@@ -33,6 +33,8 @@ function App() {
   return (
     <div className='container'>
       <h1>Ask the Church Fathers</h1>
+      <p className='cross'>☦</p>
+      <p className='subtitle'>Wisdom from the Early Church Fathers</p>
       <input
         type="text"
         placeholder="Ask a question for the Church Fathers..."

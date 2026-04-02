@@ -64,3 +64,19 @@ button {
   margin: 4px 0;
   line-height: 1.6;
 }
+
+.cross {
+  text-align: center;
+  color: #d4af37;
+  font-size: 2rem;
+  margin-bottom: 0;
+}
+
+.subtitle {
+  text-align: center;
+  color: #f0e6d3;
+  font-style: italic;
+  font-size: 1rem;
+  margin-top: 0;
+  letter-spacing: 1px;
+}
