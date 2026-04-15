@@ -22,51 +22,41 @@ Built because no existing site lets you search *by topic across all the Fathers 
 
 ---
 
-## Request Flow
-
-How a single user question moves through the entire system:
-
-```
-User types question
-        ↓
-React (frontend) sends question to Flask
-        ↓
-Flask runs keyword search (FTS5) on SQLite
-Flask runs semantic search (sentence-transformers) on SQLite
-Flask combines results using RRF
-        ↓
-Flask sends top passages + question to Claude API
-Claude writes a synthesized answer
-        ↓
-Flask sends back: synthesized answer + list of passages
-        ↓
-React displays both to the user
-```
-
----
-
 ## Architecture
 
 This project follows a **three-tier architecture**: presentation, logic, and data. Each layer has one job and doesn't know how the others work internally — so you can change one without breaking the others.
 
 ```
-User (Browser)
-     │
-     ▼
+User types question
+        │
+        ▼
 React Frontend (Netlify)
   └── Search bar, results list, AI synthesis panel
-     │  GET /api/search
-     │  POST /api/synthesize
-     ▼
+        │  GET /api/search?q=...
+        │  POST /api/synthesize
+        ▼
 Flask Backend (Render.com)
-  └── Handles requests, runs search logic, calls Claude API
-     │
-     ▼
+  ├── Keyword search  → FTS5 index in SQLite
+  ├── Semantic search → embeddings in SQLite (sentence-transformers)
+  └── Combines both results using RRF
+        │
+        ▼
+Claude API
+  └── Receives top passages + question → returns synthesized answer
+        │
+        ▼
+Flask sends back: synthesized answer + ranked passage list
+        │
+        ▼
+React displays both to the user
+
+─────────────────────────────────────────────────
+
+ETL Pipeline (runs offline, once — not on user requests)
+  └── Scrapes CCEL → cleans text → chunks → embeds → loads into SQLite
+
 SQLite Database (deployed with Flask)
   └── authors → works → passages → embeddings + FTS5 index
-
-ETL Pipeline (runs offline, once)
-  └── Scrapes CCEL → cleans text → chunks → embeds → loads into SQLite
 ```
 
 The ETL pipeline is a separate offline process — it runs once to populate the database before deployment, not on every user request. Preprocessing is expensive; serving must be fast.
