@@ -363,6 +363,107 @@ body {
   margin-bottom: 24px;
 }
 
+.results-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.results-count { white-space: nowrap; }
+
+/* ── Author filter chip ── */
+.author-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--parchment);
+  border: 1px solid var(--gold);
+  color: var(--text-md);
+  font-family: 'Crimson Text', serif;
+  font-size: 0.8rem;
+  font-style: italic;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 2px 8px 2px 10px;
+  border-radius: 2px;
+}
+
+.author-chip-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  font-size: 0.85rem;
+  padding: 0;
+  transition: color 0.15s;
+}
+.author-chip-remove:hover { color: var(--gold); }
+
+/* ── Synthesis panel ── */
+.synthesis-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold);
+  border-radius: 2px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.synthesis-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.synthesis-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.synthesis-badge {
+  font-family: 'Crimson Text', serif;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-style: italic;
+}
+
+.synthesis-placeholder {
+  font-family: 'Crimson Text', serif;
+  font-size: 1rem;
+  color: var(--text-md);
+  font-style: italic;
+  line-height: 1.7;
+}
+
+/* ── Read more link on passage cards ── */
+.passage-footer {
+  margin-top: 8px;
+}
+
+.read-more-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'Crimson Text', serif;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  padding: 0;
+  transition: color 0.15s;
+}
+.read-more-btn:hover { color: var(--gold); }
+
 .back-btn {
   background: transparent;
   border: 1px solid var(--border);

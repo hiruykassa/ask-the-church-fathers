@@ -1,8 +1,39 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { MdFavoriteBorder, MdFavorite } from 'react-icons/md'
-import { IoSearch, IoChevronDown, IoChevronUp } from 'react-icons/io5'
+import { IoSearch, IoChevronDown, IoChevronUp, IoClose } from 'react-icons/io5'
 import { searchFathers, fathers } from './data/fathers'
 import './App.css'
+
+/* ── Detect a Father's name in the raw query string ── */
+function detectAuthor(q) {
+  if (!q) return null
+  const lower = q.toLowerCase()
+  for (const f of fathers) {
+    // match on first word of surname or full name
+    const nameLower = f.name.toLowerCase()
+    const parts = nameLower.split(/\s+/)
+    if (parts.some(p => p.length > 4 && lower.includes(p))) {
+      return f.name
+    }
+  }
+  return null
+}
+
+/* ── Strip the author name from the query so we search by topic only ── */
+function stripAuthor(q, authorName) {
+  if (!authorName) return q
+  // remove each word of the author name and common prefixes from the query
+  let result = q
+  const wordsToRemove = [
+    ...authorName.toLowerCase().split(/\s+/),
+    'saint', 'st.', 'st', 'blessed', 'pope', 'bishop', 'of', 'the',
+    'on', 'about', 'regarding', 'according', 'to', 'what', 'did', 'say'
+  ]
+  for (const w of wordsToRemove) {
+    result = result.replace(new RegExp('\\b' + w + '\\b', 'gi'), '')
+  }
+  return result.replace(/\s+/g, ' ').trim()
+}
 
 /* ── Apostolic suggestions ── */
 const SUGGESTIONS = [
@@ -204,7 +235,7 @@ const SECTIONS_RIGHT = [
 /* ══════════════════════════════════════════════════
    ENTRY ROW  — name row + optional works sub-accordion
 ══════════════════════════════════════════════════ */
-function EntryRow({ entry, isFather, onSearch }) {
+function EntryRow({ entry, isFather, onSearch, onFatherClick, onWorkClick }) {
   const [open, setOpen] = useState(false)
   const hasWorks = entry.works && entry.works.length > 0
 
@@ -226,7 +257,7 @@ function EntryRow({ entry, isFather, onSearch }) {
         <div className="na-entry-meta">
           <button
             className="na-name clickable"
-            onClick={() => onSearch(entry.name)}
+            onClick={() => isFather && onFatherClick ? onFatherClick(entry.name) : onSearch(entry.name)}
           >
             {entry.name}{entry.dates ? ' (' + entry.dates + ')' : ''}
           </button>
@@ -250,7 +281,10 @@ function EntryRow({ entry, isFather, onSearch }) {
         <ul className="na-works">
           {entry.works.map((w, j) => (
             <li key={j} className="na-work">
-              <button className="na-work-btn" onClick={() => onSearch(w)}>
+              <button
+                className="na-work-btn"
+                onClick={() => onWorkClick ? onWorkClick(w) : onSearch(w)}
+              >
                 {w}
               </button>
             </li>
@@ -264,7 +298,7 @@ function EntryRow({ entry, isFather, onSearch }) {
 /* ══════════════════════════════════════════════════
    TOP-LEVEL SECTION  (collapsible)
 ══════════════════════════════════════════════════ */
-function Section({ section, onSearch }) {
+function Section({ section, onSearch, onFatherClick, onWorkClick }) {
   const [open, setOpen] = useState(false)
   const isFathers = section.id === 'fathers'
 
@@ -283,6 +317,8 @@ function Section({ section, onSearch }) {
               entry={entry}
               isFather={isFathers}
               onSearch={onSearch}
+              onFatherClick={onFatherClick}
+              onWorkClick={onWorkClick}
             />
           ))}
         </ul>
@@ -295,21 +331,57 @@ function Section({ section, onSearch }) {
    APP
 ══════════════════════════════════════════════════ */
 function App() {
-  const [query, setQuery]         = useState('')
-  const [results, setResults]     = useState([])
-  const [searched, setSearched]   = useState(false)
-  const [favorites, setFavorites] = useState([])
+  const [query, setQuery]             = useState('')
+  const [results, setResults]         = useState([])
+  const [searched, setSearched]       = useState(false)
+  const [favorites, setFavorites]     = useState([])
+  const [authorFilter, setAuthorFilter] = useState(null) // e.g. "Cyril of Jerusalem"
+  const [topicQuery, setTopicQuery]   = useState('')     // query with author stripped out
 
-  function doSearch(q) {
+  function doSearch(q, forceAuthor = undefined) {
     if (!q.trim()) return
-    setResults(searchFathers(q))
-    setSearched(true)
+
+    // detect author from query (unless sidebar click already set forceAuthor)
+    const detected = forceAuthor !== undefined ? forceAuthor : detectAuthor(q)
+    const topic    = detected ? stripAuthor(q, detected) : q
+
+    setAuthorFilter(detected)
+    setTopicQuery(topic || q)
     setQuery(q)
+
+    let raw = searchFathers(topic || q)
+    if (detected) {
+      // filter results to only the matched author
+      raw = raw.filter(r => r.father.name === detected)
+    }
+    setResults(raw)
+    setSearched(true)
+  }
+
+  // called when user removes the author chip — re-run search without filter
+  function clearAuthorFilter() {
+    const newResults = searchFathers(topicQuery)
+    setAuthorFilter(null)
+    setResults(newResults)
+  }
+
+  // sidebar click: clicking a Father's name searches for them by author
+  function onSidebarFatherClick(name) {
+    setQuery(name)
+    doSearch(name, name)
+  }
+
+  // sidebar click: clicking a work searches for that work title (no author filter)
+  function onSidebarWorkClick(work) {
+    setQuery(work)
+    doSearch(work, null)
   }
 
   function goBack() {
     setSearched(false)
     setQuery('')
+    setAuthorFilter(null)
+    setTopicQuery('')
   }
 
   function toggleFavorite(key) {
@@ -317,6 +389,8 @@ function App() {
       prev.includes(key) ? prev.filter(f => f !== key) : [...prev, key]
     )
   }
+
+  const totalPassages = results.reduce((a, r) => a + r.works.length, 0)
 
   return (
     <div className="page">
@@ -354,12 +428,24 @@ function App() {
           <div className="landing">
             <div className="col-left">
               {SECTIONS_LEFT.map(s => (
-                <Section key={s.id} section={s} onSearch={doSearch} />
+                <Section
+                  key={s.id}
+                  section={s}
+                  onSearch={doSearch}
+                  onFatherClick={onSidebarFatherClick}
+                  onWorkClick={onSidebarWorkClick}
+                />
               ))}
             </div>
             <div className="col-right">
               {SECTIONS_RIGHT.map(s => (
-                <Section key={s.id} section={s} onSearch={doSearch} />
+                <Section
+                  key={s.id}
+                  section={s}
+                  onSearch={doSearch}
+                  onFatherClick={onSidebarFatherClick}
+                  onWorkClick={onSidebarWorkClick}
+                />
               ))}
             </div>
           </div>
@@ -368,20 +454,50 @@ function App() {
         {searched && results.length === 0 && (
           <div className="empty">
             <p className="empty-title">No results for "<em>{query}</em>"</p>
-            <p className="empty-hint">Try: Eucharist - baptism - prayer - fasting - martyrdom</p>
+            <p className="empty-hint">Try: Eucharist · baptism · prayer · fasting · martyrdom</p>
             <button className="back-btn" onClick={goBack}>Back</button>
           </div>
         )}
 
         {searched && results.length > 0 && (
           <>
+            {/* ── Meta bar: count + active filter chip + back ── */}
             <div className="results-meta">
-              <span>
-                {results.length} Father{results.length !== 1 ? 's' : ''} - {results.reduce((a, r) => a + r.works.length, 0)} passage{results.reduce((a, r) => a + r.works.length, 0) !== 1 ? 's' : ''}
-              </span>
+              <div className="results-meta-left">
+                <span className="results-count">
+                  {results.length} Father{results.length !== 1 ? 's' : ''} · {totalPassages} passage{totalPassages !== 1 ? 's' : ''}
+                </span>
+                {authorFilter && (
+                  <span className="author-chip">
+                    {authorFilter}
+                    <button
+                      className="author-chip-remove"
+                      onClick={clearAuthorFilter}
+                      title="Show all Fathers on this topic"
+                    >
+                      <IoClose />
+                    </button>
+                  </span>
+                )}
+              </div>
               <button className="back-btn" onClick={goBack}>Back</button>
             </div>
 
+            {/* ── AI Synthesis panel (placeholder until Flask + Claude are live) ── */}
+            <div className="synthesis-panel">
+              <div className="synthesis-header">
+                <span className="synthesis-label">✦ AI Synthesis</span>
+                <span className="synthesis-badge">Coming soon</span>
+              </div>
+              <p className="synthesis-placeholder">
+                When the backend is live, this panel will show what the Church Fathers
+                collectively taught on <em>"{topicQuery || query}"</em>
+                {authorFilter ? ` — filtered to ${authorFilter}` : ' — across all Fathers'}.
+                Disagreements between Fathers will be shown explicitly, not resolved.
+              </p>
+            </div>
+
+            {/* ── Passage results ── */}
             <div className="results-list">
               {results.map(({ father, works }) => (
                 <div key={father.id} className="father-card">
@@ -411,6 +527,15 @@ function App() {
                             </button>
                           </div>
                           <blockquote className="passage-quote">"{work.excerpt}"</blockquote>
+                          <div className="passage-footer">
+                            <button
+                              className="read-more-btn"
+                              onClick={() => onSidebarFatherClick(father.name)}
+                              title={`Browse all works by ${father.name}`}
+                            >
+                              More from {father.name} →
+                            </button>
+                          </div>
                         </div>
                       )
                     })}
