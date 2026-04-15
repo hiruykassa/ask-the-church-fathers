@@ -39,7 +39,7 @@ body {
    HEADER  — centered, clean
 ───────────────────────────────────────── */
 .site-header {
-  background: var(--bg-head);
+  background: #4a3520;
   border-bottom: 1px solid var(--border-dk);
   padding: 24px 28px 20px;
   display: grid;
@@ -65,7 +65,7 @@ body {
   font-size: 0.65rem;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--text-ddim);
+  color: #c9a96e;
   cursor: pointer;
   padding: 5px 10px;
   border-bottom: 2px solid transparent;
@@ -74,9 +74,9 @@ body {
   align-items: center;
   gap: 5px;
 }
-.nav-tab:hover { color: var(--gold-hi); }
+.nav-tab:hover { color: #f0d898; }
 .nav-tab-active {
-  color: var(--gold);
+  color: #f0d898;
   border-bottom-color: var(--gold);
 }
 
@@ -84,7 +84,7 @@ body {
   font-family: 'Cinzel', serif;
   font-size: clamp(1.3rem, 3vw, 2rem);
   font-weight: 700;
-  color: var(--text-dk);
+  color: #f5ecd7;
   letter-spacing: 1.5px;
   line-height: 1.2;
   margin-bottom: 5px;
@@ -94,7 +94,7 @@ body {
   font-family: 'Crimson Text', serif;
   font-style: italic;
   font-size: 0.95rem;
-  color: var(--text-ddim);
+  color: #c9a96e;
 }
 
 /* ─────────────────────────────────────────
