@@ -50,12 +50,15 @@ A REST API that handles search and synthesis requests from the React frontend.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/search?q=grace&mode=hybrid` | Returns ranked passages. Modes: `keyword`, `semantic`, `hybrid` (default) |
+| `GET` | `/api/search?q=natures+of+christ&author=cyril+of+alexandria` | Same search filtered to one author — handles queries like "what did Cyril say about X" |
 | `POST` | `/api/synthesize` | Sends top passages to Claude API, returns AI synthesis with citations |
 | `GET` | `/api/authors` | Returns all Church Fathers in the database |
 | `GET` | `/api/passages/<id>` | Returns full text of a single passage |
 
 **Why GET for search?** Read-only and bookmarkable — GET is the correct verb.
 **Why POST for synthesize?** Sends a list of passage IDs + query in the body. Also costs money (Claude API call) so it must never be cached by a browser.
+
+**Author detection:** When a query contains a Father's name (e.g. "saint cyril on the natures of christ"), Flask extracts the author and adds a `WHERE author_id = ?` clause before running hybrid search. The user still sees a "Filter by author" chip in the UI and can remove it to see all Fathers on that topic.
 
 **Database schema — three tables in a chain: `authors → works → passages`**
 
@@ -86,6 +89,12 @@ Takes 30–60 minutes for the full corpus. The resulting `.db` file is deployed 
 ### 3. Claude AI Synthesis Endpoint
 
 After hybrid search returns the top passages, Flask sends them along with the original question to the Claude API. Claude reads the passages and writes a coherent theological synthesis — what the Fathers collectively taught on the topic, with citations.
+
+**Neutral synthesis prompt:** Claude is instructed to present what each Father wrote, surface disagreements explicitly rather than resolving them, and never editorialize. On contested topics (e.g. the natures of Christ, the Filioque, free will), the synthesis shows which Fathers held which position and why — it does not pick a side. Example output for "natures of Christ":
+
+> *"The Fathers were divided on this question. Cyril of Alexandria argued for one nature after the union (Third Letter to Nestorius). Theodoret of Cyrrhus countered that two natures remain distinct after the union. The Council of Chalcedon (451), reflected in Leo the Great's Tome, defined two natures in one person — a position John of Damascus later systematized."*
+
+**Every search also returns the raw passage cards** so users can read the source texts for themselves. The synthesis is an orientation, not a replacement for the primary sources. Each result card shows the Father's name, the work title, the passage text, and a link to read more.
 
 This is the core differentiator of the product. No other site does this.
 
