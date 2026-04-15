@@ -528,13 +528,24 @@ function App() {
                           </div>
                           <blockquote className="passage-quote">"{work.excerpt}"</blockquote>
                           <div className="passage-footer">
-                            <button
-                              className="read-more-btn"
-                              onClick={() => onSidebarFatherClick(father.name)}
-                              title={`Browse all works by ${father.name}`}
-                            >
-                              More from {father.name} →
-                            </button>
+                            {work.newAdventUrl ? (
+                              <a
+                                className="read-more-btn"
+                                href={work.newAdventUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Read full text of ${work.title} on New Advent`}
+                              >
+                                Read full text on New Advent ↗
+                              </a>
+                            ) : (
+                              <button
+                                className="read-more-btn"
+                                onClick={() => onSidebarFatherClick(father.name)}
+                              >
+                                More from {father.name} →
+                              </button>
+                            )}
                           </div>
                         </div>
                       )
