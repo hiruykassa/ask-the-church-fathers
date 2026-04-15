@@ -121,7 +121,8 @@ body {
   cursor: pointer;
   transition: color 0.2s, transform 0.15s;
   padding: 0;
-  justify-self: start;
+  display: block;
+  margin: 0 auto 12px;
 }
 .search-cross:hover { color: var(--gold-hi); transform: scale(1.12); }
 

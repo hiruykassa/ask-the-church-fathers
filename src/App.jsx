@@ -430,7 +430,7 @@ function App() {
     <div className="page">
 
       <header className="site-header">
-        <button className="search-cross" onClick={goHome} title="Go to home">♱</button>
+        <div className="site-header-left"></div>
         <div className="site-header-center">
           <h1 className="site-title">Ask the Church Fathers</h1>
           <p className="site-sub">Search the writings of the Early Church</p>
@@ -450,6 +450,7 @@ function App() {
       </header>
 
       <section className="search-section">
+        <button className="search-cross" onClick={goHome} title="Go to home">♱</button>
         <div className="search-bar">
           <IoSearch className="search-icon" />
           <input
