@@ -430,12 +430,26 @@ function App() {
     <div className="page">
 
       <header className="site-header">
-        <h1 className="site-title">Ask the Church Fathers</h1>
-        <p className="site-sub">Search the writings of the Early Church</p>
+        <button className="search-cross" onClick={goHome} title="Go to home">♱</button>
+        <div className="site-header-center">
+          <h1 className="site-title">Ask the Church Fathers</h1>
+          <p className="site-sub">Search the writings of the Early Church</p>
+        </div>
+        <nav className="site-nav">
+          <button
+            className={`nav-tab${view === 'search' ? ' nav-tab-active' : ''}`}
+            onClick={() => setView('search')}
+          >Search</button>
+          <button
+            className={`nav-tab${view === 'saved' ? ' nav-tab-active' : ''}`}
+            onClick={() => setView('saved')}
+          >
+            Saved {saved.length > 0 && <span className="tab-count">{saved.length}</span>}
+          </button>
+        </nav>
       </header>
 
       <section className="search-section">
-        <button className="search-cross" onClick={goHome} title="Go to home">♱</button>
         <div className="search-bar">
           <IoSearch className="search-icon" />
           <input
@@ -452,22 +466,6 @@ function App() {
           {SUGGESTIONS.map(s => (
             <button key={s} className="chip" onClick={() => doSearch(s)}>{s}</button>
           ))}
-        </div>
-
-        {/* ── Saved tab ── */}
-        <div className="tab-bar">
-          <button
-            className={`tab-btn${view === 'search' ? ' tab-active' : ''}`}
-            onClick={() => setView('search')}
-          >
-            Search
-          </button>
-          <button
-            className={`tab-btn${view === 'saved' ? ' tab-active' : ''}`}
-            onClick={() => setView('saved')}
-          >
-            Saved {saved.length > 0 && <span className="tab-count">{saved.length}</span>}
-          </button>
         </div>
       </section>
 
