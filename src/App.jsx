@@ -296,8 +296,46 @@ function EntryRow({ entry, isFather, onSearch, onFatherClick, onWorkClick }) {
 }
 
 /* ══════════════════════════════════════════════════
-   TOP-LEVEL SECTION  (collapsible)
+   PASSAGE CARD — with expandable "Read more" link
 ══════════════════════════════════════════════════ */
+function PassageCard({ father, work, passageKey, isSaved, onToggleSave, onFatherClick }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="passage">
+      <div className="passage-top">
+        <span className="work-title">{work.title}</span>
+        <button className="fav-btn" onClick={() => onToggleSave(passageKey)} title={isSaved ? 'Remove from saved' : 'Save passage'}>
+          {isSaved
+            ? <MdFavorite className="fav-filled" />
+            : <MdFavoriteBorder className="fav-empty" />}
+        </button>
+      </div>
+      <blockquote className="passage-quote">"{work.excerpt}"</blockquote>
+      <div className="passage-footer">
+        {!expanded ? (
+          <button className="read-more-btn" onClick={() => setExpanded(true)}>
+            Read more ↓
+          </button>
+        ) : (
+          <div className="read-more-expanded">
+            <a
+              className="new-advent-link"
+              href={work.newAdventUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Read full text on New Advent ↗
+            </a>
+            <button className="read-more-btn collapse-btn" onClick={() => setExpanded(false)}>
+              ↑ Collapse
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 function Section({ section, onSearch, onFatherClick, onWorkClick }) {
   const [open, setOpen] = useState(false)
   const isFathers = section.id === 'fathers'
@@ -331,64 +369,60 @@ function Section({ section, onSearch, onFatherClick, onWorkClick }) {
    APP
 ══════════════════════════════════════════════════ */
 function App() {
-  const [query, setQuery]             = useState('')
-  const [results, setResults]         = useState([])
-  const [searched, setSearched]       = useState(false)
-  const [favorites, setFavorites]     = useState([])
-  const [authorFilter, setAuthorFilter] = useState(null) // e.g. "Cyril of Jerusalem"
-  const [topicQuery, setTopicQuery]   = useState('')     // query with author stripped out
+  const [query, setQuery]               = useState('')
+  const [results, setResults]           = useState([])
+  const [searched, setSearched]         = useState(false)
+  const [saved, setSaved]               = useState([])   // array of { father, work, key }
+  const [view, setView]                 = useState('search') // 'search' | 'saved'
+  const [authorFilter, setAuthorFilter] = useState(null)
+  const [topicQuery, setTopicQuery]     = useState('')
 
   function doSearch(q, forceAuthor = undefined) {
     if (!q.trim()) return
-
-    // detect author from query (unless sidebar click already set forceAuthor)
     const detected = forceAuthor !== undefined ? forceAuthor : detectAuthor(q)
     const topic    = detected ? stripAuthor(q, detected) : q
-
     setAuthorFilter(detected)
     setTopicQuery(topic || q)
     setQuery(q)
-
     let raw = searchFathers(topic || q)
-    if (detected) {
-      // filter results to only the matched author
-      raw = raw.filter(r => r.father.name === detected)
-    }
+    if (detected) raw = raw.filter(r => r.father.name === detected)
     setResults(raw)
     setSearched(true)
+    setView('search')
   }
 
-  // called when user removes the author chip — re-run search without filter
   function clearAuthorFilter() {
-    const newResults = searchFathers(topicQuery)
     setAuthorFilter(null)
-    setResults(newResults)
+    setResults(searchFathers(topicQuery))
   }
 
-  // sidebar click: clicking a Father's name searches for them by author
   function onSidebarFatherClick(name) {
     setQuery(name)
     doSearch(name, name)
   }
 
-  // sidebar click: clicking a work searches for that work title (no author filter)
   function onSidebarWorkClick(work) {
     setQuery(work)
     doSearch(work, null)
   }
 
-  function goBack() {
+  function goHome() {
     setSearched(false)
     setQuery('')
     setAuthorFilter(null)
     setTopicQuery('')
+    setView('search')
   }
 
-  function toggleFavorite(key) {
-    setFavorites(prev =>
-      prev.includes(key) ? prev.filter(f => f !== key) : [...prev, key]
-    )
+  function toggleSave(passageKey, father, work) {
+    setSaved(prev => {
+      const exists = prev.find(s => s.key === passageKey)
+      if (exists) return prev.filter(s => s.key !== passageKey)
+      return [...prev, { key: passageKey, father, work }]
+    })
   }
+
+  function isSaved(key) { return saved.some(s => s.key === key) }
 
   const totalPassages = results.reduce((a, r) => a + r.works.length, 0)
 
@@ -401,7 +435,7 @@ function App() {
       </header>
 
       <section className="search-section">
-        <div className="search-cross">♱</div>
+        <button className="search-cross" onClick={goHome} title="Go to home">♱</button>
         <div className="search-bar">
           <IoSearch className="search-icon" />
           <input
@@ -411,7 +445,6 @@ function App() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && doSearch(query)}
-            autoFocus
           />
           <button className="search-btn" onClick={() => doSearch(query)}>Search</button>
         </div>
@@ -420,140 +453,173 @@ function App() {
             <button key={s} className="chip" onClick={() => doSearch(s)}>{s}</button>
           ))}
         </div>
+
+        {/* ── Saved tab ── */}
+        <div className="tab-bar">
+          <button
+            className={`tab-btn${view === 'search' ? ' tab-active' : ''}`}
+            onClick={() => setView('search')}
+          >
+            Search
+          </button>
+          <button
+            className={`tab-btn${view === 'saved' ? ' tab-active' : ''}`}
+            onClick={() => setView('saved')}
+          >
+            Saved {saved.length > 0 && <span className="tab-count">{saved.length}</span>}
+          </button>
+        </div>
       </section>
 
       <main className="main">
 
-        {!searched && (
-          <div className="landing">
-            <div className="col-left">
-              {SECTIONS_LEFT.map(s => (
-                <Section
-                  key={s.id}
-                  section={s}
-                  onSearch={doSearch}
-                  onFatherClick={onSidebarFatherClick}
-                  onWorkClick={onSidebarWorkClick}
-                />
-              ))}
-            </div>
-            <div className="col-right">
-              {SECTIONS_RIGHT.map(s => (
-                <Section
-                  key={s.id}
-                  section={s}
-                  onSearch={doSearch}
-                  onFatherClick={onSidebarFatherClick}
-                  onWorkClick={onSidebarWorkClick}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {searched && results.length === 0 && (
-          <div className="empty">
-            <p className="empty-title">No results for "<em>{query}</em>"</p>
-            <p className="empty-hint">Try: Eucharist · baptism · prayer · fasting · martyrdom</p>
-            <button className="back-btn" onClick={goBack}>Back</button>
-          </div>
-        )}
-
-        {searched && results.length > 0 && (
+        {/* ════ SAVED VIEW ════ */}
+        {view === 'saved' && (
           <>
-            {/* ── Meta bar: count + active filter chip + back ── */}
-            <div className="results-meta">
-              <div className="results-meta-left">
-                <span className="results-count">
-                  {results.length} Father{results.length !== 1 ? 's' : ''} · {totalPassages} passage{totalPassages !== 1 ? 's' : ''}
-                </span>
-                {authorFilter && (
-                  <span className="author-chip">
-                    {authorFilter}
-                    <button
-                      className="author-chip-remove"
-                      onClick={clearAuthorFilter}
-                      title="Show all Fathers on this topic"
-                    >
-                      <IoClose />
-                    </button>
-                  </span>
-                )}
+            {saved.length === 0 ? (
+              <div className="empty">
+                <p className="empty-title">No saved passages yet</p>
+                <p className="empty-hint">Click the ♡ on any passage to save it here.</p>
               </div>
-              <button className="back-btn" onClick={goBack}>Back</button>
-            </div>
-
-            {/* ── AI Synthesis panel (placeholder until Flask + Claude are live) ── */}
-            <div className="synthesis-panel">
-              <div className="synthesis-header">
-                <span className="synthesis-label">✦ AI Synthesis</span>
-                <span className="synthesis-badge">Coming soon</span>
-              </div>
-              <p className="synthesis-placeholder">
-                When the backend is live, this panel will show what the Church Fathers
-                collectively taught on <em>"{topicQuery || query}"</em>
-                {authorFilter ? ` — filtered to ${authorFilter}` : ' — across all Fathers'}.
-                Disagreements between Fathers will be shown explicitly, not resolved.
-              </p>
-            </div>
-
-            {/* ── Passage results ── */}
-            <div className="results-list">
-              {results.map(({ father, works }) => (
-                <div key={father.id} className="father-card">
-                  <div className="card-header">
-                    <div className="card-meta">
-                      <div className="card-badges">
-                        {father.titles.map(t => (
-                          <span key={t} className="badge">[{t}]</span>
-                        ))}
-                      </div>
-                      <h2 className="father-name">{father.name}</h2>
-                      <p className="father-dates">{father.dates}</p>
-                    </div>
+            ) : (
+              <>
+                <div className="results-meta">
+                  <div className="results-meta-left">
+                    <span className="results-count">{saved.length} saved passage{saved.length !== 1 ? 's' : ''}</span>
                   </div>
-                  <div className="passages">
-                    {works.map((work, i) => {
-                      const key = father.id + '-' + i
-                      const fav = favorites.includes(key)
-                      return (
-                        <div key={key} className="passage">
-                          <div className="passage-top">
-                            <span className="work-title">{work.title}</span>
-                            <button className="fav-btn" onClick={() => toggleFavorite(key)}>
-                              {fav
-                                ? <MdFavorite className="fav-filled" />
-                                : <MdFavoriteBorder className="fav-empty" />}
-                            </button>
-                          </div>
-                          <blockquote className="passage-quote">"{work.excerpt}"</blockquote>
-                          <div className="passage-footer">
-                            {work.newAdventUrl ? (
-                              <a
-                                className="read-more-btn"
-                                href={work.newAdventUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={`Read full text of ${work.title} on New Advent`}
-                              >
-                                Read full text on New Advent ↗
-                              </a>
-                            ) : (
-                              <button
-                                className="read-more-btn"
-                                onClick={() => onSidebarFatherClick(father.name)}
-                              >
-                                More from {father.name} →
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <button className="back-btn" onClick={() => setSaved([])}>Clear all</button>
                 </div>
-              ))}
-            </div>
+                <div className="results-list">
+                  {saved.map(({ key, father, work }) => (
+                    <div key={key} className="father-card">
+                      <div className="card-header">
+                        <div className="card-meta">
+                          <div className="card-badges">
+                            {father.titles.map(t => <span key={t} className="badge">[{t}]</span>)}
+                          </div>
+                          <h2 className="father-name">{father.name}</h2>
+                          <p className="father-dates">{father.dates}</p>
+                        </div>
+                      </div>
+                      <div className="passages">
+                        <PassageCard
+                          father={father}
+                          work={work}
+                          passageKey={key}
+                          isSaved={isSaved(key)}
+                          onToggleSave={(k) => toggleSave(k, father, work)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ════ SEARCH VIEW ════ */}
+        {view === 'search' && (
+          <>
+            {!searched && (
+              <div className="landing">
+                <div className="col-left">
+                  {SECTIONS_LEFT.map(s => (
+                    <Section
+                      key={s.id}
+                      section={s}
+                      onSearch={doSearch}
+                      onFatherClick={onSidebarFatherClick}
+                      onWorkClick={onSidebarWorkClick}
+                    />
+                  ))}
+                </div>
+                <div className="col-right">
+                  {SECTIONS_RIGHT.map(s => (
+                    <Section
+                      key={s.id}
+                      section={s}
+                      onSearch={doSearch}
+                      onFatherClick={onSidebarFatherClick}
+                      onWorkClick={onSidebarWorkClick}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {searched && results.length === 0 && (
+              <div className="empty">
+                <p className="empty-title">No results for "<em>{query}</em>"</p>
+                <p className="empty-hint">Try: Eucharist · baptism · prayer · fasting · martyrdom</p>
+                <button className="back-btn" onClick={goHome}>Back</button>
+              </div>
+            )}
+
+            {searched && results.length > 0 && (
+              <>
+                <div className="results-meta">
+                  <div className="results-meta-left">
+                    <span className="results-count">
+                      {results.length} Father{results.length !== 1 ? 's' : ''} · {totalPassages} passage{totalPassages !== 1 ? 's' : ''}
+                    </span>
+                    {authorFilter && (
+                      <span className="author-chip">
+                        {authorFilter}
+                        <button className="author-chip-remove" onClick={clearAuthorFilter} title="Show all Fathers">
+                          <IoClose />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                  <button className="back-btn" onClick={goHome}>Back</button>
+                </div>
+
+                <div className="synthesis-panel">
+                  <div className="synthesis-header">
+                    <span className="synthesis-label">✦ AI Synthesis</span>
+                    <span className="synthesis-badge">Coming soon</span>
+                  </div>
+                  <p className="synthesis-placeholder">
+                    When the backend is live, this panel will show what the Church Fathers
+                    collectively taught on <em>"{topicQuery || query}"</em>
+                    {authorFilter ? ` — filtered to ${authorFilter}` : ' — across all Fathers'}.
+                    Disagreements between Fathers will be shown explicitly, not resolved.
+                  </p>
+                </div>
+
+                <div className="results-list">
+                  {results.map(({ father, works }) => (
+                    <div key={father.id} className="father-card">
+                      <div className="card-header">
+                        <div className="card-meta">
+                          <div className="card-badges">
+                            {father.titles.map(t => <span key={t} className="badge">[{t}]</span>)}
+                          </div>
+                          <h2 className="father-name">{father.name}</h2>
+                          <p className="father-dates">{father.dates}</p>
+                        </div>
+                      </div>
+                      <div className="passages">
+                        {works.map((work, i) => {
+                          const key = father.id + '-' + i
+                          return (
+                            <PassageCard
+                              key={key}
+                              father={father}
+                              work={work}
+                              passageKey={key}
+                              isSaved={isSaved(key)}
+                              onToggleSave={(k) => toggleSave(k, father, work)}
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
 
