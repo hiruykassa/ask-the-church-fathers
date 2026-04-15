@@ -22,6 +22,29 @@ Built because no existing site lets you search *by topic across all the Fathers 
 
 ---
 
+## Request Flow
+
+How a single user question moves through the entire system:
+
+```
+User types question
+        ↓
+React (frontend) sends question to Flask
+        ↓
+Flask runs keyword search (FTS5) on SQLite
+Flask runs semantic search (sentence-transformers) on SQLite
+Flask combines results using RRF
+        ↓
+Flask sends top passages + question to Claude API
+Claude writes a synthesized answer
+        ↓
+Flask sends back: synthesized answer + list of passages
+        ↓
+React displays both to the user
+```
+
+---
+
 ## Architecture
 
 This project follows a **three-tier architecture**: presentation, logic, and data. Each layer has one job and doesn't know how the others work internally — so you can change one without breaking the others.
