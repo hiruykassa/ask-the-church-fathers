@@ -10,7 +10,7 @@ Built because no existing site lets you search *by topic across all the Fathers 
 
 | Layer | Status | Notes |
 |-------|--------|-------|
-| Frontend (React) | ✅ Done | Search, browse by Father, works sub-accordion, suggestion chips, responsive layout |
+| Frontend (React) | ✅ Done | Search, author detection, filter chip, saved tab, passage cards with read-more, New Advent links, sidebar browser, favicon, home button |
 | Flask backend + SQLite schema | 🔲 Not started | REST API, hybrid search logic, DB schema |
 | ETL pipeline | 🔲 Not started | CCEL scraper, text cleaner, chunker, embedder |
 | Claude AI synthesis endpoint | 🔲 Not started | Calls Claude API with top passages, returns synthesis |
@@ -23,17 +23,40 @@ Built because no existing site lets you search *by topic across all the Fathers 
 
 ### Frontend (React + Vite)
 
-The full UI is complete. Built with React and Vite, styled with custom CSS (cream/gold theme, serif typography).
+The full UI is complete. Built with React and Vite, styled with custom CSS (dark brown/cream/gold theme, serif typography — Cinzel, Crimson Text, EB Garamond).
 
-**Features:**
-- Search bar with suggestion chips (Eucharist, baptism, prayer, fasting...)
-- NewAdvent.org-style two-column browser — 65 Church Fathers with their complete works listed
-- Collapsible accordion per Father — expand to see individual works
-- Every Father name and every work title is clickable and triggers a search
-- All sidebar sections clickable: Liturgies, Councils, Apocrypha, Miscellaneous
-- Favorite button on result cards
-- ♱ cross above the search bar
-- Fully responsive
+**Header**
+- Dark brown header with gold cross favicon (SVG) matching the site palette
+- ♱ cross button (top left) — clickable home button that resets the entire search state
+- Site title + subtitle centered in the header
+- **Search** and **Saved** nav tabs (top right) — underline style, gold when active
+
+**Search**
+- Sticky search bar with icon, input, and SEARCH button
+- 10 suggestion chips: Eucharist, baptism, prayer, fasting, martyrdom, repentance, scripture, resurrection, Holy Spirit, church
+- **Author detection** — if the query contains a Father's name (e.g. "what did Cyril say about the incarnation"), the app auto-detects the author and filters results to that Father
+- **Author filter chip** shown in results meta bar — removable with one click to see all Fathers on that topic
+
+**Results**
+- **AI Synthesis placeholder panel** above results — shows "Coming soon" until the Flask backend is live
+- Passage cards showing Father name, work title, and excerpt
+- ♡ save button on every passage card
+- **"Read more ↓"** on each card — expands inline to show a "Read full text on New Advent ↗" link; collapses with "↑ Collapse"
+- Clicking a **Father's name** in the sidebar → filters search to that author
+- Clicking a **work title** in the sidebar → runs a topic search across all Fathers
+
+**Saved tab**
+- Gold count badge on the Saved tab showing how many passages are saved
+- Full saved view renders all saved passages as complete cards
+- "Clear all" button wipes saved passages
+
+**Sidebar**
+- Two-column layout: sidebar left, results right
+- 5 collapsible sections: Fathers (25), Liturgies, Councils (7 ecumenical + 11 local), Apocrypha, Miscellaneous
+- Every Father name and work title is clickable
+
+**Data**
+- `fathers.js` — 25 hardcoded Church Fathers, each with dates, tradition (Eastern/Western), topic keywords, works, excerpts, and a direct `newAdventUrl` linking to the correct New Advent page for every work
 
 **Currently using a local `fathers.js` data file for search** — the real search (Flask + SQLite + embeddings) is what gets built next.
 
