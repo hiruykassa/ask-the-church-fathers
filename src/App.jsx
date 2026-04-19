@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { MdFavoriteBorder, MdFavorite } from 'react-icons/md'
 import { IoSearch, IoChevronDown, IoChevronUp, IoClose } from 'react-icons/io5'
 import { searchFathers, fathers } from './data/fathers'
@@ -40,6 +40,7 @@ const SUGGESTIONS = [
   'Eucharist', 'baptism', 'prayer', 'fasting', 'martyrdom',
   'repentance', 'scripture', 'resurrection', 'Holy Spirit', 'church'
 ]
+const PASSAGE_CHUNK_WORDS = 35
 
 /* ── Sort helper ── */
 const alpha = arr => [...arr].sort((a, b) => a.name.localeCompare(b.name))
@@ -299,22 +300,28 @@ function EntryRow({ entry, isFather, onSearch, onFatherClick, onWorkClick }) {
    PASSAGE CARD — with expandable "Read more" link
 ══════════════════════════════════════════════════ */
 function PassageCard({ father, work, passageKey, isSaved, onToggleSave, onFatherClick }) {
-  const text = (work.fullText || work.excerpt || '').trim()
-  const words = text ? text.split(/\s+/) : []
-  const CHUNK_WORDS = 35
-  const chunks = []
-  for (let i = 0; i < words.length; i += CHUNK_WORDS) {
-    chunks.push(words.slice(i, i + CHUNK_WORDS).join(' '))
-  }
+  const chunks = useMemo(() => {
+    // Prefer fullText when available; excerpt is the fallback for mock data.
+    const text = work.fullText?.trim() || work.excerpt?.trim() || ''
+    const words = text ? text.split(/\s+/) : []
+    const result = []
+    for (let i = 0; i < words.length; i += PASSAGE_CHUNK_WORDS) {
+      result.push(words.slice(i, i + PASSAGE_CHUNK_WORDS).join(' '))
+    }
+    return result
+  }, [work.fullText, work.excerpt])
 
   const [visibleChunks, setVisibleChunks] = useState(1)
   const [showSourceLink, setShowSourceLink] = useState(false)
   const hasMoreToRead = visibleChunks < chunks.length
-  const visibleText = chunks.slice(0, visibleChunks).join(' ')
+  const visibleText = useMemo(
+    () => (chunks.length ? chunks.slice(0, visibleChunks).join(' ') : ''),
+    [chunks, visibleChunks]
+  )
 
   function handleReadMore() {
     if (hasMoreToRead) {
-      setVisibleChunks(n => Math.min(n + 1, chunks.length))
+      setVisibleChunks(n => n + 1)
       return
     }
     setShowSourceLink(true)
@@ -330,7 +337,7 @@ function PassageCard({ father, work, passageKey, isSaved, onToggleSave, onFather
             : <MdFavoriteBorder className="fav-empty" />}
         </button>
       </div>
-      <blockquote className="passage-quote">"{visibleText || text}"</blockquote>
+      <blockquote className="passage-quote">"{visibleText}"</blockquote>
       <div className="passage-footer">
         {!showSourceLink ? (
           <button
@@ -350,7 +357,11 @@ function PassageCard({ father, work, passageKey, isSaved, onToggleSave, onFather
               Read full text on New Advent ↗
             </a>
           </div>
-        ) : null}
+        ) : (
+          <div className="read-more-expanded">
+            <span className="work-title">No external source link available.</span>
+          </div>
+        )}
       </div>
     </div>
   )
