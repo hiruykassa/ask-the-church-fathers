@@ -299,7 +299,26 @@ function EntryRow({ entry, isFather, onSearch, onFatherClick, onWorkClick }) {
    PASSAGE CARD — with expandable "Read more" link
 ══════════════════════════════════════════════════ */
 function PassageCard({ father, work, passageKey, isSaved, onToggleSave, onFatherClick }) {
-  const [expanded, setExpanded] = useState(false)
+  const text = (work.fullText || work.excerpt || '').trim()
+  const words = text ? text.split(/\s+/) : []
+  const CHUNK_WORDS = 35
+  const chunks = []
+  for (let i = 0; i < words.length; i += CHUNK_WORDS) {
+    chunks.push(words.slice(i, i + CHUNK_WORDS).join(' '))
+  }
+
+  const [visibleChunks, setVisibleChunks] = useState(1)
+  const [showSourceLink, setShowSourceLink] = useState(false)
+  const hasMoreToRead = visibleChunks < chunks.length
+  const visibleText = chunks.slice(0, visibleChunks).join(' ')
+
+  function handleReadMore() {
+    if (hasMoreToRead) {
+      setVisibleChunks(n => Math.min(n + 1, chunks.length))
+      return
+    }
+    setShowSourceLink(true)
+  }
 
   return (
     <div className="passage">
@@ -311,13 +330,16 @@ function PassageCard({ father, work, passageKey, isSaved, onToggleSave, onFather
             : <MdFavoriteBorder className="fav-empty" />}
         </button>
       </div>
-      <blockquote className="passage-quote">"{work.excerpt}"</blockquote>
+      <blockquote className="passage-quote">"{visibleText || text}"</blockquote>
       <div className="passage-footer">
-        {!expanded ? (
-          <button className="read-more-btn" onClick={() => setExpanded(true)}>
+        {!showSourceLink ? (
+          <button
+            className="read-more-btn"
+            onClick={handleReadMore}
+          >
             Read more ↓
           </button>
-        ) : (
+        ) : work.newAdventUrl ? (
           <div className="read-more-expanded">
             <a
               className="new-advent-link"
@@ -327,11 +349,8 @@ function PassageCard({ father, work, passageKey, isSaved, onToggleSave, onFather
             >
               Read full text on New Advent ↗
             </a>
-            <button className="read-more-btn collapse-btn" onClick={() => setExpanded(false)}>
-              ↑ Collapse
-            </button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
