@@ -488,9 +488,67 @@ body {
   line-height: 1.7;
 }
 
+.synthesis-btn {
+  font-family: 'Cinzel', serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: transparent;
+  border: 1px solid var(--gold);
+  border-radius: 2px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.synthesis-btn:hover:not(:disabled) {
+  background: var(--gold);
+  color: var(--bg);
+}
+.synthesis-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.synthesis-text {
+  font-family: 'Crimson Text', serif;
+  font-size: 1.05rem;
+  color: var(--text);
+  line-height: 1.8;
+}
+.synthesis-text h1,
+.synthesis-text h2,
+.synthesis-text h3 {
+  font-family: 'Cinzel', serif;
+  color: var(--gold);
+  margin: 1em 0 0.4em;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.synthesis-text h1 { font-size: 1.1rem; }
+.synthesis-text h2 { font-size: 1rem; }
+.synthesis-text h3 { font-size: 0.9rem; }
+.synthesis-text strong { color: var(--text); font-weight: 700; }
+.synthesis-text em { font-style: italic; }
+.synthesis-text p { margin: 0 0 0.8em; }
+.synthesis-text ul,
+.synthesis-text ol {
+  padding-left: 1.4em;
+  margin-bottom: 0.8em;
+}
+.synthesis-text li { margin-bottom: 0.3em; }
+
 /* ── Read more link on passage cards ── */
 .passage-footer {
   margin-top: 8px;
+}
+
+.passage-author {
+  font-family: 'Crimson Text', serif;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  font-style: italic;
 }
 
 .read-more-btn {

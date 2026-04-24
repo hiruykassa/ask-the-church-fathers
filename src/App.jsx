@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { MdFavoriteBorder, MdFavorite } from 'react-icons/md'
 import { IoSearch, IoChevronDown, IoChevronUp, IoClose } from 'react-icons/io5'
 import { searchFathers, fathers } from './data/fathers'
@@ -296,42 +297,22 @@ function EntryRow({ entry, isFather, onSearch, onFatherClick, onWorkClick }) {
 }
 
 /* ══════════════════════════════════════════════════
-   PASSAGE CARD — with expandable "Read more" link
+   PASSAGE CARD — flat result shape { id, passage, author, work }
 ══════════════════════════════════════════════════ */
-function PassageCard({ father, work, passageKey, isSaved, onToggleSave, onFatherClick }) {
-  const [expanded, setExpanded] = useState(false)
-
+function PassageCard({ result, passageKey, isSaved, onToggleSave }) {
   return (
     <div className="passage">
       <div className="passage-top">
-        <span className="work-title">{work.title}</span>
+        <span className="work-title">{result.work}</span>
         <button className="fav-btn" onClick={() => onToggleSave(passageKey)} title={isSaved ? 'Remove from saved' : 'Save passage'}>
           {isSaved
             ? <MdFavorite className="fav-filled" />
             : <MdFavoriteBorder className="fav-empty" />}
         </button>
       </div>
-      <blockquote className="passage-quote">"{work.excerpt}"</blockquote>
+      <blockquote className="passage-quote">"{result.passage}"</blockquote>
       <div className="passage-footer">
-        {!expanded ? (
-          <button className="read-more-btn" onClick={() => setExpanded(true)}>
-            Read more ↓
-          </button>
-        ) : (
-          <div className="read-more-expanded">
-            <a
-              className="new-advent-link"
-              href={work.newAdventUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Read full text on New Advent ↗
-            </a>
-            <button className="read-more-btn collapse-btn" onClick={() => setExpanded(false)}>
-              ↑ Collapse
-            </button>
-          </div>
-        )}
+        <span className="passage-author">— {result.author}</span>
       </div>
     </div>
   )
@@ -376,24 +357,52 @@ function App() {
   const [view, setView]                 = useState('search') // 'search' | 'saved'
   const [authorFilter, setAuthorFilter] = useState(null)
   const [topicQuery, setTopicQuery]     = useState('')
+  const [synthesis, setSynthesis]       = useState(null)
+  const [synthesizing, setSynthesizing] = useState(false)
 
-  function doSearch(q, forceAuthor = undefined) {
+async function doSearch(q, forceAuthor = undefined) {
     if (!q.trim()) return
     const detected = forceAuthor !== undefined ? forceAuthor : detectAuthor(q)
     const topic    = detected ? stripAuthor(q, detected) : q
     setAuthorFilter(detected)
     setTopicQuery(topic || q)
     setQuery(q)
-    let raw = searchFathers(topic || q)
-    if (detected) raw = raw.filter(r => r.father.name === detected)
-    setResults(raw)
+    setSynthesis(null)
+    const response = await fetch(`http://localhost:5001/api/search?q=${topic || q}`)
+    const data = await response.json()
+    setResults(data.results)
     setSearched(true)
     setView('search')
   }
 
+  async function getSynthesis() {
+    setSynthesizing(true)
+    setSynthesis('')
+    try {
+      const response = await fetch('http://localhost:5001/api/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: topicQuery || query, passages: results }),
+      })
+      if (!response.ok) throw new Error('Network response was not ok')
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        setSynthesis(prev => prev + chunk)
+      }
+    } catch (err) {
+      setSynthesis('Error fetching synthesis. Please try again.')
+    } finally {
+      setSynthesizing(false)
+    }
+  }
+
   function clearAuthorFilter() {
     setAuthorFilter(null)
-    setResults(searchFathers(topicQuery))
+    doSearch(topicQuery)
   }
 
   function onSidebarFatherClick(name) {
@@ -414,17 +423,17 @@ function App() {
     setView('search')
   }
 
-  function toggleSave(passageKey, father, work) {
+  function toggleSave(passageKey, result) {
     setSaved(prev => {
       const exists = prev.find(s => s.key === passageKey)
       if (exists) return prev.filter(s => s.key !== passageKey)
-      return [...prev, { key: passageKey, father, work }]
+      return [...prev, { key: passageKey, result }]
     })
   }
 
   function isSaved(key) { return saved.some(s => s.key === key) }
 
-  const totalPassages = results.reduce((a, r) => a + r.works.length, 0)
+  const totalPassages = results.length
 
   return (
     <div className="page">
@@ -489,24 +498,19 @@ function App() {
                   <button className="back-btn" onClick={() => setSaved([])}>Clear all</button>
                 </div>
                 <div className="results-list">
-                  {saved.map(({ key, father, work }) => (
+                  {saved.map(({ key, result }) => (
                     <div key={key} className="father-card">
                       <div className="card-header">
                         <div className="card-meta">
-                          <div className="card-badges">
-                            {father.titles.map(t => <span key={t} className="badge">[{t}]</span>)}
-                          </div>
-                          <h2 className="father-name">{father.name}</h2>
-                          <p className="father-dates">{father.dates}</p>
+                          <h2 className="father-name">{result.author}</h2>
                         </div>
                       </div>
                       <div className="passages">
                         <PassageCard
-                          father={father}
-                          work={work}
+                          result={result}
                           passageKey={key}
                           isSaved={isSaved(key)}
-                          onToggleSave={(k) => toggleSave(k, father, work)}
+                          onToggleSave={(k) => toggleSave(k, result)}
                         />
                       </div>
                     </div>
@@ -560,7 +564,7 @@ function App() {
                 <div className="results-meta">
                   <div className="results-meta-left">
                     <span className="results-count">
-                      {results.length} Father{results.length !== 1 ? 's' : ''} · {totalPassages} passage{totalPassages !== 1 ? 's' : ''}
+                      {totalPassages} passage{totalPassages !== 1 ? 's' : ''}
                     </span>
                     {authorFilter && (
                       <span className="author-chip">
@@ -577,45 +581,51 @@ function App() {
                 <div className="synthesis-panel">
                   <div className="synthesis-header">
                     <span className="synthesis-label">✦ AI Synthesis</span>
-                    <span className="synthesis-badge">Coming soon</span>
+                    <button
+                      className="synthesis-btn"
+                      onClick={getSynthesis}
+                      disabled={synthesizing || results.length === 0}
+                    >
+                      {synthesizing ? 'Synthesizing…' : 'Get Synthesis'}
+                    </button>
                   </div>
-                  <p className="synthesis-placeholder">
-                    When the backend is live, this panel will show what the Church Fathers
-                    collectively taught on <em>"{topicQuery || query}"</em>
-                    {authorFilter ? ` — filtered to ${authorFilter}` : ' — across all Fathers'}.
-                    Disagreements between Fathers will be shown explicitly, not resolved.
-                  </p>
+                  {!synthesis && !synthesizing && (
+                    <p className="synthesis-placeholder">
+                      Click "Get Synthesis" to see what the Church Fathers collectively taught on <em>"{topicQuery || query}"</em>
+                      {authorFilter ? ` — filtered to ${authorFilter}` : ' — across all Fathers'}.
+                    </p>
+                  )}
+                  {synthesizing && synthesis === '' && (
+                    <p className="synthesis-placeholder">Consulting the Fathers…</p>
+                  )}
+                  {synthesis && (
+                    <div className="synthesis-text">
+                      <ReactMarkdown>{synthesis}</ReactMarkdown>
+                    </div>
+                  )}
                 </div>
 
                 <div className="results-list">
-                  {results.map(({ father, works }) => (
-                    <div key={father.id} className="father-card">
-                      <div className="card-header">
-                        <div className="card-meta">
-                          <div className="card-badges">
-                            {father.titles.map(t => <span key={t} className="badge">[{t}]</span>)}
+                  {results.map((result) => {
+                    const key = result.id
+                    return (
+                      <div key={key} className="father-card">
+                        <div className="card-header">
+                          <div className="card-meta">
+                            <h2 className="father-name">{result.author}</h2>
                           </div>
-                          <h2 className="father-name">{father.name}</h2>
-                          <p className="father-dates">{father.dates}</p>
+                        </div>
+                        <div className="passages">
+                          <PassageCard
+                            result={result}
+                            passageKey={key}
+                            isSaved={isSaved(key)}
+                            onToggleSave={(k) => toggleSave(k, result)}
+                          />
                         </div>
                       </div>
-                      <div className="passages">
-                        {works.map((work, i) => {
-                          const key = father.id + '-' + i
-                          return (
-                            <PassageCard
-                              key={key}
-                              father={father}
-                              work={work}
-                              passageKey={key}
-                              isSaved={isSaved(key)}
-                              onToggleSave={(k) => toggleSave(k, father, work)}
-                            />
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </>
             )}
