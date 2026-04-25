@@ -10,6 +10,187 @@ Built because no existing site lets you search *by topic across all the Fathers 
 
 | Layer | Status | Notes |
 |-------|--------|-------|
+| Frontend (React + Vite) | ✅ Done | Search, author detection, filter chip, saved tab, passage cards, sidebar browser |
+| Flask backend + SQLite | ✅ Done | REST API live at `localhost:5001`, SQLite database with authors/works/passages |
+| Claude AI synthesis endpoint | ✅ Done | Streams response token-by-token via `text/plain` chunked response |
+| ETL pipeline | 🔲 Not started | CCEL scraper, text cleaner, chunker, embedder |
+| Deployment | 🔲 Not started | Netlify (frontend) + Render.com (backend) |
+| Auth + freemium | 🔲 Future | Account required for synthesis; free tier + paid tier if traffic justifies it |
+
+---
+
+## What Is Built
+
+### Frontend (React + Vite)
+
+Full UI connected to the live Flask backend. Built with React and Vite, styled with custom CSS (dark brown/cream/gold theme, serif typography — Cinzel, Crimson Text, EB Garamond).
+
+**Search**
+- Search bar with icon, input, and SEARCH button
+- 10 suggestion chips: Eucharist, baptism, prayer, fasting, martyrdom, repentance, scripture, resurrection, Holy Spirit, church
+- **Author detection** — if the query contains a Father's name, the app auto-detects the author and filters results to that Father
+- **Author filter chip** shown in results meta bar — removable with one click
+
+**Results**
+- Passages fetched from Flask backend (`GET /api/search?q=...`) — real SQLite data, not hardcoded
+- Each result card shows the Father's name, work title, passage text, and attribution
+- ♡ save button on every passage card
+
+**AI Synthesis panel**
+- **"Get Synthesis"** button sends a `POST /api/synthesize` request with the current query and passages
+- Response **streams word-by-word** using the Fetch `ReadableStream` API — text appears live as Claude generates it
+- Rendered as formatted markdown via `react-markdown` — headings, bold, lists display correctly
+- Shows "Consulting the Fathers…" while waiting for the first chunk
+
+**Saved tab**
+- Gold count badge showing how many passages are saved
+- Full saved view with "Clear all" button
+
+**Sidebar**
+- Two-column layout: sidebar left, results right
+- 5 collapsible sections: Fathers, Liturgies, Councils, Apocrypha, Miscellaneous
+- Every Father name and work title is clickable
+
+---
+
+### Backend (Python + Flask)
+
+REST API running on port `5001`. SQLite database (`database.db`) stores authors, works, and passages.
+
+**Endpoints:**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/search?q=<query>` | Full-text search across all passages |
+| `GET` | `/api/authors` | Returns all Church Fathers in the database |
+| `GET` | `/api/passages/<id>` | Returns a single passage by ID |
+| `POST` | `/api/synthesize` | Streams Claude AI synthesis as plain text |
+
+**Database schema:**
+- **`authors`** — one row per Church Father (name, tradition)
+- **`works`** — one row per text, linked to `author_id`
+- **`passages`** — one row per chunk, linked to `work_id`
+
+**Synthesis prompt:** Claude is instructed to report exactly what the Fathers taught based solely on the supplied passages, state controversial positions plainly, and show disagreements between Fathers explicitly rather than resolving them.
+
+---
+
+## Running Locally
+
+### Prerequisites
+- Node.js
+- Python 3
+- An Anthropic API key
+
+### Backend
+
+```bash
+cd backend
+pip3 install -r requirements.txt
+```
+
+Create a `.env` file in the `backend/` folder:
+```
+ANTHROPIC_API_KEY=your_key_here
+```
+
+```bash
+python3 app.py
+# Running on http://localhost:5001
+```
+
+### Frontend
+
+```bash
+npm install
+npm run dev
+# Running on http://localhost:5173
+```
+
+---
+
+## Architecture
+
+```
+User types question
+        │
+        ▼
+React Frontend (Vite)
+  └── Search bar, results list, streaming AI synthesis panel
+        │  GET /api/search?q=...
+        │  POST /api/synthesize  (streams back plain text)
+        ▼
+Flask Backend (localhost:5001)
+  └── Keyword search → SQLite passages table
+        │
+        ▼
+Anthropic Claude API
+  └── Receives passages + query → streams synthesis token-by-token
+        │
+        ▼
+React ReadableStream reader appends each chunk to state live
+```
+
+---
+
+## What Is Being Built Next
+
+### 1. ETL Pipeline
+
+Populate the database with the full corpus of Church Fathers texts.
+
+- **Extract** — Scrape texts from [CCEL (Christian Classics Ethereal Library)](https://ccel.org) (Ante-Nicene Fathers + Nicene & Post-Nicene Fathers series, public domain)
+- **Transform** — Clean HTML, split into 150–400 word chunks, generate embeddings via `sentence-transformers`
+- **Load** — Insert into SQLite in order: authors → works → passages → embeddings + FTS5 index
+
+### 2. Hybrid Search
+
+Upgrade from plain `LIKE` search to hybrid keyword + semantic search:
+
+- **Keyword (FTS5 + BM25)** — fast exact-word matching
+- **Semantic (embeddings + cosine similarity)** — finds passages by meaning, not just words
+- **Reciprocal Rank Fusion** — merges both result lists, passages ranking high in both rise to the top
+
+### 3. Deployment
+
+| Service | Cost | Purpose |
+|---------|------|---------|
+| Netlify | Free | Hosts React frontend |
+| Render.com Starter | $7/month | Hosts Flask backend + SQLite |
+| Claude API | ~$23/month | ~7,600 synthesis calls/month at ~$0.003/call |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React + Vite |
+| Backend | Python + Flask |
+| Database | SQLite |
+| AI Synthesis | Anthropic Claude (`claude-sonnet-4-6`) — streaming |
+| Markdown rendering | `react-markdown` |
+| Frontend Hosting | Netlify (planned) |
+| Backend Hosting | Render.com (planned) |
+
+---
+
+## Data Source
+
+All Church Fathers texts sourced from [CCEL (Christian Classics Ethereal Library)](https://ccel.org). The Ante-Nicene Fathers and Nicene & Post-Nicene Fathers translation series are public domain (published 1867–1900).
+
+
+A full-stack web application where users search Christian theology topics and receive relevant passages from the early Church Fathers (1st–8th century AD), along with an AI-generated synthesis of what the Fathers collectively taught on that topic.
+
+Built because no existing site lets you search *by topic across all the Fathers at once* — you can only browse by author or work. This solves that.
+
+---
+
+## Build Status
+
+| Layer | Status | Notes |
+|-------|--------|-------|
 | Frontend (React) | ✅ Done | Search, author detection, filter chip, saved tab, passage cards with read-more, New Advent links, sidebar browser, favicon, home button |
 | Flask backend + SQLite schema | 🔲 Not started | REST API, hybrid search logic, DB schema |
 | ETL pipeline | 🔲 Not started | CCEL scraper, text cleaner, chunker, embedder |

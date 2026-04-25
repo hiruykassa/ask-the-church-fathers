@@ -368,7 +368,7 @@ async function doSearch(q, forceAuthor = undefined) {
     setTopicQuery(topic || q)
     setQuery(q)
     setSynthesis(null)
-    const response = await fetch(`http://localhost:5001/api/search?q=${topic || q}`)
+    const response = await fetch(`http://localhost:5001/api/search?q=${encodeURIComponent(topic || q)}`)
     const data = await response.json()
     setResults(data.results)
     setSearched(true)

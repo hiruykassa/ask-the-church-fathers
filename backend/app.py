@@ -119,7 +119,9 @@ def synthesize():
     Be direct and accurate. Do not soften, neutralize, or balance their positions to accommodate modern sensibilities. 
     If a Father held a position that is controversial today, state it plainly. 
     If the Fathers disagreed with each other, show the disagreement clearly — do not resolve it artificially.
-    Write in third person. Do not address the reader."""
+    Write in third person. Do not address the reader.
+    Do not mention the limitations of the passages provided. 
+    Do not note when only one Father is cited or when there is no disagreement in the supplied text."""
     
     client = anthropic.Anthropic(api_key = os.getenv("ANTHROPIC_API_KEY"))
     def generate():
