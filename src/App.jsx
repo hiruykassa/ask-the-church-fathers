@@ -13,7 +13,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { IoSearch } from 'react-icons/io5'
 import { fathers } from './data/fathers'
 import { useScrollReveal } from './hooks/useScrollReveal'
-import { FEATURED_QUOTES } from './constants/quotes'
+
 import { FEATURED_FATHERS } from './constants/featuredFathers'
 import { ALL_FATHERS, RIGHT_SECTIONS } from './constants/library'
 import FatherRow from './components/FatherRow'
@@ -56,10 +56,11 @@ export default function App() {
   const [synthesis,    setSynthesis]    = useState('')
   const [synthesizing, setSynthesizing] = useState(false)
 
-  /** Pick today's quote by cycling through the array using the day of month */
-  const [featuredQuote] = useState(() =>
-    FEATURED_QUOTES[new Date().getDate() % FEATURED_QUOTES.length]
-  )
+  const featuredQuote = {
+    text: "Stand firm and hold to the traditions that you were taught by us.",
+    author: "2 Thessalonians 2:15",
+    work: "",
+  }
 
   useScrollReveal()
 
