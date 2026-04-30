@@ -3,7 +3,7 @@ dist/
 
 # Dependencies
 node_modules/
-backend/venv/
+backend/.venv/
 
 # Environment variables (keep secrets out of git)
 backend/.env
