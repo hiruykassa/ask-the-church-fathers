@@ -58,7 +58,7 @@ The current ETL only grabs the *first chapter* of each work — there are dozens
 - **AI synthesis** — streams a Claude-generated summary of what the Fathers collectively taught (3 short paragraphs, neutral scholarly tone, shows disagreements plainly)
 - **Book reader** (`/read/:workId`) — full-screen reader with scroll-progress bar, sidebar/drawer TOC, and passage-level navigation; back button restores the last search
 - **Scroll-reveal animations** — Father cards animate in as they enter the viewport
-- **Full library catalog** — Church Fathers plus Liturgies, Councils, Apocrypha, and Miscellaneous sections — all clickable to trigger a search
+- **Full library catalog** — five top-level sidebar buckets (`Father`, `Liturgy`, `Council`, `Apocrypha`, `Miscellaneous`) — all clickable to trigger a search
 
 ### Planned changes (not yet built)
 
@@ -95,9 +95,9 @@ Organized in priority tiers. Tier 1 is the most urgent; Tier 7 is the "after MVP
 
 ### Tier 4 — Backend Hardening
 
-- [ ] **Schema simplification.** Drop `tradition` and `bio` from `authors`. Drop `category` from `works`. Final schema:
+- [ ] **Schema simplification.** Drop `tradition` and `bio` from `authors`. Keep `section` in `works` for sidebar grouping. Final schema:
   - `authors`: `id`, `name`, `born`, `died`
-  - `works`: `id`, `author_id`, `title`, `source_url`
+  - `works`: `id`, `author_id`, `title`, `section`, `source_url`
   - `passages`: `id`, `work_id`, `text` (unchanged)
 - [ ] **Error handling** on every endpoint (no stack traces leaking to users).
 - [ ] **Rate limiting on `/api/synthesize`** — every call costs Anthropic API money. Without limits, one abuser can run up the bill.
@@ -240,7 +240,9 @@ All text comes from **[New Advent — Church Fathers](https://www.newadvent.org/
 The current script:
 
 1. Wipes all three tables (`passages`, `works`, `authors`).
-2. Defines `scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic)` — a function that takes one author plus a list of `{url, title, category}` dicts.
+2. Defines `scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic)` — a function that takes one author plus a list of `{url, title, section}` dicts.
+   - `section` is a sidebar bucket value: `Father`, `Liturgy`, `Council`, `Apocrypha`, or `Miscellaneous`.
+   - Current ETL data labels all works as `Father` because all loaded works are by Church Fathers.
 3. For each work in the list:
    - `requests.get(url)` downloads the page
    - `BeautifulSoup` finds the first `<h2>`, then walks its sibling `<p>` tags
@@ -252,7 +254,7 @@ The current script:
 
 ### Seed script (`backend/seed.py`)
 
-A shortcut for local dev. Inserts 3 authors (Augustine, Chrysostom, Athanasius), 3 works, and 5 hand-written passages so the app can run without scraping. Use this if `etl.py` is broken or you want a clean known-state DB.
+A shortcut for local dev. Inserts 3 authors (Augustine, Chrysostom, Athanasius), 3 works, and 5 hand-written passages so the app can run without scraping. All seeded works currently use `section = "Father"`. Use this if `etl.py` is broken or you want a clean known-state DB.
 
 ---
 
@@ -274,7 +276,7 @@ CREATE TABLE works (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     author_id  INTEGER REFERENCES authors(id),
     title      TEXT NOT NULL,
-    category   TEXT,   -- to be removed
+    section    TEXT,
     source_url TEXT
 );
 
@@ -284,6 +286,15 @@ CREATE TABLE passages (
     text    TEXT NOT NULL
 );
 ```
+
+`works.section` is used for the sidebar's five top-level browse buckets:
+- `Father`
+- `Liturgy`
+- `Council`
+- `Apocrypha`
+- `Miscellaneous`
+
+Older genre labels (`Autobiography`, `Homily`, `Treatise`, etc.) are no longer used in this column.
 
 ### Planned schema (Tier 4)
 
@@ -301,6 +312,7 @@ CREATE TABLE works (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     author_id  INTEGER REFERENCES authors(id),
     title      TEXT NOT NULL,
+    section    TEXT,
     source_url TEXT
 );
 
@@ -422,6 +434,8 @@ An `IntersectionObserver` watches every `[data-reveal]` element. When one enters
 `src/constants/library.js` exports:
 - `ALL_FATHERS` — entries with `{ id, name, works[] }` where each work has `{ id, title }`
 - `RIGHT_SECTIONS` — extra sections: Liturgies, Councils, Apocrypha, Miscellaneous
+
+The backend `works.section` column maps to the same five sidebar buckets used for browsing: `Father`, `Liturgy`, `Council`, `Apocrypha`, and `Miscellaneous`.
 
 Each entry in the catalog is clickable — it fires a search for that author/work name, populating the results panel immediately.
 
