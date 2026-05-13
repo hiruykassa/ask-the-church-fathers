@@ -23,6 +23,8 @@ export default function ReadPage() {
 
   const passageRefs = useRef([])
 
+  const scrollTarget = location.state?.scrollToPassage || null
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -46,6 +48,18 @@ export default function ReadPage() {
       })
     return () => { cancelled = true }
   }, [workId])
+
+  useEffect(() => {
+    if (!work || !scrollTarget) return
+    const idx = work.passages.findIndex(p => p.id === scrollTarget)
+    if (idx < 0) return
+    requestAnimationFrame(() => {
+      const el = passageRefs.current[idx]
+      if (!el) return
+      const y = el.getBoundingClientRect().top + window.scrollY - 110
+      window.scrollTo({ top: y, behavior: 'smooth' })
+    })
+  }, [work, scrollTarget])
 
   useEffect(() => {
     function onScroll() {
@@ -150,7 +164,7 @@ export default function ReadPage() {
                   <p
                     key={p.id}
                     id={`passage-${i + 1}`}
-                    className="read-passage"
+                    className={`read-passage${p.id === scrollTarget ? ' read-passage--highlight' : ''}`}
                     ref={el => passageRefs.current[i] = el}
                   >
                     {p.text}

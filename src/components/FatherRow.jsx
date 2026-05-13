@@ -6,6 +6,8 @@ import { IoChevronDown } from 'react-icons/io5'
  * Shows the father's name and dates. Clicking the name fires `onFatherClick`.
  * A chevron button expands/collapses the list of that father's works.
  *
+ * Works can be either strings (static fallback) or objects with {id, title} (live API data).
+ *
  * @param {{ father: object, onFatherClick: Function, onWorkClick: Function }} props
  */
 export default function FatherRow({ father, onFatherClick, onWorkClick }) {
@@ -37,13 +39,17 @@ export default function FatherRow({ father, onFatherClick, onWorkClick }) {
 
       {open && hasWorks && (
         <ul className="acc-row-works">
-          {father.works.map((w, i) => (
-            <li key={i}>
-              <button className="acc-work-link" onClick={() => onWorkClick(w)}>
-                {w}
-              </button>
-            </li>
-          ))}
+          {father.works.map((w, i) => {
+            const isObj = typeof w === 'object'
+            const label = isObj ? w.title : w
+            return (
+              <li key={isObj ? w.id : i}>
+                <button className="acc-work-link" onClick={() => onWorkClick(w)}>
+                  {label}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
     </li>

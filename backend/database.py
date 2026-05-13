@@ -32,7 +32,7 @@ cursor.execute("""
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         author_id INTEGER,
         title TEXT,
-        category TEXT,
+        section TEXT,
         source_url TEXT,
         FOREIGN KEY (author_id) REFERENCES authors(id)   
    )

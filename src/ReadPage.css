@@ -26,6 +26,9 @@
 /* ── Header — reuses .site-header from App.css ── */
 .read-site-header {
   grid-template-columns: 1fr auto 1fr !important;
+  position: sticky;
+  top: 0;
+  z-index: 200;
 }
 
 .read-back-btn {
@@ -265,6 +268,12 @@
   text-align: justify;
   hyphens: auto;
   scroll-margin-top: 110px;
+}
+.read-passage--highlight {
+  background: rgba(200, 167, 102, 0.08);
+  border-left: 3px solid var(--gold);
+  padding-left: 16px;
+  border-radius: 2px;
 }
 .read-passage:last-child { margin-bottom: 0; }
 .read-passage-num {

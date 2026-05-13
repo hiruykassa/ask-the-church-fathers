@@ -24,6 +24,20 @@ import './App.css'
 
 const API = 'http://localhost:5001'
 
+const SECTION_TITLES = {
+  Liturgy: 'Liturgies',
+  Council: 'Councils',
+  Apocrypha: 'Apocrypha',
+  Miscellaneous: 'Miscellaneous',
+}
+
+function formatDates(born, died) {
+  if (born === died) return `c. ${born}`
+  if (!born) return `d. ${died}`
+  if (!died) return `b. ${born}`
+  return `${born}–${died}`
+}
+
 /**
  * Scans the raw query for a known Father's name.
  * Returns the matched name string, or null if none found.
@@ -56,6 +70,9 @@ export default function App() {
   const [synthesis,    setSynthesis]    = useState('')
   const [synthesizing, setSynthesizing] = useState(false)
 
+  const [liveFathers,  setLiveFathers]  = useState(null)
+  const [liveSections, setLiveSections] = useState(null)
+
   const featuredQuote = {
     text: "Stand firm and hold to the traditions that you were taught by us.",
     author: "2 Thessalonians 2:15",
@@ -63,6 +80,34 @@ export default function App() {
   }
 
   useScrollReveal()
+
+  useEffect(() => {
+    fetch(`${API}/api/library`)
+      .then(res => res.json())
+      .then(data => {
+        const sections = data.sections || {}
+        const fatherEntries = (sections.Father || []).map(a => ({
+          name: a.name,
+          dates: formatDates(a.born, a.died),
+          works: a.works,
+        }))
+        fatherEntries.sort((a, b) => a.name.localeCompare(b.name))
+        setLiveFathers(fatherEntries)
+
+        const otherSections = Object.keys(SECTION_TITLES)
+          .filter(key => sections[key] && sections[key].length > 0)
+          .map(key => ({
+            id: key.toLowerCase(),
+            title: SECTION_TITLES[key],
+            entries: sections[key].map(a => ({
+              name: a.name,
+              works: a.works,
+            })),
+          }))
+        setLiveSections(otherSections)
+      })
+      .catch(() => { /* fallback to static data */ })
+  }, [])
 
   /**
    * When navigating back from the reader, ReadPage passes restoreQuery
@@ -300,33 +345,57 @@ export default function App() {
               <div className="catalog">
                 <AccordionSection title="The Fathers of the Church">
                   <ul className="acc-list">
-                    {ALL_FATHERS.map((f, i) => (
+                    {(liveFathers || ALL_FATHERS).map((f, i) => (
                       <FatherRow
-                        key={i}
+                        key={f.name || i}
                         father={f}
                         onFatherClick={name => doSearch(name, name)}
-                        onWorkClick={w => doSearch(w, null)}
+                        onWorkClick={w => {
+                          if (typeof w === 'object' && w.id) {
+                            navigate(`/read/${w.id}`, { state: { restoreQuery: query } })
+                          } else {
+                            doSearch(typeof w === 'string' ? w : w.title, null)
+                          }
+                        }}
                       />
                     ))}
                   </ul>
                 </AccordionSection>
 
-                {RIGHT_SECTIONS.map((s) => (
-                  <AccordionSection key={s.id} title={s.title}>
-                    <ul className="acc-list">
-                      {s.entries.map((e, i) => (
-                        <li key={i} className="acc-row">
-                          <button
-                            className="acc-row-name"
-                            onClick={() => doSearch(e.query || e.title, null)}
-                          >
-                            <span className="acc-row-title">{e.title}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </AccordionSection>
-                ))}
+                {liveSections
+                  ? liveSections.map((s) => (
+                      <AccordionSection key={s.id} title={s.title}>
+                        <ul className="acc-list">
+                          {s.entries.flatMap(e => e.works || []).map(w => (
+                            <li key={w.id} className="acc-row">
+                              <button
+                                className="acc-row-name"
+                                onClick={() => navigate(`/read/${w.id}`, { state: { restoreQuery: query } })}
+                              >
+                                <span className="acc-row-title">{w.title}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </AccordionSection>
+                    ))
+                  : RIGHT_SECTIONS.map((s) => (
+                      <AccordionSection key={s.id} title={s.title}>
+                        <ul className="acc-list">
+                          {s.entries.map((e, i) => (
+                            <li key={i} className="acc-row">
+                              <button
+                                className="acc-row-name"
+                                onClick={() => doSearch(e.query || e.title, null)}
+                              >
+                                <span className="acc-row-title">{e.title}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </AccordionSection>
+                    ))
+                }
               </div>
             </>
           )}

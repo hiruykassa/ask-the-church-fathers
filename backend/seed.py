@@ -24,18 +24,18 @@ cursor.execute("INSERT INTO authors (name, born, died, tradition, bio) values (?
 athanasius_id = cursor.lastrowid
 
 #Works
-cursor.execute("INSERT INTO works (author_id, title, category, source_url) values (?, ?, ?, ?)",
-               (augustine_id, "Confessions", "Autobiography", "https://www.ccel.org/ccel/augustine/confessions.html")
+cursor.execute("INSERT INTO works (author_id, title, section, source_url) values (?, ?, ?, ?)",
+               (augustine_id, "Confessions", "Father", "https://www.ccel.org/ccel/augustine/confessions.html")
             )
 confessions_id = cursor.lastrowid
 
-cursor.execute("INSERT INTO works (author_id, title, category, source_url) values (?, ?, ?, ?)",
-               (chrysostom_id, "Homilies on Matthew", "Homily", "https://www.ccel.org/ccel/schaff/npnf110.html")
+cursor.execute("INSERT INTO works (author_id, title, section, source_url) values (?, ?, ?, ?)",
+               (chrysostom_id, "Homilies on Matthew", "Father", "https://www.ccel.org/ccel/schaff/npnf110.html")
             )
 homilies_id = cursor.lastrowid
 
-cursor.execute("INSERT INTO works (author_id, title, category, source_url) values (?, ?, ?, ?)",
-               (athanasius_id, "On the Incarnation", "Treatise", "https://www.ccel.org/ccel/athanasius/incarnation.html")
+cursor.execute("INSERT INTO works (author_id, title, section, source_url) values (?, ?, ?, ?)",
+               (athanasius_id, "On the Incarnation", "Father", "https://www.ccel.org/ccel/athanasius/incarnation.html")
             )
 incarnation_id = cursor.lastrowid
 

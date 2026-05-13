@@ -11,5 +11,9 @@ backend/.env
 # OS junk
 .DS_Store
 
+# Python cache
+__pycache__/
+
 # Editor
 .vscode/
+.cursor/

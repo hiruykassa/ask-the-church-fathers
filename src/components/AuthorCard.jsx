@@ -47,7 +47,7 @@ export default function AuthorCard({ group, isSaved, onToggleSave, onNavigate, d
                 <div className="passage-row-main">
                   <button
                     className="passage-work-btn"
-                    onClick={() => onNavigate(p.work_id)}
+                    onClick={() => onNavigate(p.work_id, p.id)}
                     title="Open the full work"
                   >
                     {p.work}

@@ -147,6 +147,57 @@ def get_work(work_id):
     })
 
 
+# Returns all authors grouped by the section of their works.
+# Used by the frontend Full Library catalog to render live data from the database.
+@app.route("/api/library")
+def library():
+    conn = sqlite3.connect("database.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT authors.id AS author_id, authors.name, authors.born, authors.died,
+               authors.tradition, authors.bio,
+               works.id AS work_id, works.title AS work_title, works.section
+        FROM authors
+        JOIN works ON works.author_id = authors.id
+        ORDER BY works.section, authors.name, works.title
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    sections = {}
+    seen_authors = {}
+
+    for row in rows:
+        section = row["section"] or "Miscellaneous"
+        author_key = (section, row["author_id"])
+
+        if section not in sections:
+            sections[section] = []
+
+        if author_key not in seen_authors:
+            author_obj = {
+                "id": row["author_id"],
+                "name": row["name"],
+                "born": row["born"],
+                "died": row["died"],
+                "tradition": row["tradition"],
+                "bio": row["bio"],
+                "works": []
+            }
+            seen_authors[author_key] = author_obj
+            sections[section].append(author_obj)
+
+        seen_authors[author_key]["works"].append({
+            "id": row["work_id"],
+            "title": row["work_title"],
+            "section": section
+        })
+
+    return jsonify({"sections": sections})
+
+
 # AI synthesis endpoint — takes a topic query and a list of passages, sends them to
 # Claude, and streams the response back as plain text chunks.
 # Streaming means the frontend can display words as they arrive rather than waiting

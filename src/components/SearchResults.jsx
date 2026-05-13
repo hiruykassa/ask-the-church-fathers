@@ -74,8 +74,8 @@ export default function SearchResults({
                 group={g}
                 isSaved={isSaved}
                 onToggleSave={onToggleSave}
-                onNavigate={(workId) =>
-                  navigate(`/read/${workId}`, { state: { query, fromSearch: true } })
+                onNavigate={(workId, passageId) =>
+                  navigate(`/read/${workId}`, { state: { query, fromSearch: true, scrollToPassage: passageId } })
                 }
                 defaultOpen={i === 0}
               />
