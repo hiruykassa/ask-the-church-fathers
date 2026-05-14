@@ -12,6 +12,9 @@ cursor.execute("DELETE FROM authors")
 conn.commit()
 conn.close()
 
+HEADING_TAGS = {"h2", "h3", "h4", "h5", "h6"}
+SKIP_PREFIXES = ("Please help support", "Source.", "Contact information")
+
 def scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic):
     for work in work_dic:
         chunks = []
@@ -21,28 +24,34 @@ def scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic):
                 soup = BeautifulSoup(response.text, "html.parser")
 
                 first_heading = soup.find("h1")
+                current_header = None
 
-                for p in first_heading.find_next_siblings("p"):
-                    for a in p.find_all("a"):
+                for el in first_heading.find_next_siblings():
+                    tag = el.name
+
+                    if tag in HEADING_TAGS:
+                        current_header = el.get_text(strip=True)
+                        continue
+
+                    if tag != "p":
+                        continue
+
+                    for a in el.find_all("a"):
                         a.unwrap()
-
-                    for span in p.find_all("span", class_="stiki"):
+                    for span in el.find_all("span", class_="stiki"):
                         span.decompose()
-                    text = re.sub(r'\[.*?\]', '', p.get_text().strip())
 
-                    if text.startswith("Please help support") or text.startswith("Source.") or text.startswith("Contact information"):
+                    text = re.sub(r'\[.*?\]', '', el.get_text().strip())
+
+                    if text.startswith(SKIP_PREFIXES) or not text:
                         continue
-                    
-                    if not text:
-                        continue
-    
-                    chunks.append(text)
+
+                    chunks.append({"header": current_header, "text": text})
+
                 time.sleep(1)
             except Exception as e:
                 print(f"Failed to scrape {url}: {e}")
                 continue
-
-
 
         conn = sqlite3.connect("database.db")
         cursor = conn.cursor()
@@ -59,7 +68,6 @@ def scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic):
             author_id = cursor.lastrowid
 
         #Works
-
         cursor.execute("INSERT INTO works (author_id, title, section, source_url) values (?, ?, ?, ?)",
                     (author_id, work["title"], work["section"], work["urls"][0])
                     )
@@ -67,8 +75,8 @@ def scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic):
 
         #Passages
         for chunk in chunks:
-            cursor.execute("INSERT INTO passages (work_id, text) VALUES (?, ?)",
-                            (work_id, chunk)
+            cursor.execute("INSERT INTO passages (work_id, header, text) VALUES (?, ?, ?)",
+                            (work_id, chunk["header"], chunk["text"])
             )
 
         conn.commit()

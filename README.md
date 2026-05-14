@@ -30,19 +30,23 @@ Type a topic, keyword, or a Father's name — get matching passages, then ask an
 
 ## Project Status
 
-The site runs end-to-end on localhost: scrape a few works, start the Flask backend, start the React frontend, type a query, get matching passages, click "Ask the Fathers" and stream a Claude synthesis. The whole pipeline works.
+The site runs end-to-end on localhost: scrape the full pre-Chalcedon corpus, start the Flask backend, start the React frontend, type a query, get matching passages, click "Ask the Fathers" and stream a Claude synthesis. The whole pipeline works.
 
-**It is NOT yet production-ready.** Major content, search, hardening, and deployment work is still needed before this is a site real users can rely on. See [Roadmap](#roadmap--whats-left).
+**It is NOT yet production-ready.** Search quality, hardening, and deployment work is still needed before this is a site real users can rely on. See [Roadmap](#roadmap--whats-left).
 
 ### Current corpus snapshot
 
-| Metric           | Count |
-|------------------|-------|
-| Authors loaded   | 1 (Augustine) |
-| Works loaded     | 2 (Confessions Bk 1 Ch 1, City of God Bk 1 Ch 1) |
-| Passages loaded  | ~93 |
+| Metric           | Count  |
+|------------------|--------|
+| Authors loaded   | 118    |
+| Works loaded     | 389    |
+| Passages loaded  | ~65,700 |
+| Councils         | 14     |
+| Liturgies        | 3      |
+| Apocrypha        | 25     |
+| Miscellaneous    | 16     |
 
-The current ETL only grabs the *first chapter* of each work — there are dozens of chapters per book waiting to be ingested. The corpus needs to grow significantly before the search experience feels useful.
+The ETL scrapes all chapters of each work from New Advent — the full pre-Chalcedon corpus is loaded.
 
 ---
 
@@ -50,63 +54,68 @@ The current ETL only grabs the *first chapter* of each work — there are dozens
 
 ### What works today
 
+- **Full pre-Chalcedon corpus** — 118 authors, 389 works, ~65,700 passages covering all major Fathers, councils, apocrypha, liturgies, and miscellaneous texts before 451 AD
+- **Multi-chapter scraping** — ETL walks every chapter URL for each work, not just the first page
+- **Passage section headers** — ETL captures `<h2>`–`<h6>` headings from source pages and stores them as passage headers; displayed in search results (grouped under header labels) and in the book reader (as section dividers with headers in the TOC)
 - **Full-text search** — SQL `LIKE` matching across all passages in the database
 - **Author detection** — queries like `"Augustine prayer"` auto-filter to that Father
 - **Author filter chip** — click ✕ to broaden the search back to all authors
-- **Grouped results (by author)** — passages grouped by author, each group collapsible
+- **Grouped results (by author)** — passages grouped by author, each group collapsible; within each author, passages are sub-grouped by section header
 - **Save passages** — bookmark any passage to a personal Saved tab (session only — does NOT persist across page refresh)
 - **AI synthesis** — streams a Claude-generated summary of what the Fathers collectively taught (3 short paragraphs, neutral scholarly tone, shows disagreements plainly)
-- **Book reader** (`/read/:workId`) — full-screen reader with scroll-progress bar, sidebar/drawer TOC, and passage-level navigation; back button restores the last search
+- **Book reader** (`/read/:workId`) — full-screen reader with scroll-progress bar, sidebar/drawer TOC with section header labels, and passage-level navigation; back button restores the last search
 - **Scroll-reveal animations** — Father cards animate in as they enter the viewport
 - **Full library catalog** — five top-level sidebar buckets (`Father`, `Liturgy`, `Council`, `Apocrypha`, `Miscellaneous`) — all clickable to trigger a search
+- **Polite scraping** — `time.sleep(1)` between HTTP requests so we don't hammer newadvent.org
+- **`.gitignore`** — database files, `.env`, `.venv`, `node_modules`, `__pycache__`, and editor folders are excluded from git
 
 ### Planned changes (not yet built)
 
 - **Search results grouped by work title** — see [Search Behavior](#search-behavior) for the new flow
-- **Multi-chapter scraping** — currently only the first chapter of each work is ingested
-- **Pre-Chalcedon corpus** (~40+ authors, all pre-451 AD) — see [Corpus Scope](#corpus-scope)
 - **Schema simplification** — drop unused fields from `authors` and `works`
 
 ---
 
 ## Roadmap — What's Left
 
-Organized in priority tiers. Tier 1 is the most urgent; Tier 7 is the "after MVP is live" wishlist.
+Organized in priority tiers. Tier 1 is the most urgent; Tier 6 is the "after MVP is live" wishlist.
 
-### Tier 1 — Content (the site is empty without this)
+### ~~Tier 1 — Content~~ ✓ Complete
 
-- [ ] **Multi-chapter scraper.** Current scraper grabs only the first chapter of each work. Needs to find each work's table of contents and crawl every chapter URL.
-- [ ] **Bulk-load all pre-Chalcedon Fathers.** Roughly 40+ authors from the New Advent index. Each author entry needs `{name, born, died}` and a list of `{title, source_url}` for each work.
-- [ ] **Bulk-load pre-Chalcedon councils** (~14 councils, Carthage 257 through Chalcedon 451).
-- [ ] **Bulk-load pre-Chalcedon apocrypha and miscellaneous** (Didache, Apostolic Constitutions, Gospel of Thomas, Acts of Paul and Thecla, etc. — see [Corpus Scope](#corpus-scope)).
-- [ ] **Polite scraping** — add small delays (`time.sleep(1)`) between requests so we don't hammer newadvent.org.
+All content work is done:
 
-### Tier 2 — Search Behavior Change
+- [x] **Multi-chapter scraper.** ETL walks every chapter URL for each work.
+- [x] **Bulk-load all pre-Chalcedon Fathers.** 118 authors loaded from the New Advent index.
+- [x] **Bulk-load pre-Chalcedon councils.** 14 councils loaded (Carthage 257 through Chalcedon 451).
+- [x] **Bulk-load pre-Chalcedon apocrypha and miscellaneous.** 25 apocrypha, 3 liturgies, 16 miscellaneous texts loaded.
+- [x] **Polite scraping.** `time.sleep(1)` between requests.
+- [x] **Passage section headers.** `<h2>`–`<h6>` headings scraped and stored per passage.
+
+### Tier 1 — Search Behavior Change
 
 - [ ] **Change search to return grouped-by-work-title with expandable passages** (see [Search Behavior](#search-behavior)). Backend changes in `/api/search`, frontend changes in `SearchResults.jsx` to render expandable accordion-style cards per work.
 - [ ] **Better ranking** — when there are many matches, rank works by passage count or relevance instead of arbitrary order.
 
-### Tier 3 — Search Quality
+### Tier 2 — Search Quality
 
 - [ ] **Better matching.** SQL `LIKE %q%` is naive — searching "Trinity" misses "Triune" or "three persons." Options:
   - SQLite FTS5 full-text search (built-in, easy upgrade)
   - Semantic search using embeddings (more powerful, more work)
 - [ ] **Pagination** — currently every match is returned at once.
 
-### Tier 4 — Backend Hardening
+### Tier 3 — Backend Hardening
 
-- [ ] **Schema simplification.** Drop `tradition` and `bio` from `authors`. Keep `section` in `works` for sidebar grouping. Final schema:
+- [ ] **Schema simplification.** Drop `tradition` and `bio` from `authors`. Final schema:
   - `authors`: `id`, `name`, `born`, `died`
   - `works`: `id`, `author_id`, `title`, `section`, `source_url`
-  - `passages`: `id`, `work_id`, `text` (unchanged)
+  - `passages`: `id`, `work_id`, `header`, `text`
 - [ ] **Error handling** on every endpoint (no stack traces leaking to users).
 - [ ] **Rate limiting on `/api/synthesize`** — every call costs Anthropic API money. Without limits, one abuser can run up the bill.
 - [ ] **Caching** synthesis results — same query shouldn't re-call Claude.
 - [ ] **CORS lockdown** — replace `CORS(app)` (allows everything) with a whitelist of allowed origins.
 - [ ] **Database connection helper** — extract repeated `sqlite3.connect(...)` into a single helper.
-- [ ] **`.gitignore`** for `database.db`, `.env`, `.venv`, `node_modules`, `__pycache__`.
 
-### Tier 5 — Frontend Polish
+### Tier 4 — Frontend Polish
 
 - [ ] **Loading states** — proper spinners on search and synthesize.
 - [ ] **Error UI** — when an API call fails, show a user-friendly message instead of breaking.
@@ -115,14 +124,14 @@ Organized in priority tiers. Tier 1 is the most urgent; Tier 7 is the "after MVP
 - [ ] **Source-link visibility** — show the original `source_url` on every passage so users can verify against the original.
 - [ ] **Persistent saved passages** — currently lost on refresh. Use `localStorage`, or add a backend table later if accounts are added.
 
-### Tier 6 — Deployment
+### Tier 5 — Deployment
 
 - [ ] **Frontend → Netlify or Cloudflare Pages** (free tier).
 - [ ] **Backend → Render or Fly.io** (free tier). SQLite file lives on the host's persistent disk.
 - [ ] **Production environment variables** — `ANTHROPIC_API_KEY` in the host's secret store, not in the repo.
 - [ ] **Custom domain** (optional, ~$10/yr).
 
-### Tier 7 — Nice-to-haves (after MVP is live)
+### Tier 6 — Nice-to-haves (after MVP is live)
 
 - [ ] User accounts, persistent bookmarks, reading history.
 - [ ] Filter by era, language, theological tradition.
@@ -136,11 +145,12 @@ Organized in priority tiers. Tier 1 is the most urgent; Tier 7 is the "after MVP
 
 The intended corpus is **everything from the New Advent Fathers index that pre-dates the Council of Chalcedon (451 AD)**. This is the body of writings shared in common by all major Christian traditions (Roman Catholic, Eastern Orthodox, Oriental Orthodox) before the Christological split.
 
-**Included:**
-- Church Fathers whose work falls before 451 AD (~40-45 authors). Examples: Justin Martyr, Irenaeus, Tertullian, Origen, Athanasius, Basil the Great, Gregory Nazianzen, Gregory of Nyssa, Augustine, Jerome, Chrysostom, Ambrose, Cyril of Jerusalem, Hippolytus, Cyprian, Clement of Alexandria, etc.
-- Pre-Chalcedon ecumenical and local councils (~14): Carthage 257, Ancyra 314, Neocaesarea 315, Nicaea I 325, Antioch 341, Gangra 343, Sardica 344, Constantinople I 381, Constantinople 382, Laodicea 390, Constantinople 394, Carthage 419, Ephesus 431, Chalcedon 451.
-- Pre-Chalcedon apocryphal texts (Gospel of Peter, Acts of Paul and Thecla, Apocalypse of Peter, etc.) — included for historical completeness; clearly not canonical.
-- Pre-Chalcedon miscellaneous orthodox texts (Didache, Apostolic Constitutions, Passion of the Scillitan Martyrs, etc.).
+**Included (all now loaded):**
+- Church Fathers whose work falls before 451 AD (~118 author entries). Examples: Justin Martyr, Irenaeus, Tertullian, Origen, Athanasius, Basil the Great, Gregory Nazianzen, Gregory of Nyssa, Augustine, Jerome, Chrysostom, Ambrose, Cyril of Jerusalem, Hippolytus, Cyprian, Clement of Alexandria, Leo the Great, Lactantius, Ephraim the Syrian, Eusebius of Caesarea, and many more.
+- Pre-Chalcedon ecumenical and local councils (14): Carthage 257, Ancyra 314, Neocaesarea 315, Nicaea I 325, Antioch 341, Gangra 343, Sardica 344, Constantinople I 381, Constantinople 382, Laodicea 363, Constantinople 394, Carthage 419, Ephesus 431, Chalcedon 451.
+- Pre-Chalcedon apocryphal texts (25): Gospel of Peter, Gospel of Thomas, Gospel of Nicodemus, Acts of Paul and Thecla, Acts of Thomas, Apocalypse of Peter, Protoevangelium of James, Testaments of the Twelve Patriarchs, and others.
+- Pre-Chalcedon liturgical texts (3): Liturgy of James, Liturgy of Mark, Liturgy of the Blessed Apostles.
+- Pre-Chalcedon miscellaneous orthodox texts (16): Didache, Apostolic Constitutions, Apostolic Canons, Passion of the Scillitan Martyrs, Teaching of the Apostles, and others.
 
 **Excluded:**
 - Anything written or compiled after 451 AD (Gregory the Great, John of Damascus, John Cassian's late works, etc.).
@@ -203,9 +213,10 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 2. `App.jsx` calls `detectAuthor(query)` — checks if any Church Father's name is in the query
 3. If a Father is detected, his name is extracted and stored as `detectedAuthor`; the bare topic is sent to the backend
 4. `GET /api/search?q=<topic>` hits Flask → SQL `LIKE %topic%` joins `passages → works → authors`
-5. Results are returned as a flat list of passages and grouped by **author** in `SearchResults.jsx`
-6. If `detectedAuthor` was set, only that author's group is shown; all others are hidden
-7. An author filter chip appears — click ✕ to show all authors again
+5. Results are returned as a flat list of passages (including `header` field) and grouped by **author** in `SearchResults.jsx`
+6. Within each author group, passages are sub-grouped by their section header
+7. If `detectedAuthor` was set, only that author's group is shown; all others are hidden
+8. An author filter chip appears — click ✕ to show all authors again
 
 ### Request Flow — Search (planned)
 
@@ -224,10 +235,11 @@ See [Search Behavior](#search-behavior) for the new design — results will be g
 
 1. User clicks a work title anywhere in the app → `navigate('/read/:workId')`
 2. `ReadPage.jsx` mounts and fetches `GET /api/works/:id`
-3. Flask returns the work title, author, and every passage in order
-4. Passages are rendered in a scrollable column; a `scroll` listener updates the progress bar
-5. The TOC lists every passage number — clicking one calls `scrollToPassage(i)` → `scrollIntoView`
-6. Back button calls `navigate('/', { state: { restoreQuery } })` → `App.jsx` re-runs the previous search automatically
+3. Flask returns the work title, author, and every passage (with headers) in order
+4. Passages are rendered in a scrollable column; section headers from the source text appear as dividers between passages
+5. A `scroll` listener updates the progress bar
+6. The TOC lists every passage number, grouped under their section header labels — clicking one calls `scrollToPassage(i)` → `scrollIntoView`
+7. Back button calls `navigate('/', { state: { restoreQuery } })` → `App.jsx` re-runs the previous search automatically
 
 ---
 
@@ -235,26 +247,28 @@ See [Search Behavior](#search-behavior) for the new design — results will be g
 
 All text comes from **[New Advent — Church Fathers](https://www.newadvent.org/fathers/)**, a public-domain library of patristic writings (most translations are 19th-century: Schaff's Nicene & Post-Nicene Fathers, Roberts/Donaldson Ante-Nicene Fathers).
 
-### Current ETL behavior (`backend/etl.py`)
+### ETL behavior (`backend/etl.py`)
 
-The current script:
+The scraper:
 
 1. Wipes all three tables (`passages`, `works`, `authors`).
-2. Defines `scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic)` — a function that takes one author plus a list of `{url, title, section}` dicts.
+2. Defines `scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic)` — a function that takes one author plus a list of `{urls[], title, section}` dicts. Each work can have multiple chapter URLs.
    - `section` is a sidebar bucket value: `Father`, `Liturgy`, `Council`, `Apocrypha`, or `Miscellaneous`.
-   - Current ETL data labels all works as `Father` because all loaded works are by Church Fathers.
-3. For each work in the list:
+3. For each work in the list, iterates over every URL in `urls[]`:
    - `requests.get(url)` downloads the page
-   - `BeautifulSoup` finds the first `<h2>`, then walks its sibling `<p>` tags
+   - `BeautifulSoup` finds the first `<h1>`, then walks all following siblings
+   - `<h2>`–`<h6>` headings are captured as the current section header (`current_header`); subsequent `<p>` tags inherit that header
    - Anchor tags are unwrapped, `<span class="stiki">` annotations are removed, and `[bracketed]` reference numbers are stripped via regex
-   - The cleaned text of each `<p>` becomes one passage row in the database
+   - Paragraphs starting with "Please help support", "Source.", or "Contact information" are skipped
+   - Each cleaned `<p>` becomes one passage row in the database, stored with its section header
+   - `time.sleep(1)` pauses between page fetches for polite scraping
 4. Author insert uses an "exists or insert" pattern so the same author is reused across multiple works.
 
-**Important limitation:** the scraper grabs only the first chapter of each work — the paragraphs after the first `<h2>`. New Advent organizes each book into many chapter URLs (e.g. Confessions Book 1 has 20 chapters, all separate pages). The next ETL upgrade is to detect a work's chapter list and walk it.
+### Helper scripts
 
-### Seed script (`backend/seed.py`)
-
-A shortcut for local dev. Inserts 3 authors (Augustine, Chrysostom, Athanasius), 3 works, and 5 hand-written passages so the app can run without scraping. All seeded works currently use `section = "Father"`. Use this if `etl.py` is broken or you want a clean known-state DB.
+- **`backend/discover_urls.py`** — discovers chapter URLs for works from the New Advent index.
+- **`backend/verify_urls.py`** — verifies that scraped URLs are reachable.
+- **`backend/seed.py`** — shortcut for local dev. Inserts 3 authors, 3 works, and 5 hand-written passages so the app can run without scraping.
 
 ---
 
@@ -283,22 +297,23 @@ CREATE TABLE works (
 CREATE TABLE passages (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     work_id INTEGER REFERENCES works(id),
+    header  TEXT,
     text    TEXT NOT NULL
 );
 ```
 
+`passages.header` stores the section heading (from `<h2>`–`<h6>` tags on the source page) that a passage falls under. Used in the frontend to display section headers in both search results and the book reader.
+
 `works.section` is used for the sidebar's five top-level browse buckets:
-- `Father`
-- `Liturgy`
-- `Council`
-- `Apocrypha`
-- `Miscellaneous`
+- `Father` (331 works)
+- `Liturgy` (3 works)
+- `Council` (14 works)
+- `Apocrypha` (25 works)
+- `Miscellaneous` (16 works)
 
-Older genre labels (`Autobiography`, `Homily`, `Treatise`, etc.) are no longer used in this column.
+### Planned schema (Tier 3)
 
-### Planned schema (Tier 4)
-
-After simplification, the tables become:
+After simplification, `tradition` and `bio` are dropped from `authors`:
 
 ```sql
 CREATE TABLE authors (
@@ -319,11 +334,10 @@ CREATE TABLE works (
 CREATE TABLE passages (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     work_id INTEGER REFERENCES works(id),
+    header  TEXT,
     text    TEXT NOT NULL
 );
 ```
-
-Migration: change `database.py`, delete `database.db`, re-run `database.py` to recreate. Then re-run ETL/seed.
 
 ---
 
@@ -331,8 +345,8 @@ Migration: change `database.py`, delete `database.db`, re-run `database.py` to r
 
 ### Current behavior
 
-- Backend: `GET /api/search?q=` runs `SELECT … WHERE passages.text LIKE %q%` and returns a flat list of passages.
-- Frontend: passages are grouped by **author** in `SearchResults.jsx`. First author group is open by default; others collapsed.
+- Backend: `GET /api/search?q=` runs `SELECT … WHERE passages.text LIKE %q%` and returns a flat list of passages (each with `header` field).
+- Frontend: passages are grouped by **author** in `SearchResults.jsx`. Within each author card, passages are sub-grouped under their section headers. First author group is open by default; others collapsed.
 
 ### Planned behavior
 
@@ -340,7 +354,7 @@ Search results group by **work title (book)**, not author. Each work card shows 
 
 Concretely:
 
-- Backend: `/api/search` will return passages plus enough metadata to group them by `work_id`. Either group server-side and return a structure like `[{work_id, title, author, matches: [{id, text}, ...]}]`, or keep the current flat passage list and let the frontend group by `work_id`.
+- Backend: `/api/search` will return passages plus enough metadata to group them by `work_id`. Either group server-side and return a structure like `[{work_id, title, author, matches: [{id, text, header}, ...]}]`, or keep the current flat passage list and let the frontend group by `work_id`.
 - Frontend: `SearchResults.jsx` rebuilt around an expandable accordion of works (similar visual treatment to the existing `AccordionSection`).
 - The current author-detection filter still applies — a query like "Augustine prayer" still narrows to Augustine's works only.
 
@@ -352,50 +366,50 @@ Concretely:
 ask-the-church-fathers/
 │
 ├── backend/
-│   ├── app.py           # Flask API — 6 routes
-│   ├── database.py      # Creates SQLite schema on first run
-│   ├── etl.py           # Scrapes newadvent.org → inserts into DB
-│   ├── seed.py          # Sample data for local dev
-│   ├── query.py         # Debug helper — prints all passages to terminal
-│   ├── database.db      # SQLite file (NOT committed once .gitignore is added)
-│   ├── requirements.txt # Python dependencies
-│   └── .env             # NOT committed — put ANTHROPIC_API_KEY here
+│   ├── app.py             # Flask API — 6 routes
+│   ├── database.py        # Creates SQLite schema on first run
+│   ├── etl.py             # Scrapes newadvent.org → inserts into DB
+│   ├── discover_urls.py   # Discovers chapter URLs from New Advent index
+│   ├── verify_urls.py     # Verifies scraped URLs are reachable
+│   ├── seed.py            # Sample data for local dev
+│   ├── query.py           # Debug helper — prints all passages to terminal
+│   ├── database.db        # SQLite file (gitignored)
+│   ├── requirements.txt   # Python dependencies
+│   └── .env               # NOT committed — put ANTHROPIC_API_KEY here
 │
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx          # Root component — all state, search logic, layout
-│   │   ├── App.css          # Entire design system (CSS custom properties, no Tailwind)
-│   │   ├── ReadPage.jsx     # /read/:workId — full-screen book reader
-│   │   ├── ReadPage.css     # Reader-specific styles
-│   │   ├── index.css        # Global reset
-│   │   ├── main.jsx         # React Router setup — two routes
-│   │   │
-│   │   ├── components/
-│   │   │   ├── AccordionSection.jsx  # Reusable collapsible section
-│   │   │   ├── AuthorCard.jsx        # Author result card — passages, save/unsave hearts
-│   │   │   ├── FatherRow.jsx         # Single Father row with works sub-list
-│   │   │   ├── SavedView.jsx         # Saved tab — grouped by author
-│   │   │   ├── SearchResults.jsx     # Results layout
-│   │   │   └── SynthesisPanel.jsx    # AI synthesis panel — streaming display
-│   │   │
-│   │   ├── constants/
-│   │   │   ├── featuredFathers.js    # 10 featured Fathers + portrait imports
-│   │   │   └── library.js            # ALL_FATHERS + RIGHT_SECTIONS catalog
-│   │   │
-│   │   ├── data/
-│   │   │   └── fathers.js            # Name list used by detectAuthor()
-│   │   │
-│   │   ├── hooks/
-│   │   │   └── useScrollReveal.js    # IntersectionObserver hook
-│   │   │
-│   │   └── img/                      # Portrait JPEGs
+├── src/
+│   ├── App.jsx            # Root component — all state, search logic, layout
+│   ├── App.css            # Entire design system (CSS custom properties)
+│   ├── ReadPage.jsx       # /read/:workId — full-screen book reader
+│   ├── ReadPage.css       # Reader-specific styles
+│   ├── index.css          # Global reset
+│   ├── main.jsx           # React Router setup — two routes
 │   │
-│   ├── public/favicon.svg
-│   ├── index.html
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   └── package.json
+│   ├── components/
+│   │   ├── AccordionSection.jsx  # Reusable collapsible section
+│   │   ├── AuthorCard.jsx        # Author result card — passages grouped by header, save/unsave hearts
+│   │   ├── FatherRow.jsx         # Single Father row with works sub-list
+│   │   ├── SavedView.jsx         # Saved tab — grouped by author
+│   │   ├── SearchResults.jsx     # Results layout
+│   │   └── SynthesisPanel.jsx    # AI synthesis panel — streaming display
+│   │
+│   ├── constants/
+│   │   ├── featuredFathers.js    # 10 featured Fathers + portrait imports
+│   │   └── library.js            # ALL_FATHERS + RIGHT_SECTIONS catalog
+│   │
+│   ├── data/
+│   │   └── fathers.js            # Name list used by detectAuthor()
+│   │
+│   ├── hooks/
+│   │   └── useScrollReveal.js    # IntersectionObserver hook
+│   │
+│   └── img/                      # Portrait JPEGs
 │
+├── public/favicon.svg
+├── index.html
+├── vite.config.js
+├── package.json
+├── .gitignore
 └── README.md
 ```
 
@@ -445,7 +459,7 @@ Each entry in the catalog is clickable — it fires a search for that author/wor
 
 ### Flask App (app.py)
 
-The Flask app runs with `debug=True` on port `5001`. CORS is enabled for all origins via `flask-cors` so the Vite dev server on `5173` can reach it freely. (Production deployment will need to lock CORS down to specific origins — see Tier 4.)
+The Flask app runs with `debug=True` on port `5001`. CORS is enabled for all origins via `flask-cors` so the Vite dev server on `5173` can reach it freely. (Production deployment will need to lock CORS down to specific origins — see Tier 3.)
 
 `database.py` is run once before starting the app to ensure all three tables exist.
 
@@ -511,10 +525,10 @@ Example:
 |--------|---------------------|-------------|
 | GET    | `/api/health`       | Returns `{ "status": "ok" }` |
 | GET    | `/api/hello?name=`  | Greeting test endpoint (debugging only) |
-| GET    | `/api/search?q=`    | SQL `LIKE` search across passage text. Returns `{ query, results: [{id, passage, author, work, work_id}] }`. **Planned change:** return shape will be reorganized to group by work — see [Search Behavior](#search-behavior). |
+| GET    | `/api/search?q=`    | SQL `LIKE` search across passage text. Returns `{ query, results: [{id, passage, author, work, work_id, header}] }`. **Planned change:** return shape will be reorganized to group by work — see [Search Behavior](#search-behavior). |
 | GET    | `/api/authors`      | All authors in the DB. Currently returns `{id, name, tradition}`. After schema simplification, will return `{id, name, born, died}`. |
-| GET    | `/api/passages/:id` | Single passage by id, includes author and work title. Returns 404 if not found. |
-| GET    | `/api/works/:id`    | All passages for a work: `{work_id, title, author, passages: [{id, text}]}`. Returns 404 if not found. |
+| GET    | `/api/passages/:id` | Single passage by id, includes author, work title, and header. Returns 404 if not found. |
+| GET    | `/api/works/:id`    | All passages for a work: `{work_id, title, author, passages: [{id, text, header}]}`. Returns 404 if not found. |
 | POST   | `/api/synthesize`   | Streams Claude synthesis. Body: `{ query: string, passages: [{author, work, passage}] }`. Response: plain text stream. |
 
 ---
@@ -524,7 +538,7 @@ Example:
 | Layer    | Technology |
 |----------|------------|
 | Frontend | React 18, Vite 5, react-router-dom v7 |
-| Styling  | Pure CSS with custom properties — no Tailwind |
+| Styling  | Pure CSS with custom properties |
 | Markdown | react-markdown (renders AI synthesis) |
 | Icons    | react-icons (io5, md) |
 | Backend  | Python 3, Flask, Flask-CORS, SQLite |
@@ -560,22 +574,21 @@ ANTHROPIC_API_KEY=sk-ant-...
 python seed.py
 ```
 
-**Option B — scrape from New Advent (currently: Augustine only, first chapter of 2 works):**
+**Option B — scrape the full corpus from New Advent (~65,700 passages, takes a while with polite delays):**
 ```bash
 python etl.py
 ```
 
 Verify what landed in the DB:
 ```bash
-sqlite3 database.db "SELECT title, COUNT(*) FROM passages JOIN works ON passages.work_id = works.id GROUP BY title"
+sqlite3 database.db "SELECT COUNT(DISTINCT a.name) AS authors, COUNT(DISTINCT w.id) AS works, COUNT(*) AS passages FROM passages p JOIN works w ON p.work_id = w.id JOIN authors a ON w.author_id = a.id"
 ```
 
 ### 3 — Frontend
 
 ```bash
-cd frontend
 npm install
-npm run dev                   
+npm run dev
 ```
 
-Open `http://localhost:5173` in your browser. Type a query like "God" or "soul" and watch results stream in.
+Open `http://localhost:5173` in your browser. Type a query like "Trinity" or "baptism" and watch results stream in.

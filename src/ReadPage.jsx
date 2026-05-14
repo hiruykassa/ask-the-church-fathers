@@ -137,11 +137,24 @@ export default function ReadPage() {
               <p className="toc-count">{work.passages.length} total</p>
               <div className="toc-divider" />
               <nav className="toc-list">
-                {work.passages.map((_, i) => (
-                  <button key={i} className="toc-num" onClick={() => scrollToPassage(i)}>
-                    {i + 1}
-                  </button>
-                ))}
+                {(() => {
+                  const items = []
+                  let lastHeader = null
+                  work.passages.forEach((p, i) => {
+                    if (p.header && p.header !== lastHeader) {
+                      items.push(
+                        <p key={`h-${i}`} className="toc-header-label">{p.header}</p>
+                      )
+                      lastHeader = p.header
+                    }
+                    items.push(
+                      <button key={i} className="toc-num" onClick={() => scrollToPassage(i)}>
+                        {i + 1}
+                      </button>
+                    )
+                  })
+                  return items
+                })()}
               </nav>
             </div>
           </aside>
@@ -160,16 +173,24 @@ export default function ReadPage() {
               </div>
 
               <div className="read-passages">
-                {work.passages.map((p, i) => (
-                  <p
-                    key={p.id}
-                    id={`passage-${i + 1}`}
-                    className={`read-passage${p.id === scrollTarget ? ' read-passage--highlight' : ''}`}
-                    ref={el => passageRefs.current[i] = el}
-                  >
-                    {p.text}
-                  </p>
-                ))}
+                {work.passages.map((p, i) => {
+                  const prevHeader = i > 0 ? work.passages[i - 1].header : null
+                  const showHeader = p.header && p.header !== prevHeader
+                  return (
+                    <div key={p.id}>
+                      {showHeader && (
+                        <h2 className="read-section-header">{p.header}</h2>
+                      )}
+                      <p
+                        id={`passage-${i + 1}`}
+                        className={`read-passage${p.id === scrollTarget ? ' read-passage--highlight' : ''}`}
+                        ref={el => passageRefs.current[i] = el}
+                      >
+                        {p.text}
+                      </p>
+                    </div>
+                  )
+                })}
               </div>
             </article>
           )}

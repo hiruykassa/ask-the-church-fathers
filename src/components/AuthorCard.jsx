@@ -36,36 +36,65 @@ export default function AuthorCard({ group, isSaved, onToggleSave, onNavigate, d
 
       {open && (
         <div className="auth-card-body">
-          {group.passages.map(p => {
-            /* Truncate long passages to keep results scannable */
-            const snippet = p.passage.length > 320
-              ? p.passage.slice(0, 320).replace(/\s\S*$/, '') + '…'
-              : p.passage
+          {(() => {
+            const sections = []
+            let currentHeader = null
+            let currentGroup = []
 
-            return (
-              <div key={p.id} className="passage-row">
-                <div className="passage-row-main">
-                  <button
-                    className="passage-work-btn"
-                    onClick={() => onNavigate(p.work_id, p.id)}
-                    title="Open the full work"
-                  >
-                    {p.work}
-                  </button>
-                  <p className="passage-quote">{snippet}</p>
-                </div>
-                <button
-                  className="fav-btn"
-                  onClick={e => { e.stopPropagation(); onToggleSave(p.id, p) }}
-                  title={isSaved(p.id) ? 'Remove from saved' : 'Save passage'}
-                >
-                  {isSaved(p.id)
-                    ? <MdFavorite className="fav-filled" />
-                    : <MdFavoriteBorder className="fav-empty" />}
-                </button>
+            const flush = () => {
+              if (currentGroup.length > 0) {
+                sections.push({ header: currentHeader, passages: currentGroup })
+                currentGroup = []
+              }
+            }
+
+            for (const p of group.passages) {
+              const h = p.header || null
+              if (h !== currentHeader) {
+                flush()
+                currentHeader = h
+              }
+              currentGroup.push(p)
+            }
+            flush()
+
+            return sections.map((sec, si) => (
+              <div key={si} className="passage-header-group">
+                {sec.header && (
+                  <p className="passage-header-label">{sec.header}</p>
+                )}
+                {sec.passages.map(p => {
+                  const snippet = p.passage.length > 320
+                    ? p.passage.slice(0, 320).replace(/\s\S*$/, '') + '…'
+                    : p.passage
+
+                  return (
+                    <div key={p.id} className="passage-row">
+                      <div className="passage-row-main">
+                        <button
+                          className="passage-work-btn"
+                          onClick={() => onNavigate(p.work_id, p.id)}
+                          title="Open the full work"
+                        >
+                          {p.work}
+                        </button>
+                        <p className="passage-quote">{snippet}</p>
+                      </div>
+                      <button
+                        className="fav-btn"
+                        onClick={e => { e.stopPropagation(); onToggleSave(p.id, p) }}
+                        title={isSaved(p.id) ? 'Remove from saved' : 'Save passage'}
+                      >
+                        {isSaved(p.id)
+                          ? <MdFavorite className="fav-filled" />
+                          : <MdFavoriteBorder className="fav-empty" />}
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
+            ))
+          })()}
         </div>
       )}
     </div>

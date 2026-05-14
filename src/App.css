@@ -1080,6 +1080,26 @@ body {
 }
 .passage-row:last-child { border-bottom: none; }
 
+.passage-header-group + .passage-header-group {
+  margin-top: 6px;
+}
+
+.passage-header-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 14px 0 0;
+  padding: 6px 0 4px;
+  border-top: 1px solid var(--border-soft);
+}
+.passage-header-group:first-child .passage-header-label {
+  border-top: none;
+  margin-top: 6px;
+}
+
 .passage-row-main { flex: 1; min-width: 0; }
 
 .passage-work-btn {

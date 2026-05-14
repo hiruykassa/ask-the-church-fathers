@@ -9,6 +9,7 @@ cursor.execute("""
     CREATE TABLE IF NOT EXISTS passages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         work_id INTEGER,
+        header TEXT,
         text TEXT,
         FOREIGN KEY (work_id) REFERENCES works(id)
     )

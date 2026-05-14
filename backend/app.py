@@ -36,7 +36,7 @@ def search():
     search_value = f"%{q}%"
 
     cursor.execute("""
-        SELECT passages.id, passages.text, authors.name, works.title, works.id
+        SELECT passages.id, passages.text, authors.name, works.title, works.id, passages.header
         FROM passages 
         JOIN works ON passages.work_id = works.id
         JOIN authors ON works.author_id = authors.id
@@ -45,8 +45,6 @@ def search():
 
     rows = cursor.fetchall()
 
-    # Shape each row into a flat dict matching the frontend's expected shape,
-    # including work_id so the frontend can link to the /read/:workId page.
     passages = []
     for row in rows:
         passages.append({
@@ -55,6 +53,7 @@ def search():
             "author": row[2],
             "work": row[3],
             "work_id": row[4],
+            "header": row[5],
         })
 
     conn.close()
@@ -92,7 +91,7 @@ def get_passage(id):
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT passages.id, passages.text, authors.name, works.title 
+        SELECT passages.id, passages.text, authors.name, works.title, passages.header
         FROM passages 
         JOIN works ON passages.work_id = works.id
         JOIN authors ON works.author_id = authors.id
@@ -110,6 +109,7 @@ def get_passage(id):
         "passage": row[1],
         "author": row[2],
         "work": row[3],
+        "header": row[4],
     })
 
 # Returns all passages for a specific work by its ID, used by the /read/:workId page.
@@ -131,7 +131,7 @@ def get_work(work_id):
         return jsonify({"error": "Work not found"}), 404
 
     cursor.execute("""
-        SELECT passages.id, passages.text
+        SELECT passages.id, passages.text, passages.header
         FROM passages
         WHERE passages.work_id = ?
         ORDER BY passages.id
@@ -143,7 +143,7 @@ def get_work(work_id):
         "work_id": work_id,
         "title": work_row[0],
         "author": work_row[1],
-        "passages": [{"id": r[0], "text": r[1]} for r in passage_rows],
+        "passages": [{"id": r[0], "text": r[1], "header": r[2]} for r in passage_rows],
     })
 
 

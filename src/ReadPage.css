@@ -276,6 +276,42 @@
   border-radius: 2px;
 }
 .read-passage:last-child { margin-bottom: 0; }
+
+/* ── Section headers within the text ── */
+.read-section-header {
+  font-family: 'Cinzel', serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 1px;
+  margin: 2em 0 0.8em;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+}
+.read-passages > div:first-child .read-section-header {
+  margin-top: 0;
+}
+
+/* ── TOC header labels ── */
+.toc-header-label {
+  grid-column: 1 / -1;
+  font-family: 'Cinzel', serif;
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 8px 0 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-soft);
+  line-height: 1.3;
+}
+.toc-header-label:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
 .read-passage-num {
   font-family: 'Cinzel', serif;
   font-size: 0.76rem;

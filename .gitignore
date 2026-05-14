@@ -8,6 +8,9 @@ backend/.venv/
 # Environment variables (keep secrets out of git)
 backend/.env
 
+# SQLite databases
+*.db
+
 # OS junk
 .DS_Store
 
