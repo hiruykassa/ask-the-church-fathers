@@ -43,8 +43,8 @@
   font-weight: 600;
   letter-spacing: 1.6px;
   text-transform: uppercase;
-  color: #c8a766;
-  transition: color 0.18s;
+  color: var(--gold-hi);
+  transition: color 0.18s var(--ease);
   padding: 4px 0;
   white-space: nowrap;
   justify-self: start;
@@ -63,7 +63,7 @@
 .read-header-title {
   font-family: 'Crimson Text', serif;
   font-size: 0.95rem;
-  color: rgba(240,230,200,0.7);
+  color: rgba(240, 230, 200, 0.7);
   font-style: italic;
   white-space: nowrap;
   overflow: hidden;
@@ -79,13 +79,13 @@
   border-radius: var(--radius-sm);
   padding: 6px 9px;
   cursor: pointer;
-  color: #c8a766;
+  color: var(--gold-hi);
   font-size: 1.1rem;
   line-height: 1;
   flex-shrink: 0;
   transition: background 0.15s, color 0.15s;
 }
-.toc-mobile-btn:hover { background: rgba(0,0,0,0.4); color: var(--parchment); }
+.toc-mobile-btn:hover { background: rgba(0, 0, 0, 0.4); color: var(--parchment); }
 
 /* ── Mobile TOC drawer ── */
 .toc-drawer {
@@ -277,6 +277,55 @@
 }
 .read-passage:last-child { margin-bottom: 0; }
 
+/* ── Liturgy & Council passage formatting ── */
+
+/* Rubrics — speaker labels and stage directions (liturgy + council intros) */
+.read-passage.read-rubric {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-align: left;
+  margin: 2em 0 0.3em;
+  hyphens: manual;
+  line-height: 1.6;
+  border-left: none;
+  padding-left: 0;
+}
+.read-passages > div:first-child .read-rubric {
+  margin-top: 0;
+}
+
+/* Liturgy: spoken/prayer text indented to separate from rubrics */
+.read-liturgy .read-passage:not(.read-rubric) {
+  padding-left: 24px;
+  border-left: 2px solid var(--border-soft);
+}
+
+/* Council: speaker attribution ("X said:") */
+.read-speaker {
+  font-weight: 700;
+  color: var(--text-md);
+  font-style: normal;
+}
+
+/* Council: creedal declarations */
+.read-passage.read-creed {
+  background: rgba(181, 136, 46, 0.06);
+  border-left: 3px solid var(--gold);
+  padding: 20px 24px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* Council: anathema passages */
+.read-passage.read-anathema {
+  border-left: 3px solid var(--text-dim);
+  padding-left: 18px;
+}
+
 /* ── Section headers within the text ── */
 .read-section-header {
   font-family: 'Cinzel', serif;
@@ -361,6 +410,8 @@
   .read-site-header .site-title-ornament { display: none; }
   .read-work-title  { font-size: clamp(1.2rem, 5.5vw, 1.7rem); }
   .read-passage     { font-size: 1.06rem; line-height: 1.9; }
+  .read-liturgy .read-passage:not(.read-rubric) { padding-left: 16px; }
+  .read-passage.read-creed { padding: 14px 16px; }
 }
 
 @media (max-width: 480px) {
@@ -370,6 +421,9 @@
   .read-work-author { font-size: 0.98rem; }
   .read-passage     { font-size: 0.98rem; line-height: 1.82; margin-bottom: 1.1em; }
   .read-passage-num { font-size: 0.66rem; }
+  .read-passage.read-rubric { font-size: 0.7rem; letter-spacing: 1.4px; }
+  .read-liturgy .read-passage:not(.read-rubric) { padding-left: 12px; }
+  .read-passage.read-creed { padding: 12px 14px; }
   .read-back-btn    { font-size: 0.58rem; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .toc-drawer       { padding: 10px 12px 12px; }
   .toc-drawer-list  { gap: 4px; }

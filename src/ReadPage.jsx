@@ -1,9 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { IoArrowBack, IoMenu, IoClose, IoChevronBack } from 'react-icons/io5'
+import { IoArrowBack, IoMenu, IoClose, IoChevronBack, IoArrowUp } from 'react-icons/io5'
 import './ReadPage.css'
 
 const API = 'http://localhost:5001'
+
+const LITURGY_ROLES = /\b(priest|deacon|people|bishop|reader|choir|singer|catechumen)\b/i
+const RUBRIC_STARTS = /^(prayer of|then the|after the|before the|\(aloud)/i
+const SPEAKER_RE    = /^(.{5,120}?\bsaid[,:]\s*)/
 
 /* ══════════════════════════════════════════════════
    READ PAGE  — /read/:workId
@@ -18,8 +22,9 @@ export default function ReadPage() {
   const [work,      setWork]      = useState(null)
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState(null)
-  const [scrollPct, setScrollPct] = useState(0)
-  const [tocOpen,   setTocOpen]   = useState(false)
+  const [scrollPct,    setScrollPct]    = useState(0)
+  const [tocOpen,      setTocOpen]      = useState(false)
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   const passageRefs = useRef([])
 
@@ -67,9 +72,14 @@ export default function ReadPage() {
       const scrolled = el.scrollTop || document.body.scrollTop
       const total    = el.scrollHeight - el.clientHeight
       setScrollPct(total > 0 ? (scrolled / total) * 100 : 0)
+      setShowScrollTop(scrolled > 400)
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
   function scrollToPassage(i) {
@@ -91,6 +101,39 @@ export default function ReadPage() {
   const backLabel = location.state?.fromSearch
     ? `Results for "${location.state.query}"`
     : 'Library'
+
+  const isLiturgy = /^liturgy\b/i.test(work?.title || '')
+  const isCouncil = /^council\b/i.test(work?.title || '')
+
+  function classifyPassage(text) {
+    const t = text.trim()
+    const len = t.length
+
+    if (isLiturgy && len <= 200) {
+      if (LITURGY_ROLES.test(t) || RUBRIC_STARTS.test(t)) return 'rubric'
+    }
+
+    if (isCouncil) {
+      if (/^we believe in one god/i.test(t)) return 'creed'
+      if (/anathema/i.test(t)) return 'anathema'
+      if (len <= 100) return 'rubric'
+    }
+
+    return null
+  }
+
+  function renderCouncilText(text) {
+    const match = text.match(SPEAKER_RE)
+    if (match) {
+      return (
+        <>
+          <span className="read-speaker">{match[1]}</span>
+          {text.slice(match[1].length)}
+        </>
+      )
+    }
+    return text
+  }
 
   return (
     <div className="read-page page-fade">
@@ -172,10 +215,17 @@ export default function ReadPage() {
                 <div className="read-title-rule" />
               </div>
 
-              <div className="read-passages">
+              <div className={`read-passages${isLiturgy ? ' read-liturgy' : ''}${isCouncil ? ' read-council' : ''}`}>
                 {work.passages.map((p, i) => {
                   const prevHeader = i > 0 ? work.passages[i - 1].header : null
                   const showHeader = p.header && p.header !== prevHeader
+                  const variant = classifyPassage(p.text)
+                  const cls = [
+                    'read-passage',
+                    variant && `read-${variant}`,
+                    p.id === scrollTarget && 'read-passage--highlight',
+                  ].filter(Boolean).join(' ')
+
                   return (
                     <div key={p.id}>
                       {showHeader && (
@@ -183,10 +233,10 @@ export default function ReadPage() {
                       )}
                       <p
                         id={`passage-${i + 1}`}
-                        className={`read-passage${p.id === scrollTarget ? ' read-passage--highlight' : ''}`}
+                        className={cls}
                         ref={el => passageRefs.current[i] = el}
                       >
-                        {p.text}
+                        {isCouncil && variant !== 'rubric' ? renderCouncilText(p.text) : p.text}
                       </p>
                     </div>
                   )
@@ -196,6 +246,14 @@ export default function ReadPage() {
           )}
         </div>
       </div>
+
+      <button
+        className={`scroll-top-btn${showScrollTop ? ' is-visible' : ''}`}
+        onClick={scrollToTop}
+        aria-label="Back to top"
+      >
+        <IoArrowUp />
+      </button>
     </div>
   )
 }

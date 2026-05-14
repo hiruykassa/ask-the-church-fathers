@@ -8,9 +8,9 @@
  *  - Layout: header, hero/search bar, library catalog, results, footer
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { IoSearch } from 'react-icons/io5'
+import { IoSearch, IoArrowUp, IoChevronBack } from 'react-icons/io5'
 import { fathers } from './data/fathers'
 import { useScrollReveal } from './hooks/useScrollReveal'
 
@@ -72,6 +72,17 @@ export default function App() {
 
   const [liveFathers,  setLiveFathers]  = useState(null)
   const [liveSections, setLiveSections] = useState(null)
+  const [showScrollTop, setShowScrollTop] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 400)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
 
   const featuredQuote = {
     text: "Stand firm and hold to the traditions that you were taught by us.",
@@ -190,6 +201,7 @@ export default function App() {
 
   /** Resets all search state to return to the hero / library view. */
   function goHome() {
+    window.scrollTo({ top: 0 })
     setSearched(false)
     setQuery('')
     setResults([])
@@ -274,17 +286,25 @@ export default function App() {
               </blockquote>
             </>
           )}
-          <div className="search-bar">
-            <IoSearch className="search-icon" />
-            <input
-              className="search-input"
-              type="text"
-              placeholder="Search by topic, father, or keyword..."
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && doSearch(query)}
-            />
-            <button className="search-btn" onClick={() => doSearch(query)}>Search</button>
+          <div className="search-bar-row">
+            {(searched || view === 'saved') && (
+              <button className="search-home-btn" onClick={goHome} title="Back to Library">
+                <IoChevronBack />
+                <span className="search-home-label">Library</span>
+              </button>
+            )}
+            <div className="search-bar">
+              <IoSearch className="search-icon" />
+              <input
+                className="search-input"
+                type="text"
+                placeholder="Search by topic, father, or keyword..."
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && doSearch(query)}
+              />
+              <button className="search-btn" onClick={() => doSearch(query)}>Search</button>
+            </div>
           </div>
         </div>
       </section>
@@ -416,7 +436,6 @@ export default function App() {
               synthesis={synthesis}
               synthesizing={synthesizing}
               getSynthesis={getSynthesis}
-              goHome={goHome}
             />
           )}
 
@@ -426,6 +445,14 @@ export default function App() {
       <footer className="site-footer">
         <p>&copy; 2026 Ask the Church Fathers</p>
       </footer>
+
+      <button
+        className={`scroll-top-btn${showScrollTop ? ' is-visible' : ''}`}
+        onClick={scrollToTop}
+        aria-label="Back to top"
+      >
+        <IoArrowUp />
+      </button>
     </div>
   )
 }

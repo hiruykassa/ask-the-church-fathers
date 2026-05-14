@@ -63,7 +63,10 @@ The ETL scrapes all chapters of each work from New Advent — the full pre-Chalc
 - **Grouped results (by author)** — passages grouped by author, each group collapsible; within each author, passages are sub-grouped by section header
 - **Save passages** — bookmark any passage to a personal Saved tab (session only — does NOT persist across page refresh)
 - **AI synthesis** — streams a Claude-generated summary of what the Fathers collectively taught (3 short paragraphs, neutral scholarly tone, shows disagreements plainly)
-- **Book reader** (`/read/:workId`) — full-screen reader with scroll-progress bar, sidebar/drawer TOC with section header labels, and passage-level navigation; back button restores the last search
+- **Persistent navigation** — sticky compact search bar with a "Library" back button always visible when browsing results or saved passages; floating scroll-to-top button on both the search page and the book reader; `goHome` resets view and scrolls to top instantly
+- **Book reader** (`/read/:workId`) — full-screen reader with scroll-progress bar, sidebar/drawer TOC with section header labels, passage-level navigation, back button that restores the last search, and a floating scroll-to-top button
+- **Liturgy formatting** — liturgical texts (Liturgy of James, Liturgy of Mark, Liturgy of the Blessed Apostles) auto-detect speaker rubrics ("The Priest.", "The Deacon.", "The People." etc.) and render them as gold uppercase labels; spoken/prayer text is indented with a subtle left border to create a call-and-response visual structure
+- **Council formatting** — council texts auto-detect creedal declarations ("We believe in one God…") and style them with a gold border and warm background; anathema passages get a muted left border; speaker attributions ("Cyprian said:") are rendered in bold; short intro passages are styled as rubrics
 - **Scroll-reveal animations** — Father cards animate in as they enter the viewport
 - **Full library catalog** — five top-level sidebar buckets (`Father`, `Liturgy`, `Council`, `Apocrypha`, `Miscellaneous`) — all clickable to trigger a search
 - **Polite scraping** — `time.sleep(1)` between HTTP requests so we don't hammer newadvent.org
@@ -217,6 +220,7 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 6. Within each author group, passages are sub-grouped by their section header
 7. If `detectedAuthor` was set, only that author's group is shown; all others are hidden
 8. An author filter chip appears — click ✕ to show all authors again
+9. The search bar becomes a sticky compact bar with a "Library" back button on the left; a floating scroll-to-top arrow appears in the bottom-right once the user scrolls down
 
 ### Request Flow — Search (planned)
 
@@ -237,8 +241,10 @@ See [Search Behavior](#search-behavior) for the new design — results will be g
 2. `ReadPage.jsx` mounts and fetches `GET /api/works/:id`
 3. Flask returns the work title, author, and every passage (with headers) in order
 4. Passages are rendered in a scrollable column; section headers from the source text appear as dividers between passages
-5. A `scroll` listener updates the progress bar
-6. The TOC lists every passage number, grouped under their section header labels — clicking one calls `scrollToPassage(i)` → `scrollIntoView`
+5. For liturgies: speaker rubrics are auto-detected and styled as gold uppercase labels; prayer/spoken text is indented with a left border
+6. For councils: creedal text gets a gold border + warm background; anathemas get a muted border; speaker attributions are bolded
+7. A `scroll` listener updates the progress bar
+8. The TOC lists every passage number, grouped under their section header labels — clicking one calls `scrollToPassage(i)` → `scrollIntoView`
 7. Back button calls `navigate('/', { state: { restoreQuery } })` → `App.jsx` re-runs the previous search automatically
 
 ---

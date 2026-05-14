@@ -20,34 +20,30 @@ import SynthesisPanel from './SynthesisPanel'
  *   synthesis: string,
  *   synthesizing: boolean,
  *   getSynthesis: () => void,
- *   goHome: () => void,
  * }} props
  */
 export default function SearchResults({
   query, topicQuery, authorFilter, clearAuthorFilter,
   searching, results, grouped,
   isSaved, onToggleSave, navigate,
-  synthesis, synthesizing, getSynthesis, goHome,
+  synthesis, synthesizing, getSynthesis,
 }) {
   const total = results.length
 
   return (
     <>
       <div className="results-meta">
-        <div className="results-meta-left">
-          <span className="results-count">
-            {searching ? 'Searching…' : `${total} passage${total !== 1 ? 's' : ''}`}
+        <span className="results-count">
+          {searching ? 'Searching…' : `${total} passage${total !== 1 ? 's' : ''}`}
+        </span>
+        {authorFilter && (
+          <span className="author-chip">
+            {authorFilter}
+            <button className="author-chip-x" onClick={clearAuthorFilter} title="Clear filter">
+              <IoClose />
+            </button>
           </span>
-          {authorFilter && (
-            <span className="author-chip">
-              {authorFilter}
-              <button className="author-chip-x" onClick={clearAuthorFilter} title="Clear filter">
-                <IoClose />
-              </button>
-            </span>
-          )}
-        </div>
-        <button className="back-btn" onClick={goHome}>← Back to Library</button>
+        )}
       </div>
 
       {!searching && total === 0 && (
