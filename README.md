@@ -366,50 +366,62 @@ Concretely:
 ask-the-church-fathers/
 │
 ├── backend/
-│   ├── app.py             # Flask API — 6 routes
-│   ├── database.py        # Creates SQLite schema on first run
-│   ├── etl.py             # Scrapes newadvent.org → inserts into DB
-│   ├── discover_urls.py   # Discovers chapter URLs from New Advent index
-│   ├── verify_urls.py     # Verifies scraped URLs are reachable
-│   ├── seed.py            # Sample data for local dev
-│   ├── query.py           # Debug helper — prints all passages to terminal
-│   ├── database.db        # SQLite file (gitignored)
-│   ├── requirements.txt   # Python dependencies
-│   └── .env               # NOT committed — put ANTHROPIC_API_KEY here
+│   ├── .env               # NOT committed — ANTHROPIC_API_KEY goes here
+│   ├── .gitignore          # Excludes .env
+│   ├── app.py              # Flask API — 6 routes
+│   ├── database.py         # Creates SQLite schema on first run
+│   ├── discover_urls.py    # Discovers chapter URLs from New Advent index
+│   ├── etl.py              # Scrapes newadvent.org → inserts into DB
+│   ├── query.py            # Debug helper — prints all passages to terminal
+│   ├── requirements.txt    # Python dependencies
+│   ├── seed.py             # Sample data for local dev
+│   └── verify_urls.py      # Verifies scraped URLs are reachable
+│
+├── public/
+│   └── favicon.svg         # Gold cross favicon
 │
 ├── src/
-│   ├── App.jsx            # Root component — all state, search logic, layout
-│   ├── App.css            # Entire design system (CSS custom properties)
-│   ├── ReadPage.jsx       # /read/:workId — full-screen book reader
-│   ├── ReadPage.css       # Reader-specific styles
-│   ├── index.css          # Global reset
-│   ├── main.jsx           # React Router setup — two routes
+│   ├── App.css             # Entire design system (CSS custom properties)
+│   ├── App.jsx             # Root component — all state, search logic, layout
+│   ├── ReadPage.css        # Reader-specific styles
+│   ├── ReadPage.jsx        # /read/:workId — full-screen book reader
+│   ├── index.css           # Global reset
+│   ├── main.jsx            # React Router setup — two routes
 │   │
 │   ├── components/
-│   │   ├── AccordionSection.jsx  # Reusable collapsible section
-│   │   ├── AuthorCard.jsx        # Author result card — passages grouped by header, save/unsave hearts
-│   │   ├── FatherRow.jsx         # Single Father row with works sub-list
-│   │   ├── SavedView.jsx         # Saved tab — grouped by author
-│   │   ├── SearchResults.jsx     # Results layout
-│   │   └── SynthesisPanel.jsx    # AI synthesis panel — streaming display
+│   │   ├── AccordionSection.jsx   # Reusable collapsible section
+│   │   ├── AuthorCard.jsx         # Author result card — passages grouped by header
+│   │   ├── FatherRow.jsx          # Single Father row with works sub-list
+│   │   ├── SavedView.jsx          # Saved tab — grouped by author
+│   │   ├── SearchResults.jsx      # Results layout
+│   │   └── SynthesisPanel.jsx     # AI synthesis panel — streaming display
 │   │
 │   ├── constants/
-│   │   ├── featuredFathers.js    # 10 featured Fathers + portrait imports
-│   │   └── library.js            # ALL_FATHERS + RIGHT_SECTIONS catalog
+│   │   ├── featuredFathers.js     # 10 featured Fathers + portrait imports
+│   │   └── library.js             # ALL_FATHERS + RIGHT_SECTIONS catalog
 │   │
 │   ├── data/
-│   │   └── fathers.js            # Name list used by detectAuthor()
+│   │   └── fathers.js             # Name list used by detectAuthor()
 │   │
 │   ├── hooks/
-│   │   └── useScrollReveal.js    # IntersectionObserver hook
+│   │   └── useScrollReveal.js     # IntersectionObserver hook
 │   │
-│   └── img/                      # Portrait JPEGs
+│   └── img/
+│       ├── athanasius.jpeg
+│       ├── augustine.jpeg
+│       ├── basil.jpeg
+│       ├── chrysostom.jpeg
+│       ├── cyril.jpeg
+│       ├── ignatius.jpeg
+│       ├── irenaeus.jpeg
+│       ├── justin-martyr.jpeg
+│       ├── origen.jpeg
+│       └── tertullian.jpeg
 │
-├── public/favicon.svg
-├── index.html
-├── vite.config.js
-├── package.json
-├── .gitignore
+├── .gitignore              # Excludes *.db, .env, node_modules, dist, etc.
+├── index.html              # Vite entry HTML
+├── package.json            # Node dependencies and scripts
+├── vite.config.js          # Vite config with React plugin
 └── README.md
 ```
 
