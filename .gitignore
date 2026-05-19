@@ -16,6 +16,12 @@ backend/.env
 
 # Python cache
 __pycache__/
+*.pyc
+
+# Corpus tool artifacts
+tools/corpus/audit*
+*.log
+backend/audit*
 
 # Editor
 .vscode/

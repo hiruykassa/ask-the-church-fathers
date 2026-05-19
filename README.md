@@ -253,7 +253,7 @@ See [Search Behavior](#search-behavior) for the new design — results will be g
 
 All text comes from **[New Advent — Church Fathers](https://www.newadvent.org/fathers/)**, a public-domain library of patristic writings (most translations are 19th-century: Schaff's Nicene & Post-Nicene Fathers, Roberts/Donaldson Ante-Nicene Fathers).
 
-### ETL behavior (`backend/etl.py`)
+### ETL behavior (`tools/corpus/etl.py`)
 
 The scraper:
 
@@ -270,15 +270,17 @@ The scraper:
    - `time.sleep(1)` pauses between page fetches for polite scraping
 4. Author insert uses an "exists or insert" pattern so the same author is reused across multiple works.
 
-### Helper scripts
+### Corpus tools (`tools/corpus/`)
 
-- **`backend/scrape_utils.py`** — shared HTML parsing (`fetch_and_parse`, heading detection) used by ETL and repair scripts.
-- **`backend/discover_urls.py`** — discovers chapter URLs for works from the New Advent index.
-- **`backend/verify_urls.py`** — verifies that scraped URLs are reachable.
-- **`backend/repair_text.py`** — fixes mis-scraped headers/footers and rebuilds the FTS index.
-- **`backend/seed.py`** — shortcut for local dev. Inserts 3 authors, 3 works, and 5 hand-written passages so the app can run without scraping.
+Not required to run the site — only to build or repair the database. See `tools/corpus/README.md`.
 
-After `etl.py` or `repair_text.py` finishes, `passages_fts` is rebuilt automatically. Running `database.py` alone creates the FTS table and populates it from any existing passages.
+- **`etl.py`** — full New Advent scrape; rebuilds FTS at the end
+- **`repair_text.py`** — fix bad scrapes and rebuild FTS
+- **`scrape_utils.py`**, **`discover_urls.py`**, **`verify_urls.py`**, **`query.py`** — parsing and maintenance helpers
+
+**Runtime backend** (`backend/`): `app.py`, `database.py`, `seed.py`, and a local `database.db` (gitignored, ~140 MB with full corpus).
+
+After `tools/corpus/etl.py` or `repair_text.py` finishes, `passages_fts` is rebuilt automatically. Running `backend/database.py` creates the FTS table and populates it from any existing passages.
 
 ---
 
@@ -386,19 +388,20 @@ Concretely:
 ```
 ask-the-church-fathers/
 │
-├── backend/
-│   ├── .env               # NOT committed — ANTHROPIC_API_KEY goes here
-│   ├── .gitignore          # Excludes .env
-│   ├── app.py              # Flask API — search, library, synthesis, works
+├── backend/                # Runtime API (all you need to run the site)
+│   ├── .env                # NOT committed — ANTHROPIC_API_KEY
+│   ├── app.py              # Flask API
 │   ├── database.py         # Creates schema + FTS index
-│   ├── discover_urls.py    # Discovers chapter URLs from New Advent index
-│   ├── etl.py              # Scrapes newadvent.org → inserts into DB + rebuilds FTS
-│   ├── scrape_utils.py     # Shared HTML parsing for ETL/repair
-│   ├── repair_text.py      # Fixes bad scrapes + rebuilds FTS
-│   ├── query.py            # Debug helper — prints all passages to terminal
-│   ├── requirements.txt    # Python dependencies
-│   ├── seed.py             # Sample data for local dev
-│   └── verify_urls.py      # Verifies scraped URLs are reachable
+│   ├── database.db         # Local corpus (gitignored; ~140 MB full load)
+│   ├── requirements.txt
+│   └── seed.py             # Tiny dev dataset (optional)
+│
+├── tools/corpus/           # Scraping & DB maintenance (optional)
+│   ├── README.md
+│   ├── etl.py
+│   ├── scrape_utils.py
+│   ├── repair_text.py
+│   └── …
 │
 ├── public/
 │   └── favicon.svg         # Gold cross favicon
@@ -607,15 +610,17 @@ ANTHROPIC_API_KEY=sk-ant-...
 python seed.py
 ```
 
-**Option B — scrape the full corpus from New Advent (~71,600 passages; takes a while with polite delays; rebuilds FTS at the end):**
+**Option B — scrape the full corpus from New Advent (~71,600 passages; run from project root):**
 ```bash
-python etl.py
+python tools/corpus/etl.py
 ```
 
 Verify what landed in the DB:
 ```bash
-sqlite3 database.db "SELECT COUNT(DISTINCT a.name) AS authors, COUNT(DISTINCT w.id) AS works, COUNT(*) AS passages FROM passages p JOIN works w ON p.work_id = w.id JOIN authors a ON w.author_id = a.id"
+sqlite3 backend/database.db "SELECT COUNT(DISTINCT a.name) AS authors, COUNT(DISTINCT w.id) AS works, COUNT(*) AS passages FROM passages p JOIN works w ON p.work_id = w.id JOIN authors a ON w.author_id = a.id"
 ```
+
+> **Note:** `database.db` is not in git (too large). Clone the repo, then either run `seed.py`, run `tools/corpus/etl.py`, or copy an existing `database.db` into `backend/`.
 
 ### 3 — Frontend
 
