@@ -1,8 +1,7 @@
-import requests
-from bs4 import BeautifulSoup
-import re
 import sqlite3
 import time
+
+from scrape_utils import fetch_and_parse
 
 conn = sqlite3.connect("database.db")
 cursor = conn.cursor()
@@ -12,42 +11,13 @@ cursor.execute("DELETE FROM authors")
 conn.commit()
 conn.close()
 
-HEADING_TAGS = {"h2", "h3", "h4", "h5", "h6"}
-SKIP_PREFIXES = ("Please help support", "Source.", "Contact information")
 
-def scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic):
+def scrape_work(author_name, birth_yr, death_yr, rite, bio, work_dic, skip_hr_break=False):
     for work in work_dic:
         chunks = []
         for url in work["urls"]:
             try:
-                response = requests.get(url)
-                soup = BeautifulSoup(response.text, "html.parser")
-
-                first_heading = soup.find("h1")
-                current_header = None
-
-                for el in first_heading.find_next_siblings():
-                    tag = el.name
-
-                    if tag in HEADING_TAGS:
-                        current_header = el.get_text(strip=True)
-                        continue
-
-                    if tag != "p":
-                        continue
-
-                    for a in el.find_all("a"):
-                        a.unwrap()
-                    for span in el.find_all("span", class_="stiki"):
-                        span.decompose()
-
-                    text = re.sub(r'\[.*?\]', '', el.get_text().strip())
-
-                    if text.startswith(SKIP_PREFIXES) or not text:
-                        continue
-
-                    chunks.append({"header": current_header, "text": text})
-
+                chunks.extend(fetch_and_parse(url, skip_hr_break=skip_hr_break))
                 time.sleep(1)
             except Exception as e:
                 print(f"Failed to scrape {url}: {e}")
@@ -2124,7 +2094,10 @@ scrape_work(
             "section": "Father"
         },
         {
-            "urls": ["https://www.newadvent.org/fathers/3409.htm"],
+            "urls": [
+                f"https://www.newadvent.org/fathers/3409{n}.htm"
+                for n in [17, 18, 20, 21, 22, 40, 41, 51, 57, 61, 62, 63]
+            ],
             "title": "Letters",
             "section": "Father"
         },
@@ -2379,7 +2352,10 @@ scrape_work(
             "section": "Father"
         },
         {
-            "urls": ["https://www.newadvent.org/fathers/2707.htm"],
+            "urls": [
+                f"https://www.newadvent.org/fathers/2707{n:03d}.htm"
+                for n in range(1, 182)
+            ],
             "title": "Letters",
             "section": "Father"
         },
@@ -3289,3 +3265,25 @@ scrape_work(
         },
     ]
 )
+
+conn = sqlite3.connect("database.db")
+cursor = conn.cursor()
+
+cursor.execute("DROP TABLE IF EXISTS passages_fts")
+cursor.execute("""
+    CREATE VIRTUAL TABLE passages_fts USING fts5(
+        text, author_name, work_title,
+        content='', content_rowid=id
+    )
+""")
+cursor.execute("""
+    INSERT INTO passages_fts(rowid, text, author_name, work_title)
+    SELECT p.id, p.text, a.name, w.title
+    FROM passages p
+    JOIN works w ON p.work_id = w.id
+    JOIN authors a ON w.author_id = a.id
+""")
+
+conn.commit()
+conn.close()
+

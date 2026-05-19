@@ -21,13 +21,13 @@ export default function SynthesisPanel({
       <div className="syn-head">
         <span className="syn-label">✦ AI Synthesis</span>
         <button className="syn-btn" onClick={getSynthesis} disabled={synthesizing}>
-          {synthesizing ? 'Synthesizing…' : synthesis ? 'Regenerate' : 'Get Synthesis'}
+          {synthesizing ? 'Synthesizing…' : synthesis ? 'Regenerate' : 'Ask the Fathers'}
         </button>
       </div>
 
       {!synthesis && !synthesizing && (
         <p className="syn-placeholder">
-          Click <em>Get Synthesis</em> to see what the Fathers collectively taught on{' '}
+          Click <em>Ask the Fathers</em> for a historian-style summary of what the passages say on{' '}
           <strong>"{topicQuery}"</strong>
           {authorFilter ? ` — filtered to ${authorFilter}` : ' — across all Fathers'}.
         </p>

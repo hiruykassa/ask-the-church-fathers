@@ -93,6 +93,8 @@
   background: var(--parchment-3);
   border-bottom: 1px solid var(--border);
   padding: 14px 20px 16px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 .toc-drawer-label {
   font-family: 'Cinzel', serif;
@@ -103,10 +105,20 @@
   color: var(--text-dim);
   margin-bottom: 10px;
 }
-.toc-drawer-list {
+.toc-drawer-chapters {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 2px;
+}
+.toc-drawer-chapters .toc-chapter-btn {
+  padding: 8px 10px;
+}
+.toc-drawer-chapters .toc-chapter-count {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* ── Body layout ── */
@@ -126,7 +138,7 @@
 .read-toc {
   position: sticky;
   top: 96px;
-  width: 160px;
+  width: 220px;
   flex-shrink: 0;
   max-height: calc(100vh - 120px);
   overflow-y: auto;
@@ -169,29 +181,52 @@
   margin-bottom: 12px;
 }
 
-.toc-list {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
+.toc-chapter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.toc-num {
+
+.toc-chapter-btn {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
   background: none;
-  border: 1px solid var(--border-soft);
-  font-family: 'Inter', sans-serif;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: var(--text-dim);
+  border: none;
   cursor: pointer;
-  padding: 5px 2px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
-  text-align: center;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-  line-height: 1;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1.35;
 }
-.toc-num:hover {
+.toc-chapter-btn:hover {
   background: var(--gold-soft);
+}
+
+.toc-chapter-num {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
   color: var(--gold);
-  border-color: var(--gold-soft);
+  min-width: 16px;
+  flex-shrink: 0;
+}
+
+.toc-chapter-name {
+  font-family: 'Crimson Text', serif;
+  font-size: 0.84rem;
+  color: var(--text-md);
+  transition: color 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.toc-chapter-btn:hover .toc-chapter-name {
+  color: var(--gold);
 }
 
 /* ── Main article area ── */
@@ -341,26 +376,14 @@
 .read-passages > div:first-child .read-section-header {
   margin-top: 0;
 }
+.read-book-header {
+  font-size: 1.35rem;
+  letter-spacing: 1.5px;
+  border-bottom-width: 2px;
+  margin-top: 2.5em;
+}
 
-/* ── TOC header labels ── */
-.toc-header-label {
-  grid-column: 1 / -1;
-  font-family: 'Cinzel', serif;
-  font-size: 0.52rem;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin: 8px 0 2px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border-soft);
-  line-height: 1.3;
-}
-.toc-header-label:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
+/* ── Passage numbers (inline, used by reader) ── */
 .read-passage-num {
   font-family: 'Cinzel', serif;
   font-size: 0.76rem;
@@ -378,7 +401,7 @@
 @media (max-width: 900px) {
   .read-header-title { display: none; }
   .read-article      { padding: 44px 44px 52px; }
-  .read-toc          { width: 140px; margin-right: 24px; }
+  .read-toc          { width: 190px; margin-right: 24px; }
 }
 
 @media (max-width: 760px) {
@@ -426,6 +449,6 @@
   .read-passage.read-creed { padding: 12px 14px; }
   .read-back-btn    { font-size: 0.58rem; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .toc-drawer       { padding: 10px 12px 12px; }
-  .toc-drawer-list  { gap: 4px; }
-  .toc-num          { font-size: 0.65rem; padding: 4px 2px; }
+  .toc-drawer-chapters .toc-chapter-btn { padding: 6px 8px; }
+  .toc-chapter-name { font-size: 0.78rem; }
 }

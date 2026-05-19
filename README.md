@@ -40,7 +40,7 @@ The site runs end-to-end on localhost: scrape the full pre-Chalcedon corpus, sta
 |------------------|--------|
 | Authors loaded   | 118    |
 | Works loaded     | 389    |
-| Passages loaded  | ~65,700 |
+| Passages loaded  | ~71,600 |
 | Councils         | 14     |
 | Liturgies        | 3      |
 | Apocrypha        | 25     |
@@ -57,12 +57,12 @@ The ETL scrapes all chapters of each work from New Advent — the full pre-Chalc
 - **Full pre-Chalcedon corpus** — 118 authors, 389 works, ~65,700 passages covering all major Fathers, councils, apocrypha, liturgies, and miscellaneous texts before 451 AD
 - **Multi-chapter scraping** — ETL walks every chapter URL for each work, not just the first page
 - **Passage section headers** — ETL captures `<h2>`–`<h6>` headings from source pages and stores them as passage headers; displayed in search results (grouped under header labels) and in the book reader (as section dividers with headers in the TOC)
-- **Full-text search** — SQL `LIKE` matching across all passages in the database
-- **Author detection** — queries like `"Augustine prayer"` auto-filter to that Father
+- **Full-text search (FTS5)** — SQLite FTS5 across passage text, author name, and work title; results ranked by relevance (top 100). User queries are sanitized so apostrophes and special characters do not break search.
+- **Author detection** — loads the live author list from `/api/authors`; queries like `"Augustine prayer"` auto-filter to that Father; author-only queries (e.g. `"Athanasius of Alexandria"`) show a **works list** instead of passage hits
 - **Author filter chip** — click ✕ to broaden the search back to all authors
-- **Grouped results (by author)** — passages grouped by author, each group collapsible; within each author, passages are sub-grouped by section header
+- **Flat search results** — relevance-ordered passage cards with author, work title, section header, snippet, save button, and link to the full work
 - **Save passages** — bookmark any passage to a personal Saved tab (session only — does NOT persist across page refresh)
-- **AI synthesis** — streams a Claude-generated summary of what the Fathers collectively taught (3 short paragraphs, neutral scholarly tone, shows disagreements plainly)
+- **AI synthesis** — streams a Claude-generated summary in a patristic-historian voice: evidence-only from provided passages, per-Father attribution, no orthodox/heretical labels, max 4 paragraphs
 - **Persistent navigation** — sticky compact search bar with a "Library" back button always visible when browsing results or saved passages; floating scroll-to-top button on both the search page and the book reader; `goHome` resets view and scrolls to top instantly
 - **Book reader** (`/read/:workId`) — full-screen reader with scroll-progress bar, sidebar/drawer TOC with section header labels, passage-level navigation, back button that restores the last search, and a floating scroll-to-top button
 - **Liturgy formatting** — liturgical texts (Liturgy of James, Liturgy of Mark, Liturgy of the Blessed Apostles) auto-detect speaker rubrics ("The Priest.", "The Deacon.", "The People." etc.) and render them as gold uppercase labels; spoken/prayer text is indented with a subtle left border to create a call-and-response visual structure
@@ -101,10 +101,9 @@ All content work is done:
 
 ### Tier 2 — Search Quality
 
-- [ ] **Better matching.** SQL `LIKE %q%` is naive — searching "Trinity" misses "Triune" or "three persons." Options:
-  - SQLite FTS5 full-text search (built-in, easy upgrade)
-  - Semantic search using embeddings (more powerful, more work)
-- [ ] **Pagination** — currently every match is returned at once.
+- [x] **SQLite FTS5 full-text search** — `passages_fts` indexes passage text, author name, and work title; `/api/search` uses `MATCH` with ranked results (limit 100).
+- [ ] **Semantic search** — embeddings for conceptual matches (e.g. "Trinity" → "Triune").
+- [ ] **Pagination** — currently the top 100 matches are returned at once.
 
 ### Tier 3 — Backend Hardening
 
@@ -170,8 +169,9 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 │                                                             │
 │   ┌──────────┐   search/save/read   ┌──────────────────┐    │
 │   │  App.jsx │ ──────────────────▶  │  SearchResults   │    │
-│   │  (state) │ ◀──────────────────  │  AuthorCard      │    │
+│   │  (state) │ ◀──────────────────  │  AuthorWorksView │    │
 │   └──────────┘   results/stream     │  SynthesisPanel  │    │
+│        │                            │  AuthorCard      │    │
 │        │                            └──────────────────┘    │
 │        │  /read/:workId                                     │
 │        ▼                                                    │
@@ -184,12 +184,14 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 ┌─────────────────────────────────────────────────────────────┐
 │             Flask API (localhost:5001)                       │
 │                                                             │
-│   GET  /api/search?q=      →  SQL LIKE query on passages    │
-│   GET  /api/works/:id      →  all passages for one work     │
-│   POST /api/synthesize     →  stream response from Claude   │
-│   GET  /api/authors        →  list all authors              │
-│   GET  /api/passages/:id   →  single passage                │
-│   GET  /api/health         →  { status: "ok" }              │
+│   GET  /api/search?q=           →  FTS5 search (ranked)     │
+│   GET  /api/works/:id           →  all passages for a work  │
+│   GET  /api/authors/:id/works   →  works list for an author │
+│   GET  /api/library             →  catalog by section       │
+│   POST /api/synthesize          →  stream Claude response   │
+│   GET  /api/authors             →  list all authors         │
+│   GET  /api/passages/:id        →  single passage           │
+│   GET  /api/health              →  { status: "ok" }         │
 └────────────────────────┬────────────────────────────────────┘
           │                               │
           ▼                               ▼
@@ -213,14 +215,12 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 ### Request Flow — Search (current)
 
 1. User types a query and presses Enter
-2. `App.jsx` calls `detectAuthor(query)` — checks if any Church Father's name is in the query
-3. If a Father is detected, his name is extracted and stored as `detectedAuthor`; the bare topic is sent to the backend
-4. `GET /api/search?q=<topic>` hits Flask → SQL `LIKE %topic%` joins `passages → works → authors`
-5. Results are returned as a flat list of passages (including `header` field) and grouped by **author** in `SearchResults.jsx`
-6. Within each author group, passages are sub-grouped by their section header
-7. If `detectedAuthor` was set, only that author's group is shown; all others are hidden
-8. An author filter chip appears — click ✕ to show all authors again
-9. The search bar becomes a sticky compact bar with a "Library" back button on the left; a floating scroll-to-top arrow appears in the bottom-right once the user scrolls down
+2. `App.jsx` calls `detectAuthor(query)` against the live list from `GET /api/authors`
+3. **Author-only query** (e.g. `"Augustine"` or `"Athanasius of Alexandria"`): `GET /api/authors/:id/works` → `AuthorWorksView` lists that Father's works; clicking a work opens `/read/:workId`
+4. **Author + topic** (e.g. `"Augustine grace"`): topic is sent to `GET /api/search?q=<topic>`; results are client-filtered to that author; an author chip appears (click ✕ to broaden)
+5. **Topic only**: `GET /api/search?q=<query>` → FTS5 `MATCH` on `passages_fts`, ranked, limit 100
+6. `SearchResults.jsx` renders a flat relevance-ordered list of passage cards (author, work, section header, snippet)
+7. Sticky compact search bar with "Library" back button; floating scroll-to-top after scrolling down
 
 ### Request Flow — Search (planned)
 
@@ -272,9 +272,13 @@ The scraper:
 
 ### Helper scripts
 
+- **`backend/scrape_utils.py`** — shared HTML parsing (`fetch_and_parse`, heading detection) used by ETL and repair scripts.
 - **`backend/discover_urls.py`** — discovers chapter URLs for works from the New Advent index.
 - **`backend/verify_urls.py`** — verifies that scraped URLs are reachable.
+- **`backend/repair_text.py`** — fixes mis-scraped headers/footers and rebuilds the FTS index.
 - **`backend/seed.py`** — shortcut for local dev. Inserts 3 authors, 3 works, and 5 hand-written passages so the app can run without scraping.
+
+After `etl.py` or `repair_text.py` finishes, `passages_fts` is rebuilt automatically. Running `database.py` alone creates the FTS table and populates it from any existing passages.
 
 ---
 
@@ -308,7 +312,18 @@ CREATE TABLE passages (
 );
 ```
 
-`passages.header` stores the section heading (from `<h2>`–`<h6>` tags on the source page) that a passage falls under. Used in the frontend to display section headers in both search results and the book reader.
+### FTS index (`passages_fts`)
+
+```sql
+CREATE VIRTUAL TABLE passages_fts USING fts5(
+    text, author_name, work_title,
+    content='', content_rowid=id
+);
+```
+
+Rows are inserted from `passages` joined to `authors` and `works`. Search uses `MATCH` with `ORDER BY rank LIMIT 100`. The API sanitizes user input (quoted tokens) so FTS5 syntax characters do not cause errors.
+
+`passages.header` stores the section heading (from `<h2>`–`<h6>` tags on the source page) that a passage falls under. Shown on search result cards and as section dividers in the book reader.
 
 `works.section` is used for the sidebar's five top-level browse buckets:
 - `Father` (331 works)
@@ -351,8 +366,8 @@ CREATE TABLE passages (
 
 ### Current behavior
 
-- Backend: `GET /api/search?q=` runs `SELECT … WHERE passages.text LIKE %q%` and returns a flat list of passages (each with `header` field).
-- Frontend: passages are grouped by **author** in `SearchResults.jsx`. Within each author card, passages are sub-grouped under their section headers. First author group is open by default; others collapsed.
+- Backend: `GET /api/search?q=` runs FTS5 `MATCH` on `passages_fts` (passage text, author name, work title), returns up to 100 ranked hits: `{ id, passage, author, work, work_id, header }`.
+- Frontend: `SearchResults.jsx` shows a flat relevance-ordered list. `AuthorWorksView.jsx` handles author-only queries. `AuthorCard.jsx` is still used in the Saved tab (grouped by author with section headers).
 
 ### Planned behavior
 
@@ -374,10 +389,12 @@ ask-the-church-fathers/
 ├── backend/
 │   ├── .env               # NOT committed — ANTHROPIC_API_KEY goes here
 │   ├── .gitignore          # Excludes .env
-│   ├── app.py              # Flask API — 6 routes
-│   ├── database.py         # Creates SQLite schema on first run
+│   ├── app.py              # Flask API — search, library, synthesis, works
+│   ├── database.py         # Creates schema + FTS index
 │   ├── discover_urls.py    # Discovers chapter URLs from New Advent index
-│   ├── etl.py              # Scrapes newadvent.org → inserts into DB
+│   ├── etl.py              # Scrapes newadvent.org → inserts into DB + rebuilds FTS
+│   ├── scrape_utils.py     # Shared HTML parsing for ETL/repair
+│   ├── repair_text.py      # Fixes bad scrapes + rebuilds FTS
 │   ├── query.py            # Debug helper — prints all passages to terminal
 │   ├── requirements.txt    # Python dependencies
 │   ├── seed.py             # Sample data for local dev
@@ -396,18 +413,16 @@ ask-the-church-fathers/
 │   │
 │   ├── components/
 │   │   ├── AccordionSection.jsx   # Reusable collapsible section
-│   │   ├── AuthorCard.jsx         # Author result card — passages grouped by header
+│   │   ├── AuthorCard.jsx         # Saved-tab card — passages grouped by header
+│   │   ├── AuthorWorksView.jsx    # Author-only search — clickable works list
 │   │   ├── FatherRow.jsx          # Single Father row with works sub-list
 │   │   ├── SavedView.jsx          # Saved tab — grouped by author
-│   │   ├── SearchResults.jsx      # Results layout
+│   │   ├── SearchResults.jsx      # Flat FTS passage results + synthesis
 │   │   └── SynthesisPanel.jsx     # AI synthesis panel — streaming display
 │   │
 │   ├── constants/
 │   │   ├── featuredFathers.js     # 10 featured Fathers + portrait imports
 │   │   └── library.js             # ALL_FATHERS + RIGHT_SECTIONS catalog
-│   │
-│   ├── data/
-│   │   └── fathers.js             # Name list used by detectAuthor()
 │   │
 │   ├── hooks/
 │   │   └── useScrollReveal.js     # IntersectionObserver hook
@@ -441,14 +456,15 @@ All app state lives in `App.jsx` and is passed down as props:
 
 | State variable  | Type      | Purpose |
 |-----------------|-----------|---------|
-| `results`       | array     | Raw search results from the backend |
+| `results`       | array     | FTS search hits from the backend |
 | `query`         | string    | Current search input value |
-| `topicQuery`    | string    | Query sent to backend (Father name stripped out) |
-| `detectedAuthor`| string    | Father name found by `detectAuthor()`, or `''` |
+| `topicQuery`    | string    | Topic sent to `/api/search` (author name stripped when filtered) |
+| `authorFilter`  | string    | Author name when filtering topic search, or `null` |
+| `authorWorks`   | object    | `{ id, name, works[] }` for author-only queries, or `null` |
 | `synthesis`     | string    | Accumulated streaming text from Claude |
 | `synthesizing`  | boolean   | True while the stream is in progress |
 | `saved`         | array     | Passages the user has bookmarked |
-| `activeTab`     | string    | `'search'` or `'saved'` |
+| `view`          | string    | `'search'` or `'saved'` |
 
 ### Routing (main.jsx)
 
@@ -499,11 +515,12 @@ return Response(generate(), mimetype="text/plain")
 ```
 
 The system prompt instructs Claude to:
-- Act as a neutral patristic scholar
-- Report exactly what each Father said, attributing each claim
-- Show disagreements between Fathers plainly
-- Write at most 3 short paragraphs
-- No modern editorializing, softening, or personal opinion
+- Act as a patristic **historian** presenting evidence (not a theologian judging orthodoxy)
+- Use only the provided passages; filter internally to the question the passages engage
+- Present each Father individually; never label positions orthodox/heretical
+- Report condemnations as historical fact without framing them as settled verdicts
+- Stay before 500 AD; use the Fathers' own terminology without simplification
+- Write at most 4 paragraphs, third person, no disclaimers
 
 ---
 
@@ -520,20 +537,16 @@ The system prompt instructs Claude to:
 
 ## Author Detection
 
-`detectAuthor(query)` in `App.jsx`:
+`detectAuthor(query)` in `App.jsx` uses the live author list from `GET /api/authors` (cached in a ref on mount):
 
-1. Loads the name list from `src/data/fathers.js`
-2. For each Father, splits their name into individual words
-3. Skips words shorter than 5 characters (avoids matching "John", "Mark", "Paul", etc.)
-4. Tests each qualifying word against the query string (case-insensitive)
-5. On a match, strips the Father's full name from the query and returns `{ detectedAuthor, cleanQuery }`
+1. Exact or substring match on full author name
+2. Otherwise, any name word longer than 3 characters found in the query
+3. `isAuthorOnlyQuery()` treats geographic/honorific qualifiers (`of Alexandria`, `the Great`, etc.) as part of the name, not a separate topic
 
-Example:
-- Input: `"Augustine on grace"`
-- Word tested: `"Augustine"` (9 chars ✓) → match found
-- `detectedAuthor = "Augustine of Hippo"`, `cleanQuery = "on grace"`
-- Backend searches for `"on grace"` across all passages
-- Frontend hides every author group except Augustine
+Examples:
+- `"Augustine"` → author-only → works list via `GET /api/authors/:id/works`
+- `"Augustine grace"` → FTS search for `grace`, filtered to Augustine; author chip shown
+- `"Athanasius of Alexandria"` → author-only even if DB stores `"Athanasius"`
 
 ---
 
@@ -543,11 +556,13 @@ Example:
 |--------|---------------------|-------------|
 | GET    | `/api/health`       | Returns `{ "status": "ok" }` |
 | GET    | `/api/hello?name=`  | Greeting test endpoint (debugging only) |
-| GET    | `/api/search?q=`    | SQL `LIKE` search across passage text. Returns `{ query, results: [{id, passage, author, work, work_id, header}] }`. **Planned change:** return shape will be reorganized to group by work — see [Search Behavior](#search-behavior). |
-| GET    | `/api/authors`      | All authors in the DB. Currently returns `{id, name, tradition}`. After schema simplification, will return `{id, name, born, died}`. |
-| GET    | `/api/passages/:id` | Single passage by id, includes author, work title, and header. Returns 404 if not found. |
-| GET    | `/api/works/:id`    | All passages for a work: `{work_id, title, author, passages: [{id, text, header}]}`. Returns 404 if not found. |
-| POST   | `/api/synthesize`   | Streams Claude synthesis. Body: `{ query: string, passages: [{author, work, passage}] }`. Response: plain text stream. |
+| GET    | `/api/search?q=`           | FTS5 search (ranked, max 100). Returns `{ query, results: [{id, passage, author, work, work_id, header}] }`. Empty or invalid queries return `[]`. |
+| GET    | `/api/authors`             | All authors: `{ results: [{id, name, tradition}] }`. |
+| GET    | `/api/authors/:id/works`   | Works for one author: `{ name, works: [{id, title}] }`. 404 if author has no works. |
+| GET    | `/api/library`             | Catalog grouped by section: `{ sections: { Father: [...], Council: [...], ... } }`. |
+| GET    | `/api/passages/:id`        | Single passage by id. Returns 404 if not found. |
+| GET    | `/api/works/:id`           | All passages for a work: `{work_id, title, author, passages: [{id, text, header}]}`. |
+| POST   | `/api/synthesize`          | Streams Claude synthesis. Body: `{ query, passages: [{author, work, passage}] }`. 400 if no passages. Response: plain text stream. |
 
 ---
 
@@ -575,7 +590,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python database.py               # creates database.db with empty tables
+python database.py               # creates tables + FTS index (populates FTS if passages exist)
 python app.py                    # API runs on http://localhost:5001
 ```
 
@@ -592,7 +607,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 python seed.py
 ```
 
-**Option B — scrape the full corpus from New Advent (~65,700 passages, takes a while with polite delays):**
+**Option B — scrape the full corpus from New Advent (~71,600 passages; takes a while with polite delays; rebuilds FTS at the end):**
 ```bash
 python etl.py
 ```

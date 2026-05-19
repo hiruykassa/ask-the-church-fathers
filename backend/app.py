@@ -4,6 +4,18 @@ import sqlite3
 import anthropic
 from dotenv import load_dotenv
 import os
+import re
+
+
+def prepare_fts_query(q):
+    """Turn user input into a safe FTS5 MATCH expression (one quoted token per word)."""
+    q = (q or "").strip()
+    if not q:
+        return None
+    tokens = re.findall(r"[\w']+", q, flags=re.UNICODE)
+    if not tokens:
+        return None
+    return " ".join('"' + t.replace('"', '""') + '"' for t in tokens)
 
 # Load environment variables from .env (e.g. ANTHROPIC_API_KEY)
 load_dotenv()
@@ -30,18 +42,24 @@ def hello():
 @app.route("/api/search")
 def search():
     q = request.args.get("q", "")
+    search_value = prepare_fts_query(q)
+    if search_value is None:
+        return jsonify({"query": q, "results": []})
+
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
-    # Wrap the query in % wildcards for a SQL LIKE match
-    search_value = f"%{q}%"
 
     cursor.execute("""
         SELECT passages.id, passages.text, authors.name, works.title, works.id, passages.header
-        FROM passages 
+        FROM passages_fts
+        JOIN passages ON passages.id = passages_fts.rowid
         JOIN works ON passages.work_id = works.id
         JOIN authors ON works.author_id = authors.id
-        WHERE passages.text LIKE ? 
+        WHERE passages_fts MATCH ?
+        ORDER BY rank 
+        LIMIT 100 
                 """, (search_value,))
+        
 
     rows = cursor.fetchall()
 
@@ -204,9 +222,11 @@ def library():
 # for the full response before showing anything.
 @app.route("/api/synthesize", methods=["POST"])
 def synthesize():
-    data = request.get_json()
-    query = data.get("query")
-    passages = data.get("passages")
+    data = request.get_json(silent=True) or {}
+    query = data.get("query", "")
+    passages = data.get("passages") or []
+    if not passages:
+        return jsonify({"error": "No passages provided"}), 400
 
     # Format each passage as "Author, Work: passage text" for the prompt
     passages_text = ""
@@ -214,25 +234,25 @@ def synthesize():
         text = f"{p['author']}, {p['work']}: {p['passage']}"
         passages_text = passages_text + text
 
-    # Prompt instructs Claude to act as a neutral patristic scholar —
-    # report what the Fathers said accurately, show disagreements plainly,
-    # and never editorialize or soften controversial positions.
-    prompt = f"""
-    You are a patristic scholar producing a theological reference summary.
+    prompt = f"""You are a patristic historian reporting what the early Church Fathers taught. You are not a theologian making judgments — you are a historian presenting evidence.
 
-    Topic: {query}
+The user searched: "{query}"
 
-    Passages from the Church Fathers:
-    {passages_text}
+Determine the specific theological question the majority of these passages engage. Use only passages that directly address that question. Discard passages that merely share a keyword but concern a different theological issue. Do not write the question out in the response — this is an internal reasoning step only. Begin directly with what the Fathers said.
 
-    Report exactly what the Fathers taught on this topic based solely on the passages above. 
-    Be direct and accurate. Do not soften, neutralize, or balance their positions to accommodate modern sensibilities. 
-    If a Father held a position that is controversial today, state it plainly. 
-    If the Fathers disagreed with each other, show the disagreement clearly — do not resolve it artificially.
-    Write in third person. Do not address the reader.
-    Do not mention the limitations of the passages provided. 
-    Do not note when only one Father is cited or when there is no disagreement in the supplied text.
-    Keep the synthesis concise — no more than 3 short paragraphs."""
+Passages from the Church Fathers:
+{passages_text}
+
+Instructions:
+1. Use ONLY the passages above. Do not introduce claims, positions, councils, or figures from outside the provided passages. If a council is mentioned in the passages, report what it defined in its own language without interpreting it through any later tradition.
+2. Present each Father individually — "Cyril argued X," "Nestorius argued Y," "Theodoret argued Z." Do not group them into camps or frame one side as the opposition to another.
+3. Report exactly what the passages say, plainly and without softening. If a council condemned someone, say so. If a Father made a harsh argument, state it at full force. Do not balance, hedge, or diplomatize. The goal is accurate representation of what is in the texts, not protection of any reader's sensibilities.
+4. Never call a position orthodox, heretical, correct, or wrong. Report condemnations and rejections as historical fact (e.g. "The council at Ephesus condemned Nestorius's position") without framing them as settled verdicts or implying they were justified or unjustified.
+5. Stay entirely within the historical period. Do not mention which traditions today hold which positions. Do not reference anything after 500 AD.
+6. Use whatever terminology the Fathers themselves used in the passages (physis, ousia, prosōpon, etc.). Do not define or simplify these terms.
+7. If the passages only represent one perspective, present what is there — name who said it and at which council if that information is in the passages. Do not add the other side from outside the passages.
+8. Maximum 4 paragraphs. The synthesis should make sense and answer the question within those paragraphs.
+9. Write in third person. Do not address the reader. No disclaimers, no meta-commentary about the passages being limited."""
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
@@ -249,6 +269,38 @@ def synthesize():
                 yield text
 
     return Response(generate(), mimetype="text/plain")
+
+#search by author
+@app.route("/api/authors/<int:author_id>/works")
+def get_author_works(author_id):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT authors.name, works.title, works.id
+        FROM works
+        JOIN authors ON works.author_id = authors.id
+        WHERE works.author_id = ?
+        ORDER BY works.title
+                """, (author_id,))
+        
+
+    rows = cursor.fetchall()
+    if not rows:
+        return jsonify({"error": "Author not found"}), 404
+
+    works_list = []
+    author_name = rows[0][0]
+    for row in rows:
+        works_list.append({
+            "title": row[1],
+            "id": row[2],
+        })
+
+    conn.close()
+    
+    return jsonify({"name": author_name, "works": works_list})
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5001)

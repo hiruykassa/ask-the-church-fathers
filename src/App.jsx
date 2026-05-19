@@ -8,10 +8,9 @@
  *  - Layout: header, hero/search bar, library catalog, results, footer
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { IoSearch, IoArrowUp, IoChevronBack } from 'react-icons/io5'
-import { fathers } from './data/fathers'
 import { useScrollReveal } from './hooks/useScrollReveal'
 
 import { FEATURED_FATHERS } from './constants/featuredFathers'
@@ -19,6 +18,7 @@ import { ALL_FATHERS, RIGHT_SECTIONS } from './constants/library'
 import FatherRow from './components/FatherRow'
 import AccordionSection from './components/AccordionSection'
 import SearchResults from './components/SearchResults'
+import AuthorWorksView from './components/AuthorWorksView'
 import SavedView from './components/SavedView'
 import './App.css'
 
@@ -38,23 +38,6 @@ function formatDates(born, died) {
   return `${born}–${died}`
 }
 
-/**
- * Scans the raw query for a known Father's name.
- * Returns the matched name string, or null if none found.
- *
- * @param {string} q - Raw search query
- * @returns {string | null}
- */
-function detectAuthor(q) {
-  if (!q) return null
-  const lower = q.toLowerCase()
-  for (const f of fathers) {
-    const parts = f.name.toLowerCase().split(/\s+/)
-    if (parts.some(p => p.length > 4 && lower.includes(p))) return f.name
-  }
-  return null
-}
-
 export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -70,9 +53,14 @@ export default function App() {
   const [synthesis,    setSynthesis]    = useState('')
   const [synthesizing, setSynthesizing] = useState(false)
 
+  const [authorWorks,  setAuthorWorks]  = useState(null)
+
   const [liveFathers,  setLiveFathers]  = useState(null)
   const [liveSections, setLiveSections] = useState(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
+
+  const authorsRef = useRef([])
+  const searchGen = useRef(0)
 
   useEffect(() => {
     const onScroll = () => setShowScrollTop(window.scrollY > 400)
@@ -83,6 +71,76 @@ export default function App() {
   const scrollToTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
+
+  useEffect(() => {
+    fetch(`${API}/api/authors`)
+      .then(r => r.json())
+      .then(data => { authorsRef.current = data.results || [] })
+      .catch(() => {})
+  }, [])
+
+  /**
+   * Checks if the query matches an author name from the live database list.
+   * Matches if any significant word (>3 chars) from the author's name appears
+   * in the query, or vice versa. Returns { id, name } or null.
+   */
+  function detectAuthor(q) {
+    if (!q) return null
+    const lower = q.toLowerCase().trim()
+    for (const a of authorsRef.current) {
+      const nameLower = a.name.toLowerCase()
+      if (nameLower === lower || lower.includes(nameLower) || nameLower.includes(lower)) return a
+      const parts = nameLower.split(/\s+/)
+      if (parts.some(p => p.length > 3 && lower.includes(p))) return a
+    }
+    return null
+  }
+
+  /**
+   * Find an author by name in the authors list using fuzzy matching.
+   * Handles mismatches like "Augustine of Hippo" vs "Augustine".
+   */
+  function findAuthorByName(name) {
+    if (!name) return null
+    const lower = name.toLowerCase().trim()
+    for (const a of authorsRef.current) {
+      const nameLower = a.name.toLowerCase()
+      if (nameLower === lower || lower.includes(nameLower) || nameLower.includes(lower)) return a
+    }
+    const parts = lower.split(/\s+/)
+    for (const a of authorsRef.current) {
+      const nameLower = a.name.toLowerCase()
+      if (parts.some(p => p.length > 3 && nameLower.includes(p))) return a
+    }
+    return null
+  }
+
+  const NAME_QUALIFIERS = new Set([
+    'of', 'the', 'from', 'saint', 'st',
+    'great', 'hippo', 'alexandria', 'antioch', 'jerusalem', 'lyons',
+    'caesarea', 'constantinople', 'rome', 'carthage', 'cappadocia',
+    'nazianzus', 'nyssa', 'poitiers', 'mopsuestia', 'cyrrhus',
+    'damascus', 'seville', 'tours', 'milan', 'tagaste',
+    'theologian', 'younger', 'elder', 'venerable',
+  ])
+
+  /**
+   * Returns true if the query is _only_ an author name with no extra topic words.
+   * Recognizes geographic/honorific qualifiers like "of Alexandria" or "the Great"
+   * so "Athanasius of Alexandria" is treated as author-only even if the DB stores "Athanasius".
+   */
+  function isAuthorOnlyQuery(q, authorName) {
+    if (!q || !authorName) return false
+    const qLower = q.trim().toLowerCase()
+    const nameLower = authorName.toLowerCase()
+    if (nameLower === qLower) return true
+    if (nameLower.includes(qLower)) return true
+    if (FEATURED_FATHERS.some(f => f.name.toLowerCase() === qLower)) return true
+    const remainder = qLower.replace(nameLower, '').trim()
+    if (remainder.length === 0) return true
+    const words = remainder.split(/\s+/)
+    return words.every(w => NAME_QUALIFIERS.has(w))
+  }
 
   const featuredQuote = {
     text: "Stand firm and hold to the traditions that you were taught by us.",
@@ -122,45 +180,96 @@ export default function App() {
 
   /**
    * When navigating back from the reader, ReadPage passes restoreQuery
-   * via router state so the last search is automatically re-run.
+   * (and optionally restoreAuthorWorks) via router state so the last
+   * search or author-works view is automatically restored.
    */
   useEffect(() => {
     if (location.state?.restoreQuery) {
-      doSearch(location.state.restoreQuery)
+      const { restoreQuery: q, restoreAuthorWorks, authorId, authorName } = location.state
+      if (restoreAuthorWorks && authorId) {
+        setQuery(q)
+        setSearched(true)
+        setView('search')
+        setSearching(true)
+        fetch(`${API}/api/authors/${authorId}/works`)
+          .then(r => r.json())
+          .then(data => {
+            setAuthorWorks({ id: authorId, name: data.name, works: data.works || [] })
+            setResults([])
+          })
+          .catch(() => {
+            setAuthorWorks({ id: authorId, name: authorName || q, works: [] })
+            setResults([])
+          })
+          .finally(() => setSearching(false))
+      } else {
+        doSearch(q)
+      }
       window.history.replaceState({}, '')
     }
   }, [location.state?.restoreQuery])
 
   /**
-   * Runs a full-text search against the backend.
-   * If a Father's name is detected in q, results are filtered to that author.
+   * Runs a search. If the query is just an author name, fetches their works list.
+   * If it contains an author name + extra words, does FTS filtered to that author.
+   * Otherwise does a plain FTS search.
    *
    * @param {string}      q           - Search string
-   * @param {string|null} forceAuthor - Override auto-detected author (pass null to clear)
+   * @param {string|null} forceAuthor - Override auto-detected author name (pass null to clear)
    */
   async function doSearch(q, forceAuthor = undefined) {
     if (!q || !q.trim()) return
-    const detected = forceAuthor !== undefined ? forceAuthor : detectAuthor(q)
-    const topic    = detected ? q.replace(new RegExp(detected, 'i'), '').trim() || q : q
-    setAuthorFilter(detected)
-    setTopicQuery(topic || q)
+    const gen = ++searchGen.current
+    const detected = forceAuthor !== undefined
+      ? (forceAuthor ? findAuthorByName(forceAuthor) : null)
+      : detectAuthor(q)
+    const authorName = detected?.name || null
+
     setQuery(q)
     setSynthesis('')
     setSearching(true)
     setSearched(true)
     setView('search')
+    setAuthorWorks(null)
+
+    if (detected && isAuthorOnlyQuery(q, authorName)) {
+      setAuthorFilter(null)
+      setTopicQuery('')
+      try {
+        const res = await fetch(`${API}/api/authors/${detected.id}/works`)
+        if (gen !== searchGen.current) return
+        if (!res.ok) throw new Error('Author not found')
+        const data = await res.json()
+        setAuthorWorks({ id: detected.id, name: data.name, works: data.works || [] })
+        setResults([])
+      } catch {
+        if (gen !== searchGen.current) return
+        setAuthorWorks({ id: detected.id, name: authorName, works: [] })
+        setResults([])
+      } finally {
+        if (gen === searchGen.current) setSearching(false)
+      }
+      return
+    }
+
+    const topic = authorName ? q.replace(new RegExp(authorName, 'i'), '').trim() || q : q
+    setAuthorFilter(authorName)
+    setTopicQuery(topic || q)
     try {
-      const res  = await fetch(`${API}/api/search?q=${encodeURIComponent(topic || q)}`)
+      const res = await fetch(`${API}/api/search?q=${encodeURIComponent(topic || q)}`)
+      if (gen !== searchGen.current) return
+      if (!res.ok) throw new Error('Search failed')
       const data = await res.json()
       let rows = data.results || []
-      if (detected) {
-        rows = rows.filter(r => (r.author || '').toLowerCase().includes(detected.toLowerCase()))
+      if (authorName) {
+        rows = rows.filter(r => (r.author || '').toLowerCase().includes(authorName.toLowerCase()))
       }
       setResults(rows)
     } catch {
+      if (gen !== searchGen.current) return
       setResults([])
     } finally {
-      setSearching(false)
+      if (gen === searchGen.current) setSearching(false)
     }
   }
 
@@ -208,6 +317,7 @@ export default function App() {
     setAuthorFilter(null)
     setTopicQuery('')
     setSynthesis('')
+    setAuthorWorks(null)
     setView('search')
   }
 
@@ -226,17 +336,6 @@ export default function App() {
     })
   }
   const isSaved = key => saved.some(s => s.key === key)
-
-  /** Group flat results array into { author, passages[] } objects, sorted A-Z. */
-  const groupedByAuthor = (() => {
-    const acc = {}
-    for (const r of results) {
-      const a = r.author || 'Unknown'
-      if (!acc[a]) acc[a] = { author: a, passages: [] }
-      acc[a].passages.push(r)
-    }
-    return Object.values(acc).sort((x, y) => x.author.localeCompare(y.author))
-  })()
 
   return (
     <div className="page page-fade">
@@ -420,8 +519,18 @@ export default function App() {
             </>
           )}
 
-          {/* Search results view */}
-          {view === 'search' && searched && (
+          {/* Author works view (query is just an author name) */}
+          {view === 'search' && searched && authorWorks && (
+            <AuthorWorksView
+              author={authorWorks}
+              searching={searching}
+              navigate={navigate}
+              query={query}
+            />
+          )}
+
+          {/* Search results view (passage results) */}
+          {view === 'search' && searched && !authorWorks && (
             <SearchResults
               query={query}
               topicQuery={topicQuery}
@@ -429,7 +538,6 @@ export default function App() {
               clearAuthorFilter={clearAuthorFilter}
               searching={searching}
               results={results}
-              grouped={groupedByAuthor}
               isSaved={isSaved}
               onToggleSave={toggleSave}
               navigate={navigate}

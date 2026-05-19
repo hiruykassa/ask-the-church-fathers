@@ -8,6 +8,18 @@ const API = 'http://localhost:5001'
 const LITURGY_ROLES = /\b(priest|deacon|people|bishop|reader|choir|singer|catechumen)\b/i
 const RUBRIC_STARTS = /^(prayer of|then the|after the|before the|\(aloud)/i
 const SPEAKER_RE    = /^(.{5,120}?\bsaid[,:]\s*)/
+const BOOK_HEADER_RE = /^The .+ \(Book [IVXLC\d]+\)$/i
+
+function displayChapterName(header, index) {
+  if (!header) return index === 0 ? 'Introduction' : `Section ${index + 1}`
+  if (header === 'Contents.' || header === 'Contents') return 'Table of Contents'
+  if (BOOK_HEADER_RE.test(header)) return header.replace(/^The\s+/i, '')
+  return header
+}
+
+function isBookDivider(header) {
+  return header && BOOK_HEADER_RE.test(header)
+}
 
 /* ══════════════════════════════════════════════════
    READ PAGE  — /read/:workId
@@ -92,18 +104,41 @@ export default function ReadPage() {
 
   function goBack() {
     if (location.state?.fromSearch && location.state?.query) {
-      navigate('/', { state: { restoreQuery: location.state.query } })
+      navigate('/', { state: {
+        restoreQuery: location.state.query,
+        restoreAuthorWorks: !!location.state.fromAuthorWorks,
+        authorId: location.state.authorId,
+        authorName: location.state.authorName,
+      }})
     } else {
       navigate('/')
     }
   }
 
-  const backLabel = location.state?.fromSearch
-    ? `Results for "${location.state.query}"`
-    : 'Library'
+  const backLabel = location.state?.fromAuthorWorks
+    ? `Back to ${location.state.query}`
+    : location.state?.fromSearch
+      ? `Results for "${location.state.query}"`
+      : 'Library'
 
   const isLiturgy = /^liturgy\b/i.test(work?.title || '')
   const isCouncil = /^council\b/i.test(work?.title || '')
+
+  const chapters = (() => {
+    if (!work) return []
+    const chaps = []
+    let current = null
+    for (let i = 0; i < work.passages.length; i++) {
+      const h = work.passages[i].header
+      if (i === 0 || h !== current) {
+        chaps.push({ header: h, firstIndex: i, count: 1 })
+        current = h
+      } else {
+        chaps[chaps.length - 1].count++
+      }
+    }
+    return chaps
+  })()
 
   function classifyPassage(text) {
     const t = text.trim()
@@ -151,8 +186,8 @@ export default function ReadPage() {
         </div>
         <div className="read-header-right">
           {work && <span className="read-header-title">{work.title}</span>}
-          {work && work.passages.length > 0 && (
-            <button className="toc-mobile-btn" onClick={() => setTocOpen(o => !o)} title="Passage list">
+          {work && chapters.length > 0 && (
+            <button className="toc-mobile-btn" onClick={() => setTocOpen(o => !o)} title="Chapter list">
               {tocOpen ? <IoClose /> : <IoMenu />}
             </button>
           )}
@@ -161,11 +196,12 @@ export default function ReadPage() {
 
       {tocOpen && work && (
         <div className="toc-drawer">
-          <p className="toc-drawer-label">Jump to passage</p>
-          <div className="toc-drawer-list">
-            {work.passages.map((_, i) => (
-              <button key={i} className="toc-num" onClick={() => scrollToPassage(i)}>
-                {i + 1}
+          <p className="toc-drawer-label">Chapters</p>
+          <div className="toc-drawer-chapters">
+            {chapters.map((ch, ci) => (
+              <button key={ci} className="toc-chapter-btn" onClick={() => scrollToPassage(ch.firstIndex)}>
+                <span className="toc-chapter-name">{displayChapterName(ch.header, ci)}</span>
+                <span className="toc-chapter-count">{ch.count}</span>
               </button>
             ))}
           </div>
@@ -173,31 +209,24 @@ export default function ReadPage() {
       )}
 
       <div className="read-body">
-        {work && work.passages.length > 0 && (
+        {work && chapters.length > 0 && (
           <aside className="read-toc">
             <div className="toc-card">
-              <p className="toc-label">Passages</p>
-              <p className="toc-count">{work.passages.length} total</p>
+              <p className="toc-label">Chapters</p>
+              <p className="toc-count">{chapters.length} chapter{chapters.length !== 1 ? 's' : ''} · {work.passages.length} passages</p>
               <div className="toc-divider" />
-              <nav className="toc-list">
-                {(() => {
-                  const items = []
-                  let lastHeader = null
-                  work.passages.forEach((p, i) => {
-                    if (p.header && p.header !== lastHeader) {
-                      items.push(
-                        <p key={`h-${i}`} className="toc-header-label">{p.header}</p>
-                      )
-                      lastHeader = p.header
-                    }
-                    items.push(
-                      <button key={i} className="toc-num" onClick={() => scrollToPassage(i)}>
-                        {i + 1}
-                      </button>
-                    )
-                  })
-                  return items
-                })()}
+              <nav className="toc-chapter-list">
+                {chapters.map((ch, ci) => (
+                  <button
+                    key={ci}
+                    className="toc-chapter-btn"
+                    onClick={() => scrollToPassage(ch.firstIndex)}
+                    title={`${ch.count} passage${ch.count !== 1 ? 's' : ''}`}
+                  >
+                    <span className="toc-chapter-num">{ci + 1}</span>
+                    <span className="toc-chapter-name">{displayChapterName(ch.header, ci)}</span>
+                  </button>
+                ))}
               </nav>
             </div>
           </aside>
@@ -229,7 +258,9 @@ export default function ReadPage() {
                   return (
                     <div key={p.id}>
                       {showHeader && (
-                        <h2 className="read-section-header">{p.header}</h2>
+                        <h2 className={`read-section-header${isBookDivider(p.header) ? ' read-book-header' : ''}`}>
+                          {displayChapterName(p.header, i)}
+                        </h2>
                       )}
                       <p
                         id={`passage-${i + 1}`}

@@ -1,30 +1,14 @@
 import { IoClose } from 'react-icons/io5'
-import AuthorCard from './AuthorCard'
+import { MdFavoriteBorder, MdFavorite } from 'react-icons/md'
 import SynthesisPanel from './SynthesisPanel'
 
 /**
- * Displays the full search results view: passage count, optional author filter chip,
- * AI synthesis panel, and grouped author cards.
- *
- * @param {{
- *   query: string,
- *   topicQuery: string,
- *   authorFilter: string | null,
- *   clearAuthorFilter: () => void,
- *   searching: boolean,
- *   results: object[],
- *   grouped: Array<{ author: string, passages: object[] }>,
- *   isSaved: (key: number) => boolean,
- *   onToggleSave: (key: number, passage: object) => void,
- *   navigate: Function,
- *   synthesis: string,
- *   synthesizing: boolean,
- *   getSynthesis: () => void,
- * }} props
+ * Displays search results as a flat relevance-ordered list.
+ * Each passage is its own card showing author, work title, snippet, and save button.
  */
 export default function SearchResults({
   query, topicQuery, authorFilter, clearAuthorFilter,
-  searching, results, grouped,
+  searching, results,
   isSaved, onToggleSave, navigate,
   synthesis, synthesizing, getSynthesis,
 }) {
@@ -34,7 +18,7 @@ export default function SearchResults({
     <>
       <div className="results-meta">
         <span className="results-count">
-          {searching ? 'Searching…' : `${total} passage${total !== 1 ? 's' : ''}`}
+          {searching ? 'Searching…' : `${total} result${total !== 1 ? 's' : ''}`}
         </span>
         {authorFilter && (
           <span className="author-chip">
@@ -63,19 +47,46 @@ export default function SearchResults({
             getSynthesis={getSynthesis}
           />
 
-          <div className="auth-list">
-            {grouped.map((g, i) => (
-              <AuthorCard
-                key={g.author}
-                group={g}
-                isSaved={isSaved}
-                onToggleSave={onToggleSave}
-                onNavigate={(workId, passageId) =>
-                  navigate(`/read/${workId}`, { state: { query, fromSearch: true, scrollToPassage: passageId } })
-                }
-                defaultOpen={i === 0}
-              />
-            ))}
+          <div className="results-list">
+            {results.map((p, i) => {
+              const text = p.passage || ''
+              const snippet = text.length > 280
+                ? text.slice(0, 280).replace(/\s\S*$/, '') + '…'
+                : text
+
+              return (
+                <article key={p.id} className="result-card">
+                  <div className="result-card-rank">{i + 1}</div>
+                  <div className="result-card-body">
+                    <header className="result-card-header">
+                      <div className="result-card-info">
+                        <h3 className="result-card-author">{p.author}</h3>
+                        <button
+                          className="result-card-work"
+                          onClick={() => navigate(`/read/${p.work_id}`, { state: { query, fromSearch: true, scrollToPassage: p.id } })}
+                          title="Open the full work"
+                        >
+                          {p.work}
+                        </button>
+                        {p.header && (
+                          <span className="result-card-section">{p.header}</span>
+                        )}
+                      </div>
+                      <button
+                        className="fav-btn"
+                        onClick={() => onToggleSave(p.id, p)}
+                        title={isSaved(p.id) ? 'Remove from saved' : 'Save passage'}
+                      >
+                        {isSaved(p.id)
+                          ? <MdFavorite className="fav-filled" />
+                          : <MdFavoriteBorder className="fav-empty" />}
+                      </button>
+                    </header>
+                    <p className="result-card-quote">{snippet}</p>
+                  </div>
+                </article>
+              )
+            })}
           </div>
         </>
       )}

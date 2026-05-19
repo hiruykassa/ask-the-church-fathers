@@ -39,6 +39,22 @@ cursor.execute("""
    )
 """)
 
+#FTS5 table — indexes passage text, author name, and work title for full search
+cursor.execute("DROP TABLE IF EXISTS passages_fts")
+cursor.execute("""
+    CREATE VIRTUAL TABLE passages_fts USING fts5(
+        text, author_name, work_title,
+        content='', content_rowid=id
+    )
+""")
+cursor.execute("""
+    INSERT INTO passages_fts(rowid, text, author_name, work_title)
+    SELECT p.id, p.text, a.name, w.title
+    FROM passages p
+    JOIN works w ON p.work_id = w.id
+    JOIN authors a ON w.author_id = a.id
+""")
+
 conn.commit()
 conn.close()
 
