@@ -23,12 +23,22 @@
   border-radius: 0 2px 2px 0;
 }
 
-/* ── Header — reuses .site-header from App.css ── */
+/* ── Header — overrides the grid with a flex + absolute-center layout ── */
 .read-site-header {
-  grid-template-columns: 1fr auto 1fr !important;
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
   position: sticky;
   top: 0;
   z-index: 200;
+}
+
+/* Title sits in the absolute horizontal center of the header */
+.read-site-header .site-title-btn {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
 }
 
 .read-back-btn {
@@ -38,7 +48,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 1.6px;
@@ -61,9 +71,9 @@
 }
 
 .read-header-title {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-size: 0.95rem;
-  color: rgba(240, 230, 200, 0.7);
+  color: var(--header-text-muted);
   font-style: italic;
   white-space: nowrap;
   overflow: hidden;
@@ -97,7 +107,7 @@
   overflow-y: auto;
 }
 .toc-drawer-label {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 2px;
@@ -114,7 +124,7 @@
   padding: 8px 10px;
 }
 .toc-drawer-chapters .toc-chapter-count {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   color: var(--text-faint);
   margin-left: auto;
@@ -126,10 +136,10 @@
   flex: 1;
   display: flex;
   align-items: flex-start;
-  max-width: 1400px;
+  max-width: 1500px;
   width: 100%;
   margin: 0 auto;
-  padding: 48px 32px 100px;
+  padding: 48px 48px 100px;
   gap: 0;
   box-sizing: border-box;
 }
@@ -159,7 +169,7 @@
 }
 
 .toc-label {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 0.58rem;
   font-weight: 700;
   letter-spacing: 2px;
@@ -169,7 +179,7 @@
 }
 
 .toc-count {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.7rem;
   color: var(--text-dim);
   margin-bottom: 10px;
@@ -206,7 +216,7 @@
 }
 
 .toc-chapter-num {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   font-weight: 700;
   color: var(--gold);
@@ -215,7 +225,7 @@
 }
 
 .toc-chapter-name {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-size: 0.84rem;
   color: var(--text-md);
   transition: color 0.15s;
@@ -239,7 +249,7 @@
 
 .read-loading,
 .read-error {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-size: 1rem;
   color: var(--text-dim);
   font-style: italic;
@@ -251,13 +261,14 @@
 /* ── Article card ── */
 .read-article {
   width: 100%;
-  max-width: 900px;
+  max-width: 980px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 64px 72px 72px;
+  padding: 64px 80px 72px;
   box-shadow: var(--shadow-md);
   box-sizing: border-box;
+  margin: 0 auto;
 }
 
 /* ── Title block ── */
@@ -266,7 +277,7 @@
   margin-bottom: 36px;
 }
 .read-work-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: clamp(1.4rem, 4vw, 2.1rem);
   font-weight: 700;
   color: var(--text);
@@ -275,7 +286,7 @@
   margin-bottom: 10px;
 }
 .read-work-author {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-style: italic;
   font-size: 1.1rem;
   color: var(--text-md);
@@ -295,7 +306,7 @@
   flex-direction: column;
 }
 .read-passage {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-size: 1.18rem;
   color: var(--text);
   line-height: 2;
@@ -316,7 +327,7 @@
 
 /* Rubrics — speaker labels and stage directions (liturgy + council intros) */
 .read-passage.read-rubric {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.78rem;
   font-weight: 600;
   font-style: normal;
@@ -363,7 +374,7 @@
 
 /* ── Section headers within the text ── */
 .read-section-header {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--gold);
@@ -385,7 +396,7 @@
 
 /* ── Passage numbers (inline, used by reader) ── */
 .read-passage-num {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 0.76rem;
   font-weight: 700;
   color: var(--gold);
@@ -435,6 +446,40 @@
   .read-passage     { font-size: 1.06rem; line-height: 1.9; }
   .read-liturgy .read-passage:not(.read-rubric) { padding-left: 16px; }
   .read-passage.read-creed { padding: 14px 16px; }
+}
+
+/* ── Scroll-to-top button (same as App.css but scoped here since ReadPage doesn't import App.css) ── */
+.scroll-top-btn {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 900;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--gold);
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(14px);
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease), background 0.2s var(--ease), color 0.2s var(--ease);
+}
+.scroll-top-btn.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.scroll-top-btn:hover {
+  background: var(--gold);
+  color: var(--surface);
+  border-color: var(--gold);
 }
 
 @media (max-width: 480px) {

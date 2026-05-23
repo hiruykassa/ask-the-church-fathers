@@ -3267,6 +3267,36 @@ scrape_work(
     ]
 )
 
+# Cyril of Alexandria — CCEL corpus + christological letters (New Advent / NPNF / St-Takla)
+scrape_work(
+    author_name="Cyril of Alexandria",
+    birth_yr=376,
+    death_yr=444,
+    rite="Alexandrian",
+    bio="Patriarch of Alexandria and chief architect of Ephesine Christology, whose writings defined the hypostatic union against Nestorianism.",
+    work_dic=[
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_christ_is_one_01_text.htm"], "title": "That Christ is One", "section": "Father"},
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_diodore_01_text.htm"], "title": "Against Diodore of Tarsus (Fragments)", "section": "Father"},
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_theodore_01_text.htm"], "title": "Against Theodore of Mopsuestia (Fragments)", "section": "Father"},
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_synousiasts_01_text.htm"], "title": "Against the Synousiasts (Fragments)", "section": "Father"},
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_on_john_01_book1.htm"], "title": "Commentary on John", "section": "Father"},
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_nestorius_01_book1.htm"], "title": "Five Tomes Against Nestorius", "section": "Father"},
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_julian_00_address.htm"], "title": "Against Julian", "section": "Father"},
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_on_luke_01_sermons_01_11.htm"], "title": "Commentary on Luke", "section": "Father"},
+    ],
+    skip_hr_break=True,
+)
+
+_conn = sqlite3.connect(DB)
+_cursor = _conn.cursor()
+_cursor.execute("SELECT id FROM authors WHERE name = ?", ("Cyril of Alexandria",))
+_cyril_row = _cursor.fetchone()
+if _cyril_row:
+    from add_cyril_letters import insert_cyril_letters
+    insert_cyril_letters(_cursor, _cyril_row[0])
+    _conn.commit()
+_conn.close()
+
 conn = sqlite3.connect(DB)
 cursor = conn.cursor()
 

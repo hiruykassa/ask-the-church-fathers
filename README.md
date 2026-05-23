@@ -24,6 +24,7 @@ Type a topic, keyword, or a Father's name — get matching passages, then ask an
 - [Author Detection](#author-detection)
 - [API Reference](#api-reference)
 - [Tech Stack](#tech-stack)
+- [Mobile Readiness](#mobile-readiness)
 - [Getting Started](#getting-started)
 
 ---
@@ -58,17 +59,23 @@ The ETL scrapes all chapters of each work from New Advent — the full pre-Chalc
 - **Multi-chapter scraping** — ETL walks every chapter URL for each work, not just the first page
 - **Passage section headers** — ETL captures `<h2>`–`<h6>` headings from source pages and stores them as passage headers; displayed in search results (grouped under header labels) and in the book reader (as section dividers with headers in the TOC)
 - **Full-text search (FTS5)** — SQLite FTS5 across passage text, author name, and work title; results ranked by relevance (top 100). User queries are sanitized so apostrophes and special characters do not break search.
-- **Author detection** — loads the live author list from `/api/authors`; queries like `"Augustine prayer"` auto-filter to that Father; author-only queries (e.g. `"Athanasius of Alexandria"`) show a **works list** instead of passage hits
+- **AI-powered query parsing** — backend uses Claude Haiku to extract author + topic keywords from natural-language queries (e.g. "what did Augustine say about grace" → author: Augustine, keywords: grace). Server-side author-filtered FTS so results are pre-filtered before hitting the frontend.
+- **Author detection** — queries like `"Augustine prayer"` auto-filter to that Father; author-only queries (e.g. `"Athanasius of Alexandria"`) show a **works list** instead of passage hits
 - **Author filter chip** — click ✕ to broaden the search back to all authors
 - **Flat search results** — relevance-ordered passage cards with author, work title, section header, snippet, save button, and link to the full work
 - **Save passages** — bookmark any passage to a personal Saved tab (session only — does NOT persist across page refresh)
-- **AI synthesis** — streams a Claude-generated summary in a patristic-historian voice: evidence-only from provided passages, per-Father attribution, no orthodox/heretical labels, max 4 paragraphs
-- **Persistent navigation** — sticky compact search bar with a "Library" back button always visible when browsing results or saved passages; floating scroll-to-top button on both the search page and the book reader; `goHome` resets view and scrolls to top instantly
+- **AI synthesis** — streams a Claude-generated summary in a patristic-historian voice: evidence-only from provided passages, per-Father attribution, no orthodox/heretical labels, max 3 paragraphs
+- **Dark mode** — full light/dark theme toggle. Persisted in `localStorage`. Dark theme uses pure black backgrounds with warm amber accents; light theme uses cream/ivory with honey-gold accents.
+- **Component-based UI** — reusable `Button`, `Chip`, `EmptyState`, `LoadingBlock`, `ScrollToTop`, `SearchField`, and `ThemeToggle` components in `src/components/ui/`
+- **Mobile-first navigation** — bottom tab bar (Search / Saved) mirrors native mobile patterns; ready for React Native port
+- **Persistent navigation** — sticky header with search bar; floating scroll-to-top button on both the search page and the book reader; `goHome` resets view and scrolls to top instantly
 - **Book reader** (`/read/:workId`) — full-screen reader with scroll-progress bar, sidebar/drawer TOC with section header labels, passage-level navigation, back button that restores the last search, and a floating scroll-to-top button
 - **Liturgy formatting** — liturgical texts (Liturgy of James, Liturgy of Mark, Liturgy of the Blessed Apostles) auto-detect speaker rubrics ("The Priest.", "The Deacon.", "The People." etc.) and render them as gold uppercase labels; spoken/prayer text is indented with a subtle left border to create a call-and-response visual structure
 - **Council formatting** — council texts auto-detect creedal declarations ("We believe in one God…") and style them with a gold border and warm background; anathema passages get a muted left border; speaker attributions ("Cyprian said:") are rendered in bold; short intro passages are styled as rubrics
 - **Scroll-reveal animations** — Father cards animate in as they enter the viewport
 - **Full library catalog** — five top-level sidebar buckets (`Father`, `Liturgy`, `Council`, `Apocrypha`, `Miscellaneous`) — all clickable to trigger a search
+- **Centralized API client** — `src/api/client.js` with configurable base URL (`VITE_API_URL` env var for production/mobile builds)
+- **Design token system** — `src/theme/tokens.js` defines colors, spacing, radius, and typography as structured JS objects, shared between light/dark modes and ready for React Native `StyleSheet`
 - **Polite scraping** — `time.sleep(1)` between HTTP requests so we don't hammer newadvent.org
 - **`.gitignore`** — database files, `.env`, `.venv`, `node_modules`, `__pycache__`, and editor folders are excluded from git
 
@@ -212,15 +219,16 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 └──────────────────┘
 ```
 
-### Request Flow — Search (current)
+### Request Flow — Search
 
 1. User types a query and presses Enter
-2. `App.jsx` calls `detectAuthor(query)` against the live list from `GET /api/authors`
-3. **Author-only query** (e.g. `"Augustine"` or `"Athanasius of Alexandria"`): `GET /api/authors/:id/works` → `AuthorWorksView` lists that Father's works; clicking a work opens `/read/:workId`
-4. **Author + topic** (e.g. `"Augustine grace"`): topic is sent to `GET /api/search?q=<topic>`; results are client-filtered to that author; an author chip appears (click ✕ to broaden)
-5. **Topic only**: `GET /api/search?q=<query>` → FTS5 `MATCH` on `passages_fts`, ranked, limit 100
-6. `SearchResults.jsx` renders a flat relevance-ordered list of passage cards (author, work, section header, snippet)
-7. Sticky compact search bar with "Library" back button; floating scroll-to-top after scrolling down
+2. `App.jsx` sends `GET /api/search?q=<raw query>` to the backend
+3. Backend calls Claude Haiku to parse the query into `author` + `keywords`
+4. **Author-only query** (e.g. `"Augustine"` or `"Athanasius of Alexandria"`): backend returns `author_only: true` → frontend fetches `GET /api/authors/:id/works` → `AuthorWorksView` lists that Father's works; clicking a work opens `/read/:workId`
+5. **Author + topic** (e.g. `"Augustine grace"`): backend runs FTS for "grace" filtered to Augustine's works → results returned pre-filtered; frontend shows author chip (click ✕ to broaden)
+6. **Topic only**: FTS5 `MATCH` on `passages_fts`, ranked, limit 100
+7. `SearchResults.jsx` renders a flat relevance-ordered list of passage cards (author, work, section header, snippet)
+8. Sticky header with search bar; mobile tab bar at bottom; floating scroll-to-top after scrolling down
 
 ### Request Flow — Search (planned)
 
@@ -388,70 +396,117 @@ Concretely:
 ```
 ask-the-church-fathers/
 │
-├── backend/                # Runtime API (all you need to run the site)
-│   ├── .env                # NOT committed — ANTHROPIC_API_KEY
-│   ├── app.py              # Flask API
-│   ├── database.py         # Creates schema + FTS index
-│   ├── database.db         # Local corpus (gitignored; ~140 MB full load)
+├── backend/                    # Runtime API (all you need to run the site)
+│   ├── .env                    # NOT committed — ANTHROPIC_API_KEY
+│   ├── app.py                  # Flask API (search, synthesis, library)
+│   ├── database.py             # Creates schema + FTS index
+│   ├── database.db             # Local corpus (gitignored; ~140 MB full load)
 │   ├── requirements.txt
-│   └── seed.py             # Tiny dev dataset (optional)
+│   └── seed.py                 # Tiny dev dataset (optional)
 │
-├── tools/corpus/           # Scraping & DB maintenance (optional)
+├── tools/corpus/               # Scraping & DB maintenance (optional)
 │   ├── README.md
 │   ├── etl.py
 │   ├── scrape_utils.py
 │   ├── repair_text.py
+│   ├── add_cyril_letters.py
+│   ├── cyril_letters_config.py
 │   └── …
 │
+├── docs/
+│   └── MOBILE.md               # React Native port notes
+│
 ├── public/
-│   └── favicon.svg         # Gold cross favicon
+│   └── favicon.svg             # Gold cross favicon
 │
 ├── src/
-│   ├── App.css             # Entire design system (CSS custom properties)
-│   ├── App.jsx             # Root component — all state, search logic, layout
-│   ├── ReadPage.css        # Reader-specific styles
-│   ├── ReadPage.jsx        # /read/:workId — full-screen book reader
-│   ├── index.css           # Global reset
-│   ├── main.jsx            # React Router setup — two routes
+│   ├── App.css                 # Component-level styles
+│   ├── App.jsx                 # Home screen — search, library, saved
+│   ├── ReadPage.css            # Reader-specific styles
+│   ├── ReadPage.jsx            # /read/:workId — full-screen book reader
+│   ├── index.css               # Global reset + base variables
+│   ├── main.jsx                # React Router + ThemeProvider setup
+│   │
+│   ├── api/
+│   │   └── client.js           # Centralized fetch helpers (apiGet, apiPost)
+│   │
+│   ├── theme/
+│   │   ├── tokens.js           # Design tokens — colors, spacing, typography
+│   │   ├── ThemeProvider.jsx   # React context for light/dark mode
+│   │   └── applyWebTheme.js   # Maps tokens → CSS custom properties
 │   │
 │   ├── components/
-│   │   ├── AccordionSection.jsx   # Reusable collapsible section
-│   │   ├── AuthorCard.jsx         # Saved-tab card — passages grouped by header
-│   │   ├── AuthorWorksView.jsx    # Author-only search — clickable works list
-│   │   ├── FatherRow.jsx          # Single Father row with works sub-list
-│   │   ├── SavedView.jsx          # Saved tab — grouped by author
-│   │   ├── SearchResults.jsx      # Flat FTS passage results + synthesis
-│   │   └── SynthesisPanel.jsx     # AI synthesis panel — streaming display
-│   │
-│   ├── constants/
-│   │   ├── featuredFathers.js     # 10 featured Fathers + portrait imports
-│   │   └── library.js             # ALL_FATHERS + RIGHT_SECTIONS catalog
+│   │   ├── home/
+│   │   │   ├── FeaturedFathers.jsx   # Hero grid of 10 Fathers with portraits
+│   │   │   └── LibraryCatalog.jsx    # Five-section library sidebar
+│   │   │
+│   │   ├── layout/
+│   │   │   ├── SiteHeader.jsx        # Sticky header with nav + theme toggle
+│   │   │   ├── SiteFooter.jsx        # Page footer
+│   │   │   ├── MobileTabBar.jsx      # Bottom tab bar (Search / Saved)
+│   │   │   └── SearchSection.jsx     # Search input + suggestion chips
+│   │   │
+│   │   ├── ui/
+│   │   │   ├── Button.jsx            # Styled button (primary/secondary)
+│   │   │   ├── Chip.jsx              # Filter/suggestion chip
+│   │   │   ├── EmptyState.jsx        # Illustrated empty state message
+│   │   │   ├── LoadingBlock.jsx      # Skeleton loading placeholder
+│   │   │   ├── ScrollToTop.jsx       # Floating scroll-to-top FAB
+│   │   │   ├── SearchField.jsx       # Search input component
+│   │   │   └── ThemeToggle.jsx       # Light/dark mode toggle button
+│   │   │
+│   │   ├── AccordionSection.jsx      # Reusable collapsible section
+│   │   ├── AuthorCard.jsx            # Saved-tab card
+│   │   ├── AuthorWorksView.jsx       # Author-only search — works list
+│   │   ├── FatherRow.jsx             # Single Father row with works
+│   │   ├── SavedView.jsx             # Saved tab — grouped by author
+│   │   ├── SearchResults.jsx         # FTS passage results + synthesis
+│   │   └── SynthesisPanel.jsx        # AI synthesis — streaming display
 │   │
 │   ├── hooks/
-│   │   └── useScrollReveal.js     # IntersectionObserver hook
+│   │   ├── useAuthors.js             # Fetches + caches author list
+│   │   ├── useLibraryCatalog.js      # Fetches library catalog from API
+│   │   ├── useScrollReveal.js        # IntersectionObserver animations
+│   │   └── useScrollTop.js           # Scroll-to-top visibility logic
+│   │
+│   ├── utils/
+│   │   └── authorQuery.js            # detectAuthor, isAuthorOnlyQuery
+│   │
+│   ├── styles/
+│   │   └── ui.css                    # Shared UI component styles
+│   │
+│   ├── constants/
+│   │   ├── featuredFathers.js        # 10 featured Fathers + portrait imports
+│   │   └── library.js                # ALL_FATHERS + RIGHT_SECTIONS catalog
 │   │
 │   └── img/
-│       ├── athanasius.jpeg
-│       ├── augustine.jpeg
-│       ├── basil.jpeg
-│       ├── chrysostom.jpeg
-│       ├── cyril.jpeg
-│       ├── ignatius.jpeg
-│       ├── irenaeus.jpeg
-│       ├── justin-martyr.jpeg
-│       ├── origen.jpeg
-│       └── tertullian.jpeg
+│       └── (10 Father portraits)
 │
-├── .gitignore              # Excludes *.db, .env, node_modules, dist, etc.
-├── index.html              # Vite entry HTML
-├── package.json            # Node dependencies and scripts
-├── vite.config.js          # Vite config with React plugin
+├── .gitignore
+├── index.html
+├── package.json
+├── vite.config.js
 └── README.md
 ```
 
 ---
 
 ## Frontend Deep Dive
+
+### Component Architecture
+
+The frontend is decomposed into focused layers for maintainability and future React Native portability:
+
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| **Theme** | `src/theme/` | Design tokens, ThemeProvider context, CSS variable application |
+| **API** | `src/api/client.js` | Centralized `apiGet`/`apiPost` with configurable base URL |
+| **Hooks** | `src/hooks/` | Data fetching (`useAuthors`, `useLibraryCatalog`), scroll logic (`useScrollTop`, `useScrollReveal`) |
+| **Utils** | `src/utils/` | Pure functions — author detection, query parsing |
+| **UI** | `src/components/ui/` | Reusable atoms — `Button`, `Chip`, `SearchField`, `ThemeToggle`, `EmptyState`, `LoadingBlock`, `ScrollToTop` |
+| **Layout** | `src/components/layout/` | Page shell — `SiteHeader`, `SiteFooter`, `MobileTabBar`, `SearchSection` |
+| **Home** | `src/components/home/` | Home-screen sections — `FeaturedFathers`, `LibraryCatalog` |
+| **Features** | `src/components/` | Domain components — `SearchResults`, `AuthorWorksView`, `SavedView`, `SynthesisPanel` |
 
 ### State (App.jsx)
 
@@ -469,6 +524,18 @@ All app state lives in `App.jsx` and is passed down as props:
 | `saved`         | array     | Passages the user has bookmarked |
 | `view`          | string    | `'search'` or `'saved'` |
 
+### Theme System
+
+The design token system (`src/theme/tokens.js`) defines:
+- **Color palettes** for light and dark modes (gold accents, parchment/black backgrounds, warm text hierarchy)
+- **Spacing scale** (xs through xxxl)
+- **Border radii** (sm, md, lg, pill)
+- **Typography** (display: Cinzel, prose: Cormorant Garamond, ui: Inter)
+- **Layout constants** (max-width, content-width, header height)
+- **Motion curves** for animations
+
+`ThemeProvider` wraps the app and exposes `{ mode, toggle, isDark }` via context. `applyWebTheme` maps token values to CSS custom properties on the root element. The user's preference is persisted in `localStorage`.
+
 ### Routing (main.jsx)
 
 ```
@@ -476,15 +543,15 @@ All app state lives in `App.jsx` and is passed down as props:
 /read/:workId  → <ReadPage />  (full book reader)
 ```
 
+Both routes are wrapped in `ThemeProvider` for consistent theming.
+
 ### Scroll Reveal (useScrollReveal.js)
 
 An `IntersectionObserver` watches every `[data-reveal]` element. When one enters the viewport, `.is-visible` is added. CSS transitions (`opacity`, `transform`) animate the card in. Father cards use a `--reveal-delay` CSS variable to stagger the animation.
 
 ### Library Catalog
 
-`src/constants/library.js` exports:
-- `ALL_FATHERS` — entries with `{ id, name, works[] }` where each work has `{ id, title }`
-- `RIGHT_SECTIONS` — extra sections: Liturgies, Councils, Apocrypha, Miscellaneous
+The library catalog is fetched live from `GET /api/library` via the `useLibraryCatalog` hook. It falls back to the static data in `src/constants/library.js` until the API responds.
 
 The backend `works.section` column maps to the same five sidebar buckets used for browsing: `Father`, `Liturgy`, `Council`, `Apocrypha`, and `Miscellaneous`.
 
@@ -499,6 +566,19 @@ Each entry in the catalog is clickable — it fires a search for that author/wor
 The Flask app runs with `debug=True` on port `5001`. CORS is enabled for all origins via `flask-cors` so the Vite dev server on `5173` can reach it freely. (Production deployment will need to lock CORS down to specific origins — see Tier 3.)
 
 `database.py` is run once before starting the app to ensure all three tables exist.
+
+A `get_db_connection()` helper centralizes SQLite access.
+
+### AI-Powered Query Parsing
+
+The `/api/search` endpoint uses Claude Haiku (`claude-haiku-4-5-20251001`) to parse natural-language queries into structured parts:
+
+1. The user's raw query is sent to Haiku along with the full author name list from the DB
+2. Haiku extracts `author` (exact match from the list, or "none") and `keywords` (topic words only, filler stripped)
+3. The backend resolves the author name case-insensitively and runs FTS filtered to that author if present
+4. The response includes `author`, `author_id`, `keywords`, and `author_only` fields so the frontend can render appropriately
+
+This replaces the previous client-side author detection for search — the frontend `detectAuthor` utility still exists for instant UI feedback but the backend is authoritative.
 
 ### Streaming Synthesis
 
@@ -520,10 +600,11 @@ return Response(generate(), mimetype="text/plain")
 The system prompt instructs Claude to:
 - Act as a patristic **historian** presenting evidence (not a theologian judging orthodoxy)
 - Use only the provided passages; filter internally to the question the passages engage
-- Present each Father individually; never label positions orthodox/heretical
-- Report condemnations as historical fact without framing them as settled verdicts
-- Stay before 500 AD; use the Fathers' own terminology without simplification
-- Write at most 4 paragraphs, third person, no disclaimers
+- Present each Father's position in its strongest form — lead with the central claim, not qualifications
+- Favor the Fathers' own words and direct formulations over paraphrase
+- Never label positions orthodox/heretical; report condemnations as historical fact
+- Stay before 500 AD; use the Fathers' own terminology (physis, ousia, prosōpon) without simplification
+- Maximum 3 short paragraphs (≤5 sentences each), third person, no disclaimers, no em dashes
 
 ---
 
@@ -540,16 +621,24 @@ The system prompt instructs Claude to:
 
 ## Author Detection
 
-`detectAuthor(query)` in `App.jsx` uses the live author list from `GET /api/authors` (cached in a ref on mount):
+Author detection operates on two levels:
+
+### Frontend (instant UI feedback) — `src/utils/authorQuery.js`
+
+`detectAuthor(query, authorsList)` uses the cached author list:
 
 1. Exact or substring match on full author name
 2. Otherwise, any name word longer than 3 characters found in the query
 3. `isAuthorOnlyQuery()` treats geographic/honorific qualifiers (`of Alexandria`, `the Great`, etc.) as part of the name, not a separate topic
 
+### Backend (authoritative) — `parse_user_query()` in `app.py`
+
+Claude Haiku parses the raw query against the full DB author list. The backend response includes `author`, `author_id`, and `author_only` — the frontend uses these to decide whether to show the works list or filtered passage results.
+
 Examples:
 - `"Augustine"` → author-only → works list via `GET /api/authors/:id/works`
 - `"Augustine grace"` → FTS search for `grace`, filtered to Augustine; author chip shown
-- `"Athanasius of Alexandria"` → author-only even if DB stores `"Athanasius"`
+- `"what did Athanasius teach about the Trinity"` → Haiku extracts author=Athanasius, keywords=Trinity → filtered FTS
 
 ---
 
@@ -559,7 +648,7 @@ Examples:
 |--------|---------------------|-------------|
 | GET    | `/api/health`       | Returns `{ "status": "ok" }` |
 | GET    | `/api/hello?name=`  | Greeting test endpoint (debugging only) |
-| GET    | `/api/search?q=`           | FTS5 search (ranked, max 100). Returns `{ query, results: [{id, passage, author, work, work_id, header}] }`. Empty or invalid queries return `[]`. |
+| GET    | `/api/search?q=`           | AI-parsed FTS5 search (ranked, max 100). Returns `{ query, keywords, author, author_id, author_only, results: [{id, passage, author, work, work_id, header}] }`. Haiku extracts author + keywords from natural-language queries. If `author_only` is true, `results` is empty and the frontend should show the works list. |
 | GET    | `/api/authors`             | All authors: `{ results: [{id, name, tradition}] }`. |
 | GET    | `/api/authors/:id/works`   | Works for one author: `{ name, works: [{id, title}] }`. 404 if author has no works. |
 | GET    | `/api/library`             | Catalog grouped by section: `{ sections: { Father: [...], Council: [...], ... } }`. |
@@ -574,13 +663,32 @@ Examples:
 | Layer    | Technology |
 |----------|------------|
 | Frontend | React 18, Vite 5, react-router-dom v7 |
-| Styling  | Pure CSS with custom properties |
+| Theming  | Custom token system (JS objects → CSS custom properties), light/dark mode |
+| Styling  | Pure CSS with custom properties, component-scoped styles |
 | Markdown | react-markdown (renders AI synthesis) |
 | Icons    | react-icons (io5, md) |
 | Backend  | Python 3, Flask, Flask-CORS, SQLite |
-| AI       | Anthropic Claude (`claude-sonnet-4-6`), streamed via Flask `Response` generator |
+| AI       | Anthropic Claude — `claude-sonnet-4-6` for synthesis (streamed), `claude-haiku-4-5` for query parsing |
 | Scraping | requests + BeautifulSoup4 (source: newadvent.org/fathers) |
 | Env vars | python-dotenv |
+
+---
+
+## Mobile Readiness
+
+The web frontend is structured to share code with a future React Native app. See `docs/MOBILE.md` for full porting notes.
+
+| Layer | Web | React Native |
+|-------|-----|--------------|
+| Theme tokens | CSS custom properties via `applyWebTheme` | `StyleSheet.create` from `tokens.js` directly |
+| API client | `src/api/client.js` (change `VITE_API_URL`) | Same file, change base URL for device |
+| Navigation | `react-router-dom` | `@react-navigation/native` (stack + bottom tabs) |
+| Tab bar | `MobileTabBar.jsx` (CSS) | `@react-navigation/bottom-tabs` |
+| Scroll | `useScrollTop` (DOM `scroll` event) | `ScrollView` ref + `onScroll` |
+| Icons | `react-icons` | `@expo/vector-icons` |
+| Markdown | `react-markdown` | `react-native-markdown-display` |
+
+Reusable as-is (pure JS, no DOM): `tokens.js`, `api/client.js`, `utils/authorQuery.js`, `constants/*`.
 
 ---
 

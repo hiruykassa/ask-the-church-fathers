@@ -20,6 +20,84 @@ def prepare_fts_query(q):
 # Load environment variables from .env (e.g. ANTHROPIC_API_KEY)
 load_dotenv()
 
+
+def get_db_connection():
+    return sqlite3.connect("database.db")
+
+
+def get_author_names():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM authors ORDER BY name")
+    names = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return names
+
+
+def get_author_id_by_name(name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id FROM authors WHERE LOWER(name) = LOWER(?)",
+        (name,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def resolve_author_name(candidate, author_names):
+    """Map Claude's author string to a canonical DB name (case-insensitive)."""
+    if not candidate or candidate.strip().lower() in ("none", "n/a", ""):
+        return None
+    c = candidate.strip()
+    c_lower = c.lower()
+    for name in author_names:
+        if name.lower() == c_lower:
+            return name
+    for name in author_names:
+        nl = name.lower()
+        if c_lower in nl or nl in c_lower:
+            return name
+    return None
+
+
+def parse_user_query(raw_query, author_names):
+    names_list = "\n".join(f"- {n}" for n in author_names)
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=150,
+        messages=[{
+            "role": "user",
+            "content": (
+                f"User search query: {raw_query}\n\n"
+                "Authors in the database (if a Father is mentioned, you MUST use the "
+                "exact spelling from this list; otherwise use none):\n"
+                f"{names_list}\n\n"
+                "Extract two things:\n"
+                "1. author: — exact name from the list above, or none if no specific Father "
+                "is named.\n"
+                "2. keywords: — only the theological topic words (strip filler like "
+                "\"what did\", \"teach about\", \"the early church\"). If there is no "
+                "topic, use none.\n\n"
+                "Respond with exactly two lines, nothing else:\n"
+                "author: <name or none>\n"
+                "keywords: <topic words or none>"
+            ),
+        }],
+    )
+    res = response.content[0].text
+    seen = {"author": "none", "keywords": ""}
+    for line in res.split("\n"):
+        line = line.strip()
+        if line.lower().startswith("author:"):
+            seen["author"] = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("keywords:"):
+            seen["keywords"] = line.split(":", 1)[1].strip()
+    return seen
+
 app = Flask(__name__)
 # Allow cross-origin requests so the React frontend (localhost:5173) can call this API
 CORS(app)
@@ -41,42 +119,95 @@ def hello():
 # Joins passages → works → authors so each result includes the author name and work title.
 @app.route("/api/search")
 def search():
-    q = request.args.get("q", "")
-    search_value = prepare_fts_query(q)
-    if search_value is None:
-        return jsonify({"query": q, "results": []})
-
-    conn = sqlite3.connect("database.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT passages.id, passages.text, authors.name, works.title, works.id, passages.header
-        FROM passages_fts
-        JOIN passages ON passages.id = passages_fts.rowid
-        JOIN works ON passages.work_id = works.id
-        JOIN authors ON works.author_id = authors.id
-        WHERE passages_fts MATCH ?
-        ORDER BY rank 
-        LIMIT 100 
-                """, (search_value,))
-        
-
-    rows = cursor.fetchall()
-
-    passages = []
-    for row in rows:
-        passages.append({
-            "id": row[0],
-            "passage": row[1],
-            "author": row[2],
-            "work": row[3],
-            "work_id": row[4],
-            "header": row[5],
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({
+            "query": q,
+            "keywords": "",
+            "author": None,
+            "author_id": None,
+            "author_only": False,
+            "results": [],
         })
 
+    author_names = get_author_names()
+    parsed = parse_user_query(q, author_names)
+    author = resolve_author_name(parsed.get("author", "none"), author_names)
+
+    keywords_raw = (parsed.get("keywords") or "").strip()
+    if keywords_raw.lower() in ("none", "n/a"):
+        keywords_raw = ""
+    keywords = keywords_raw
+
+    # Author-only query (no topic keywords) — frontend shows works list
+    if author and not keywords:
+        return jsonify({
+            "query": q,
+            "keywords": "",
+            "author": author,
+            "author_id": get_author_id_by_name(author),
+            "author_only": True,
+            "results": [],
+        })
+
+    search_value = prepare_fts_query(keywords)
+    if search_value is None:
+        return jsonify({
+            "query": q,
+            "keywords": keywords,
+            "author": author,
+            "author_id": get_author_id_by_name(author) if author else None,
+            "author_only": False,
+            "results": [],
+        })
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if author:
+        cursor.execute("""
+            SELECT passages.id, passages.text, authors.name, works.title, works.id, passages.header
+            FROM passages_fts
+            JOIN passages ON passages.id = passages_fts.rowid
+            JOIN works ON passages.work_id = works.id
+            JOIN authors ON works.author_id = authors.id
+            WHERE passages_fts MATCH ?
+            AND LOWER(authors.name) = LOWER(?)
+            ORDER BY rank
+            LIMIT 100
+        """, (search_value, author))
+    else:
+        cursor.execute("""
+            SELECT passages.id, passages.text, authors.name, works.title, works.id, passages.header
+            FROM passages_fts
+            JOIN passages ON passages.id = passages_fts.rowid
+            JOIN works ON passages.work_id = works.id
+            JOIN authors ON works.author_id = authors.id
+            WHERE passages_fts MATCH ?
+            ORDER BY rank
+            LIMIT 100
+        """, (search_value,))
+
+    rows = cursor.fetchall()
     conn.close()
 
-    return jsonify({"query": q, "results": passages})
+    passages = [{
+        "id": row[0],
+        "passage": row[1],
+        "author": row[2],
+        "work": row[3],
+        "work_id": row[4],
+        "header": row[5],
+    } for row in rows]
+
+    return jsonify({
+        "query": q,
+        "keywords": keywords,
+        "author": author,
+        "author_id": get_author_id_by_name(author) if author else None,
+        "author_only": False,
+        "results": passages,
+    })
 
 # Returns all Church Fathers stored in the authors table.
 # Used by the frontend to populate the sidebar author list.
@@ -234,25 +365,28 @@ def synthesize():
         text = f"{p['author']}, {p['work']}: {p['passage']}"
         passages_text = passages_text + text
 
-    prompt = f"""You are a patristic historian reporting what the early Church Fathers taught. You are not a theologian making judgments — you are a historian presenting evidence.
+    prompt = f"""You are a patristic historian. Your sole task is to report what the Church Fathers said in the passages below. You are not interpreting, not theologizing, not balancing perspectives, and not arranging material for palatability.
 
 The user searched: "{query}"
 
-Determine the specific theological question the majority of these passages engage. Use only passages that directly address that question. Discard passages that merely share a keyword but concern a different theological issue. Do not write the question out in the response — this is an internal reasoning step only. Begin directly with what the Fathers said.
+Internally determine the main theological question these passages address. Discard any passage that merely shares a keyword but engages a different question. Do not state the question in your response. Begin directly with what the Fathers said.
 
 Passages from the Church Fathers:
 {passages_text}
 
-Instructions:
-1. Use ONLY the passages above. Do not introduce claims, positions, councils, or figures from outside the provided passages. If a council is mentioned in the passages, report what it defined in its own language without interpreting it through any later tradition.
-2. Present each Father individually — "Cyril argued X," "Nestorius argued Y," "Theodoret argued Z." Do not group them into camps or frame one side as the opposition to another.
-3. Report exactly what the passages say, plainly and without softening. If a council condemned someone, say so. If a Father made a harsh argument, state it at full force. Do not balance, hedge, or diplomatize. The goal is accurate representation of what is in the texts, not protection of any reader's sensibilities.
-4. Never call a position orthodox, heretical, correct, or wrong. Report condemnations and rejections as historical fact (e.g. "The council at Ephesus condemned Nestorius's position") without framing them as settled verdicts or implying they were justified or unjustified.
-5. Stay entirely within the historical period. Do not mention which traditions today hold which positions. Do not reference anything after 500 AD.
-6. Use whatever terminology the Fathers themselves used in the passages (physis, ousia, prosōpon, etc.). Do not define or simplify these terms.
-7. If the passages only represent one perspective, present what is there — name who said it and at which council if that information is in the passages. Do not add the other side from outside the passages.
-8. Maximum 4 paragraphs. The synthesis should make sense and answer the question within those paragraphs.
-9. Write in third person. Do not address the reader. No disclaimers, no meta-commentary about the passages being limited."""
+Rules:
+1. Use ONLY the passages above. Do not introduce any claim, figure, council, or position from outside these passages.
+2. Present each Father's position as that Father himself would have stated it, in its strongest form. If a Father's central argument was controversial, lead with the controversial claim. Do not bury it in qualifications or arrange the material to make it acceptable to any modern audience.
+3. Let the Fathers speak. Favor their own words and phrases from the passages over paraphrase. When a passage contains a direct formulation — a definition, a condemnation, an analogy — use it.
+4. If a Father has a defining formula or technical phrase that is central to his position, state it explicitly and prominently. Do not paraphrase around it.
+5. If only one Father appears in the results, report that Father's position directly. Do not frame it as one side of a debate. Do not introduce opposing views from outside the passages.
+6. If multiple Fathers appear, present each one individually. Do not group them into camps or frame one as the opposition to another.
+7. If a council is mentioned in the passages, report what it defined in its own language. Do not interpret it through any later tradition.
+8. Report condemnations as historical fact without calling any position orthodox, heretical, correct, or wrong.
+9. Stay entirely within the historical period. Do not mention any tradition, denomination, or development after 500 AD.
+10. Use the terminology the Fathers themselves used (physis, ousia, prosōpon, hypostasis). Do not define or simplify these terms.
+11. Maximum 3 short paragraphs. Each paragraph should be no more than 5 sentences. Third person. No disclaimers. No meta-commentary.
+12. Do not use em dashes. Use commas, periods, or semicolons instead."""
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 

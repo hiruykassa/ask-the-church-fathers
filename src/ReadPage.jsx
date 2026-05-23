@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { IoArrowBack, IoMenu, IoClose, IoChevronBack, IoArrowUp } from 'react-icons/io5'
+import ThemeToggle from './components/ui/ThemeToggle'
+import { API_BASE } from './api/client'
 import './ReadPage.css'
-
-const API = 'http://localhost:5001'
 
 const LITURGY_ROLES = /\b(priest|deacon|people|bishop|reader|choir|singer|catechumen)\b/i
 const RUBRIC_STARTS = /^(prayer of|then the|after the|before the|\(aloud)/i
@@ -48,7 +48,7 @@ export default function ReadPage() {
     setError(null)
     setWork(null)
     window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' })
-    fetch(`${API}/api/works/${workId}`)
+    fetch(`${API_BASE}/api/works/${workId}`)
       .then(r => {
         if (!r.ok) throw new Error('Work not found')
         return r.json()
@@ -84,7 +84,7 @@ export default function ReadPage() {
       const scrolled = el.scrollTop || document.body.scrollTop
       const total    = el.scrollHeight - el.clientHeight
       setScrollPct(total > 0 ? (scrolled / total) * 100 : 0)
-      setShowScrollTop(scrolled > 400)
+      setShowScrollTop(scrolled > 60)
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -185,6 +185,7 @@ export default function ReadPage() {
           <div className="site-title-ornament"><span>What did the early church teach</span></div>
         </div>
         <div className="read-header-right">
+          <ThemeToggle />
           {work && <span className="read-header-title">{work.title}</span>}
           {work && chapters.length > 0 && (
             <button className="toc-mobile-btn" onClick={() => setTocOpen(o => !o)} title="Chapter list">

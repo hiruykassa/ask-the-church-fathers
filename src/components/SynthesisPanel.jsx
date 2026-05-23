@@ -1,5 +1,3 @@
-import ReactMarkdown from 'react-markdown'
-
 /**
  * Panel that lets the user request an AI synthesis of the current search results.
  * Streams the response token-by-token via `getSynthesis`. Shows a placeholder
@@ -16,6 +14,10 @@ import ReactMarkdown from 'react-markdown'
 export default function SynthesisPanel({
   topicQuery, authorFilter, synthesis, synthesizing, getSynthesis,
 }) {
+  const paragraphs = synthesis
+    ? synthesis.split(/\n+/).filter(p => p.trim())
+    : []
+
   return (
     <div className="syn-panel">
       <div className="syn-head">
@@ -39,7 +41,10 @@ export default function SynthesisPanel({
 
       {synthesis && (
         <div className="syn-text">
-          <ReactMarkdown>{synthesis}</ReactMarkdown>
+          {synthesizing && paragraphs.length === 0
+            ? <p>{synthesis}</p>
+            : paragraphs.map((para, i) => <p key={i}>{para}</p>)
+          }
         </div>
       )}
     </div>

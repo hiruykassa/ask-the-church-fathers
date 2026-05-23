@@ -1,0 +1,128 @@
+/* About & Contact page styles */
+
+.about-main {
+  flex: 1;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 48px 32px 72px;
+}
+
+.about-article {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 56px 52px;
+  box-shadow: var(--shadow-sm);
+}
+
+.about-hero {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.about-cross {
+  display: block;
+  font-size: 2.4rem;
+  color: var(--gold);
+  margin-bottom: 16px;
+  line-height: 1;
+}
+
+.about-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 3.5vw, 1.9rem);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 1.5px;
+  margin-bottom: 16px;
+}
+
+.about-rule {
+  width: 48px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  margin: 0 auto;
+}
+
+.about-section {
+  margin-bottom: 32px;
+}
+.about-section:last-child { margin-bottom: 0; }
+
+.about-heading {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+
+.about-text {
+  font-family: var(--font-prose);
+  font-size: 1.12rem;
+  color: var(--text);
+  line-height: 1.85;
+  margin-bottom: 14px;
+}
+.about-text:last-child { margin-bottom: 0; }
+
+/* ── Contact page specific ── */
+.contact-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  transition: border-color 0.18s var(--ease);
+}
+.contact-item:hover { border-color: var(--gold); }
+
+.contact-icon {
+  color: var(--gold);
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.contact-label {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.contact-value {
+  font-family: var(--font-prose);
+  font-size: 1.02rem;
+  color: var(--text);
+}
+.contact-value a {
+  color: var(--gold);
+  text-decoration: none;
+  transition: color 0.18s;
+}
+.contact-value a:hover {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .about-main { padding: 24px 14px 48px; }
+  .about-article { padding: 32px 22px; }
+  .about-title { font-size: 1.3rem; }
+  .about-text { font-size: 1.02rem; }
+}
