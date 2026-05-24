@@ -6,22 +6,36 @@ export default function FeaturedFathers({ onFatherClick }) {
       <h2 id="feat-heading" className="feat-section-title">
         Notable Fathers
       </h2>
-      <ul className="feat-list">
+      <ul className="feat-grid">
         {FEATURED_FATHERS.map((f, i) => (
           <li key={f.name}>
             <button
               type="button"
-              className="feat-row"
+              className="feat-card"
               data-reveal
-              style={{ '--reveal-delay': `${i * 30}ms` }}
+              style={{ '--reveal-delay': `${i * 50}ms` }}
               onClick={() => onFatherClick(f.name)}
             >
-              <span className="feat-row-name">{f.name}</span>
-              <span className="feat-row-detail">
-                <span className="feat-row-region">{f.region}</span>
-                <span className="feat-row-dot" aria-hidden>&middot;</span>
-                <span className="feat-row-dates">{f.dates}</span>
-              </span>
+              <div className="feat-card-media">
+                <div
+                  className="feat-card-img-zoom"
+                  style={{
+                    transform: `scale(${f.imgScale ?? 1.36})`,
+                    transformOrigin: f.imgPos ?? 'center 12%',
+                  }}
+                >
+                  <img
+                    src={f.img}
+                    alt={f.name}
+                    className="feat-card-img"
+                    style={{ objectPosition: f.imgPos ?? 'center 12%' }}
+                  />
+                </div>
+              </div>
+              <div className="feat-card-body">
+                <span className="feat-card-name">{f.name}</span>
+                <span className="feat-card-sub">{f.region} · {f.dates}</span>
+              </div>
             </button>
           </li>
         ))}

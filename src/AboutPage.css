@@ -24,9 +24,10 @@
 .about-cross {
   display: block;
   font-size: 2.4rem;
-  color: var(--gold);
+  color: var(--cross-gold);
   margin-bottom: 16px;
   line-height: 1;
+  filter: drop-shadow(0 2px 8px var(--cross-glow));
 }
 
 .about-title {
@@ -41,7 +42,7 @@
 .about-rule {
   width: 48px;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  background: linear-gradient(90deg, transparent, var(--cross-gold), transparent);
   margin: 0 auto;
 }
 
@@ -54,7 +55,7 @@
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 700;
-  color: var(--gold);
+  color: var(--cross-gold);
   letter-spacing: 1px;
   margin-bottom: 14px;
 }
@@ -67,8 +68,17 @@
   margin-bottom: 14px;
 }
 .about-text:last-child { margin-bottom: 0; }
+.about-text a {
+  color: var(--cross-gold);
+  text-decoration: none;
+  transition: color 0.18s;
+}
+.about-text a:hover {
+  color: var(--favorite);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
-/* ── Contact page specific ── */
 .contact-methods {
   display: flex;
   flex-direction: column;
@@ -86,10 +96,10 @@
   border-radius: var(--radius);
   transition: border-color 0.18s var(--ease);
 }
-.contact-item:hover { border-color: var(--gold); }
+.contact-item:hover { border-color: var(--cross-gold); }
 
 .contact-icon {
-  color: var(--gold);
+  color: var(--cross-gold);
   font-size: 1.2rem;
   flex-shrink: 0;
 }
@@ -110,12 +120,12 @@
   color: var(--text);
 }
 .contact-value a {
-  color: var(--gold);
+  color: var(--cross-gold);
   text-decoration: none;
   transition: color 0.18s;
 }
 .contact-value a:hover {
-  color: var(--text);
+  color: var(--favorite);
   text-decoration: underline;
   text-underline-offset: 3px;
 }

@@ -1,96 +1,125 @@
 /**
- * Design tokens — single source of truth for web (CSS vars) and future React Native.
+ * Light: warm beige + brown header · black text.
+ * Dark: true black surfaces · light text · dark brown chrome.
  */
 export const COLOR_MODE_KEY = 'atcf-color-mode'
 
 export const themes = {
   light: {
-    // Warm gold accent — consistent across all elements
-    gold: '#96652b',
-    goldHi: '#b8832e',
-    goldSoft: 'rgba(150, 101, 43, 0.10)',
+    colorScheme: 'light',
+    chromeColor: '#5c4636',
 
-    // Rich brown header — grounded, warm
-    headerBg: '#2c1e10',
-    headerBg2: '#1e1208',
-    headerLine: 'rgba(180, 140, 60, 0.25)',
-    headerText: '#f4ead4',
-    headerTextMuted: '#c4a060',
+    gold: '#5c4636',
+    goldHi: '#6e5540',
+    goldSoft: 'rgba(92, 70, 54, 0.10)',
+    crossGold: '#d4920a',
+    crossGlow: 'rgba(212, 146, 10, 0.40)',
+    crossGoldSoft: 'rgba(212, 146, 10, 0.16)',
+    favorite: '#ff3040',
+    favoriteHi: '#ff5166',
+    favoriteSoft: 'rgba(255, 48, 64, 0.14)',
+    favoriteEmpty: '#a0a0a0',
 
-    parchment: '#eee6d0',
-    parchment2: '#f4eed8',
-    parchment3: '#f8f4e8',
+    headerBg: '#5c4636',
+    headerBg2: '#4a3828',
+    headerLine: 'rgba(240, 230, 216, 0.20)',
+    headerText: '#f0e6d8',
+    headerTextMuted: '#d4c4b0',
 
-    // Warm off-white — unified warm tone
-    bg: '#f6f2ea',
-    bgGradientEnd: '#f0ece2',
-    surface: '#fefcf8',
-    surface2: '#f4f0e6',
+    heroBg: '#fdfbf7',
+    bg: '#f9f5ee',
+    catalogBg: '#f9f5ee',
+    sectionBg: '#f9f5ee',
+    footerBg: '#5c4636',
+    footerBg2: '#4a3828',
+    bgGradientEnd: '#f9f5ee',
 
-    // Consistent warm borders
-    border: '#dcd4c0',
-    borderSoft: '#e6e0d0',
+    surface: '#fffefb',
+    surface2: '#f7f2ea',
 
-    // Clear hierarchy — dark ink to faded warmth
-    text: '#1c1208',
-    textHeading: '#1c1208',
-    textMd: '#4a3820',
-    textDim: '#7a6548',
-    textFaint: '#a89678',
-    textMeta: '#6a5838',
+    parchment: '#f7f2ea',
+    parchment2: '#f9f5ee',
+    parchment3: '#fdfbf7',
 
-    favorite: '#b82818',
-    focusRing: 'rgba(150, 101, 43, 0.30)',
-    textureOpacity: '0.025',
-    vignette: 'rgba(50, 35, 15, 0.04)',
+    border: '#ebe5da',
+    borderSoft: '#f2ece4',
+    sectionBorder: 'rgba(92, 70, 54, 0.12)',
 
-    btnOnGold: '#1e1208',
-    shadowColor: '50, 35, 15',
+    text: '#000000',
+    textHeading: '#000000',
+    textMd: '#000000',
+    textDim: '#333333',
+    textFaint: '#555555',
+    textMeta: '#1a1a1a',
+
+    heroGlow: 'rgba(92, 70, 54, 0.04)',
+    heroGlowGold: 'rgba(196, 160, 53, 0.05)',
+
+    focusRing: 'rgba(92, 70, 54, 0.18)',
+    shadowColor: '60, 46, 36',
+    btnOnGold: '#fffefb',
+
+    scrollbarTrack: '#f0ebe3',
+    scrollbarThumb: '#c4b49a',
   },
 
   dark: {
-    // Warm muted gold — not neon, not washed out
-    gold: '#d4a24a',
-    goldHi: '#e4b85c',
-    goldSoft: 'rgba(212, 162, 74, 0.12)',
+    colorScheme: 'dark',
+    chromeColor: '#14100c',
 
-    // True black header
-    headerBg: '#000000',
-    headerBg2: '#0a0a0a',
-    headerLine: 'rgba(212, 162, 74, 0.20)',
-    headerText: '#fafafa',
-    headerTextMuted: '#c8a050',
+    gold: '#c4a060',
+    goldHi: '#d4b070',
+    goldSoft: 'rgba(196, 160, 96, 0.16)',
+    crossGold: '#f0b429',
+    crossGlow: 'rgba(240, 180, 41, 0.45)',
+    crossGoldSoft: 'rgba(240, 180, 41, 0.20)',
+    favorite: '#ff667a',
+    favoriteHi: '#ff8596',
+    favoriteSoft: 'rgba(255, 102, 122, 0.22)',
+    favoriteEmpty: '#8a8a8a',
 
-    parchment: '#181818',
-    parchment2: '#222222',
-    parchment3: '#2a2a2a',
+    headerBg: '#1f1812',
+    headerBg2: '#14100c',
+    headerLine: 'rgba(240, 230, 216, 0.16)',
+    headerText: '#f5f0e8',
+    headerTextMuted: '#c4b4a0',
 
-    // True black body — like Instagram/TikTok
+    /* Layered zones — each step slightly lifted & warmer */
+    heroBg: '#0a0908',
     bg: '#000000',
+    sectionBg: '#12100e',
+    catalogBg: '#1a1612',
+    footerBg: '#1f1812',
+    footerBg2: '#14100c',
     bgGradientEnd: '#000000',
-    // Subtle card lift — #121212 is the sweet spot
-    surface: '#121212',
-    surface2: '#1a1a1a',
 
-    // Very subtle borders — just enough separation
+    surface: '#222018',
+    surface2: '#2c261e',
+
+    parchment: '#222018',
+    parchment2: '#1a1612',
+    parchment3: '#2c261e',
+
     border: 'rgba(255, 255, 255, 0.12)',
     borderSoft: 'rgba(255, 255, 255, 0.06)',
+    sectionBorder: 'rgba(196, 160, 96, 0.22)',
 
-    // High contrast primary text like Instagram
     text: '#fafafa',
-    textHeading: '#fafafa',
-    textMd: '#b8a070',
-    textDim: '#737373',
-    textFaint: '#404040',
-    textMeta: '#8c8078',
+    textHeading: '#ffffff',
+    textMd: '#f0f0f0',
+    textDim: '#b0b0b0',
+    textFaint: '#787878',
+    textMeta: '#cccccc',
 
-    favorite: '#e05848',
-    focusRing: 'rgba(212, 162, 74, 0.40)',
-    textureOpacity: '0.0',
-    vignette: 'rgba(0, 0, 0, 0.0)',
+    heroGlow: 'rgba(196, 160, 96, 0.10)',
+    heroGlowGold: 'rgba(212, 176, 80, 0.14)',
 
-    btnOnGold: '#000000',
+    focusRing: 'rgba(196, 160, 96, 0.40)',
     shadowColor: '0, 0, 0',
+    btnOnGold: '#141414',
+
+    scrollbarTrack: '#0a0a0a',
+    scrollbarThumb: '#444444',
   },
 }
 
@@ -100,52 +129,20 @@ export const tokens = {
     prose: "'Cormorant Garamond', 'Crimson Text', Georgia, serif",
     ui: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
-
-  spacing: {
-    xs: 4,
-    sm: 8,
-    md: 16,
-    lg: 24,
-    xl: 32,
-    xxl: 48,
-    xxxl: 64,
-  },
-
-  radius: {
-    sm: 6,
-    md: 12,
-    lg: 20,
-    pill: 999,
-  },
-
-  layout: {
-    maxWidth: 1100,
-    contentWidth: 720,
-    headerHeight: 72,
-  },
-
+  radius: { sm: 6, md: 10, lg: 16, pill: 999 },
   motion: {
     ease: 'cubic-bezier(0.4, 0, 0.2, 1)',
     easeOut: 'cubic-bezier(0.16, 1, 0.3, 1)',
   },
 }
 
-/** Quick topic chips on the home hero. */
-export const SEARCH_SUGGESTIONS = [
-  'Eucharist',
-  'baptism',
-  'Trinity',
-  'two natures',
-  'prayer',
-  'martyrdom',
-]
-
-function shadow(level, shadowColor) {
+function shadow(level, shadowColor, mode = 'light') {
+  const darkBoost = mode === 'dark' ? 2.2 : 1
   const maps = {
-    xs: `0 1px 3px rgba(${shadowColor},0.14), 0 1px 2px rgba(${shadowColor},0.10)`,
-    sm: `0 2px 10px rgba(${shadowColor},0.18), 0 1px 3px rgba(${shadowColor},0.12)`,
-    md: `0 8px 32px rgba(${shadowColor},0.30), 0 2px 8px rgba(${shadowColor},0.18)`,
-    lg: `0 20px 56px rgba(${shadowColor},0.44), 0 6px 18px rgba(${shadowColor},0.24)`,
+    xs: `0 1px 2px rgba(${shadowColor},${0.05 * darkBoost})`,
+    sm: `0 2px 8px rgba(${shadowColor},${0.14 * darkBoost}), 0 1px 2px rgba(${shadowColor},${0.08 * darkBoost})`,
+    md: `0 10px 28px rgba(${shadowColor},${0.22 * darkBoost}), 0 2px 8px rgba(${shadowColor},${0.12 * darkBoost})`,
+    lg: `0 20px 52px rgba(${shadowColor},${0.32 * darkBoost}), 0 4px 14px rgba(${shadowColor},${0.18 * darkBoost})`,
   }
   return maps[level]
 }
@@ -155,10 +152,10 @@ export function getThemeTokens(mode = 'light') {
   return {
     colors: c,
     shadows: {
-      xs: shadow('xs', c.shadowColor),
-      sm: shadow('sm', c.shadowColor),
-      md: shadow('md', c.shadowColor),
-      lg: shadow('lg', c.shadowColor),
+      xs: shadow('xs', c.shadowColor, mode),
+      sm: shadow('sm', c.shadowColor, mode),
+      md: shadow('md', c.shadowColor, mode),
+      lg: shadow('lg', c.shadowColor, mode),
     },
     ...tokens,
   }

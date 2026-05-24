@@ -15,7 +15,7 @@ export default function FatherRow({ father, onFatherClick, onWorkClick }) {
   const hasWorks = father.works && father.works.length > 0
 
   return (
-    <li className="acc-row">
+    <li className={`acc-row${open ? ' is-open' : ''}`}>
       <div className="acc-row-head">
         <button
           className="acc-row-name"

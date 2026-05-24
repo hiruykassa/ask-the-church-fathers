@@ -2,15 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      (function () {
-        var t = localStorage.getItem('atcf-color-mode');
-        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
-      })();
-    </script>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#5c4636" />
     <title>Ask the Church Fathers</title>
+    <script>
+      try {
+        var mode = localStorage.getItem('atcf-color-mode') === 'dark' ? 'dark' : 'light';
+        var html = document.documentElement;
+        html.setAttribute('data-theme', mode);
+        html.style.colorScheme = mode;
+        if (mode === 'dark') {
+          html.style.backgroundColor = '#000000';
+          html.style.color = '#fafafa';
+        } else {
+          html.style.backgroundColor = '#f9f5ee';
+          html.style.color = '#000000';
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

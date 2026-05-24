@@ -31,7 +31,7 @@ export default function SynthesisPanel({
         <p className="syn-placeholder">
           Click <em>Ask the Fathers</em> for a historian-style summary of what the passages say on{' '}
           <strong>"{topicQuery}"</strong>
-          {authorFilter ? ` — filtered to ${authorFilter}` : ' — across all Fathers'}.
+          {authorFilter ? ` (filtered to ${authorFilter})` : ''}.
         </p>
       )}
 

@@ -1,8 +1,10 @@
-import { IoClose } from 'react-icons/io5'
-import { MdFavoriteBorder, MdFavorite } from 'react-icons/md'
+import { IoClose, IoHeart, IoHeartOutline } from 'react-icons/io5'
 import SynthesisPanel from './SynthesisPanel'
-import EmptyState from './ui/EmptyState'
-import LoadingBlock from './ui/LoadingBlock'
+
+/**
+ * Displays search results as a flat relevance-ordered list.
+ * Each passage is its own card showing author, work title, snippet, and save button.
+ */
 export default function SearchResults({
   query, topicQuery, authorFilter, clearAuthorFilter,
   searching, results,
@@ -10,10 +12,15 @@ export default function SearchResults({
   synthesis, synthesizing, getSynthesis,
 }) {
   const total = results.length
-  const displayQuery = topicQuery || query
+
+  function openPassage(p) {
+    navigate(`/read/${p.work_id}`, {
+      state: { query, fromSearch: true, scrollToPassage: p.id },
+    })
+  }
 
   return (
-    <>
+    <div className="search-results">
       <div className="results-meta">
         <span className="results-count">
           {searching ? 'Searching…' : `${total} result${total !== 1 ? 's' : ''}`}
@@ -21,39 +28,24 @@ export default function SearchResults({
         {authorFilter && (
           <span className="author-chip">
             {authorFilter}
-            <button
-              type="button"
-              className="author-chip-x"
-              onClick={clearAuthorFilter}
-              title="Clear filter"
-              aria-label={`Remove filter: ${authorFilter}`}
-            >
+            <button className="author-chip-x" onClick={clearAuthorFilter} title="Clear filter">
               <IoClose />
             </button>
           </span>
         )}
       </div>
 
-      {searching && <LoadingBlock label="Searching the Fathers…" />}
-
       {!searching && total === 0 && (
-        <EmptyState
-          title={
-            <>
-              No results for &ldquo;<em>{displayQuery}</em>&rdquo;
-              {authorFilter && topicQuery ? (
-                <span className="empty-filter-note"> (filtered to {authorFilter})</span>
-              ) : null}
-            </>
-          }
-          hint="Try: Eucharist · baptism · prayer · fasting · martyrdom"
-        />
+        <div className="empty">
+          <p className="empty-title">No results for "<em>{query}</em>"</p>
+          <p className="empty-hint">Try: Eucharist · baptism · prayer · fasting · martyrdom</p>
+        </div>
       )}
 
-      {!searching && total > 0 && (
+      {total > 0 && (
         <>
           <SynthesisPanel
-            topicQuery={displayQuery}
+            topicQuery={topicQuery || query}
             authorFilter={authorFilter}
             synthesis={synthesis}
             synthesizing={synthesizing}
@@ -68,10 +60,20 @@ export default function SearchResults({
                 : text
 
               return (
-                <article key={p.id} className="result-card">
-                  <div className="result-card-rank" aria-hidden>
-                    {i + 1}
-                  </div>
+                <article
+                  key={p.id}
+                  className="result-card"
+                  onClick={() => openPassage(p)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      openPassage(p)
+                    }
+                  }}
+                  role="link"
+                  tabIndex={0}
+                >
+                  <div className="result-card-rank">{i + 1}</div>
                   <div className="result-card-body">
                     <header className="result-card-header">
                       <div className="result-card-info">
@@ -79,9 +81,7 @@ export default function SearchResults({
                         <button
                           type="button"
                           className="result-card-work"
-                          onClick={() => navigate(`/read/${p.work_id}`, {
-                            state: { query, fromSearch: true, scrollToPassage: p.id },
-                          })}
+                          onClick={e => { e.stopPropagation(); openPassage(p) }}
                           title="Open the full work"
                         >
                           {p.work}
@@ -92,14 +92,13 @@ export default function SearchResults({
                       </div>
                       <button
                         type="button"
-                        className="fav-btn"
-                        onClick={() => onToggleSave(p.id, p)}
+                        className={`fav-btn${isSaved(p.id) ? ' is-saved' : ''}`}
+                        onClick={e => { e.stopPropagation(); onToggleSave(p.id, p) }}
                         title={isSaved(p.id) ? 'Remove from saved' : 'Save passage'}
-                        aria-pressed={isSaved(p.id)}
                       >
                         {isSaved(p.id)
-                          ? <MdFavorite className="fav-filled" />
-                          : <MdFavoriteBorder className="fav-empty" />}
+                          ? <IoHeart className="fav-filled" />
+                          : <IoHeartOutline className="fav-empty" />}
                       </button>
                     </header>
                     <p className="result-card-quote">{snippet}</p>
@@ -110,6 +109,6 @@ export default function SearchResults({
           </div>
         </>
       )}
-    </>
+    </div>
   )
 }

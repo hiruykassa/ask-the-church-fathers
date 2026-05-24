@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { MdFavoriteBorder, MdFavorite } from 'react-icons/md'
-import { IoChevronDown, IoChevronUp } from 'react-icons/io5'
+import { IoChevronDown, IoChevronUp, IoHeart, IoHeartOutline } from 'react-icons/io5'
 
 /**
  * Displays a single author's search results as a collapsible card.
@@ -81,13 +80,13 @@ export default function AuthorCard({ group, isSaved, onToggleSave, onNavigate, d
                         <p className="passage-quote">{snippet}</p>
                       </div>
                       <button
-                        className="fav-btn"
+                        className={`fav-btn${isSaved(p.id) ? ' is-saved' : ''}`}
                         onClick={e => { e.stopPropagation(); onToggleSave(p.id, p) }}
                         title={isSaved(p.id) ? 'Remove from saved' : 'Save passage'}
                       >
                         {isSaved(p.id)
-                          ? <MdFavorite className="fav-filled" />
-                          : <MdFavoriteBorder className="fav-empty" />}
+                          ? <IoHeart className="fav-filled" />
+                          : <IoHeartOutline className="fav-empty" />}
                       </button>
                     </div>
                   )

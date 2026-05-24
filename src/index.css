@@ -23,6 +23,19 @@ html {
   text-size-adjust: 100%;
 }
 
+html {
+  background-color: var(--bg, #f9f5ee);
+  color: var(--text, #000000);
+}
+
+html[data-theme='light'] {
+  color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+}
+
 html, body, #root {
   min-height: 100vh;
   min-height: 100dvh;
@@ -31,6 +44,8 @@ html, body, #root {
 }
 
 body {
+  background-color: var(--bg, #f9f5ee);
+  color: var(--text, #000000);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -71,4 +86,32 @@ button {
     opacity: 1;
     transform: none;
   }
+}
+
+/* Chrome / Safari scrollbars follow the active theme */
+* {
+  scrollbar-color: var(--scrollbar-thumb, #c4b49a) var(--scrollbar-track, #f0ebe3);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track, #f0ebe3);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, #c4b49a);
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track, #f0ebe3);
+}
+
+/* Native inputs & search fields respect color-scheme in Chrome */
+input,
+textarea,
+select,
+button {
+  color-scheme: inherit;
 }

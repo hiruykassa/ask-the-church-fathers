@@ -1,20 +1,13 @@
-import { useNavigate } from 'react-router-dom'
-import { IoMailOutline } from 'react-icons/io5'
+import { IoMailOutline, IoLogoGithub } from 'react-icons/io5'
 import SiteHeader from './components/layout/SiteHeader'
 import SiteFooter from './components/layout/SiteFooter'
+import './App.css'
 import './AboutPage.css'
 
 export default function ContactPage() {
-  const navigate = useNavigate()
-
   return (
     <div className="page page-fade">
-      <SiteHeader
-        view="contact"
-        onViewChange={() => {}}
-        savedCount={0}
-        onHome={() => navigate('/')}
-      />
+      <SiteHeader />
       <div className="header-body-bridge" aria-hidden />
 
       <main className="about-main">
@@ -27,9 +20,10 @@ export default function ContactPage() {
 
           <section className="about-section">
             <p className="about-text">
-              We would love to hear from you — whether you have a question, a
-              suggestion, found an error in a text, or just want to share how
-              the Fathers have impacted your faith.
+              Reach out if you want to partner on this project, if you are
+              interested in hiring me, or if you noticed something on the site
+              that could be better. I read every message and usually reply
+              within a day or two.
             </p>
 
             <div className="contact-methods">
@@ -38,8 +32,22 @@ export default function ContactPage() {
                 <div>
                   <p className="contact-label">Email</p>
                   <p className="contact-value">
-                    <a href="mailto:hello@askthechurchfathers.com">
-                      hello@askthechurchfathers.com
+                    <a href="mailto:join.kryst@gmail.com">join.kryst@gmail.com</a>
+                  </p>
+                </div>
+              </div>
+
+              <div className="contact-item">
+                <IoLogoGithub className="contact-icon" />
+                <div>
+                  <p className="contact-label">GitHub</p>
+                  <p className="contact-value">
+                    <a
+                      href="https://github.com/hiruykassa"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      github.com/hiruykassa
                     </a>
                   </p>
                 </div>
@@ -48,12 +56,11 @@ export default function ContactPage() {
           </section>
 
           <section className="about-section">
-            <h2 className="about-heading">Report an Issue</h2>
+            <h2 className="about-heading">Corrections &amp; Feedback</h2>
             <p className="about-text">
-              If you spot a passage that looks wrong, a broken link, or
-              anything that seems off, please let us know. We take accuracy
-              seriously — these are the words of the Fathers, and they deserve
-              to be presented faithfully.
+              If a passage looks wrong, a link is broken, or search is missing
+              something important, tell me. These are the words of the Fathers
+              and they should be presented as faithfully as the sources allow.
             </p>
           </section>
         </article>

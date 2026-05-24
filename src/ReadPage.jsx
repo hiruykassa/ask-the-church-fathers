@@ -1,9 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { IoArrowBack, IoMenu, IoClose, IoChevronBack, IoArrowUp } from 'react-icons/io5'
+import { IoClose, IoChevronBack, IoArrowUp, IoChevronDown } from 'react-icons/io5'
 import ThemeToggle from './components/ui/ThemeToggle'
-import { API_BASE } from './api/client'
+import useSavedPassages from './hooks/useSavedPassages'
+import './App.css'
 import './ReadPage.css'
+
+const API = 'http://localhost:5001'
 
 const LITURGY_ROLES = /\b(priest|deacon|people|bishop|reader|choir|singer|catechumen)\b/i
 const RUBRIC_STARTS = /^(prayer of|then the|after the|before the|\(aloud)/i
@@ -37,18 +41,27 @@ export default function ReadPage() {
   const [scrollPct,    setScrollPct]    = useState(0)
   const [tocOpen,      setTocOpen]      = useState(false)
   const [showScrollTop, setShowScrollTop] = useState(false)
+  const [activeChapterIdx, setActiveChapterIdx] = useState(0)
 
   const passageRefs = useRef([])
+  const { toggleSave, isSaved } = useSavedPassages()
+  const [scrollHighlightId, setScrollHighlightId] = useState(null)
 
-  const scrollTarget = location.state?.scrollToPassage || null
+  const scrollTarget = location.state?.scrollToPassage ?? null
+
+  useEffect(() => {
+    setScrollHighlightId(scrollTarget != null ? Number(scrollTarget) : null)
+  }, [scrollTarget, workId])
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
     setWork(null)
-    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' })
-    fetch(`${API_BASE}/api/works/${workId}`)
+    if (scrollTarget == null) {
+      window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' })
+    }
+    fetch(`${API}/api/works/${workId}`)
       .then(r => {
         if (!r.ok) throw new Error('Work not found')
         return r.json()
@@ -67,16 +80,46 @@ export default function ReadPage() {
   }, [workId])
 
   useEffect(() => {
-    if (!work || !scrollTarget) return
-    const idx = work.passages.findIndex(p => p.id === scrollTarget)
+    if (!work || loading || scrollTarget == null) return
+
+    const idx = work.passages.findIndex(p => Number(p.id) === Number(scrollTarget))
     if (idx < 0) return
-    requestAnimationFrame(() => {
-      const el = passageRefs.current[idx]
-      if (!el) return
-      const y = el.getBoundingClientRect().top + window.scrollY - 110
-      window.scrollTo({ top: y, behavior: 'smooth' })
-    })
-  }, [work, scrollTarget])
+
+    let tries = 0
+    const attempt = () => {
+      const el = passageRefs.current[idx] || document.getElementById(`passage-${idx + 1}`)
+      if (el) {
+        const y = el.getBoundingClientRect().top + window.scrollY - 110
+        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
+        return
+      }
+      if (tries++ < 12) requestAnimationFrame(attempt)
+    }
+
+    requestAnimationFrame(attempt)
+  }, [work, loading, scrollTarget])
+
+  useEffect(() => {
+    passageRefs.current = []
+  }, [work])
+
+  const chapters = useMemo(() => {
+    if (!work) return []
+    const chaps = []
+    let current = null
+    for (let i = 0; i < work.passages.length; i++) {
+      const h = work.passages[i].header
+      if (i === 0 || h !== current) {
+        chaps.push({ header: h, firstIndex: i, count: 1 })
+        current = h
+      } else {
+        chaps[chaps.length - 1].count++
+      }
+    }
+    return chaps
+  }, [work])
+
+  const hasChapters = chapters.length > 1
 
   useEffect(() => {
     function onScroll() {
@@ -84,22 +127,36 @@ export default function ReadPage() {
       const scrolled = el.scrollTop || document.body.scrollTop
       const total    = el.scrollHeight - el.clientHeight
       setScrollPct(total > 0 ? (scrolled / total) * 100 : 0)
-      setShowScrollTop(scrolled > 60)
+      setShowScrollTop(scrolled > 80)
+
+      if (chapters.length > 1) {
+        const offset = 130
+        let active = 0
+        for (let ci = 0; ci < chapters.length; ci++) {
+          const ref = passageRefs.current[chapters[ci].firstIndex]
+          if (!ref) continue
+          if (ref.getBoundingClientRect().top <= offset) active = ci
+        }
+        setActiveChapterIdx(active)
+      }
     }
     window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
     return () => window.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [chapters])
 
   const scrollToTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
   function scrollToPassage(i) {
-    const el = passageRefs.current[i]
-    if (!el) return
-    const y = el.getBoundingClientRect().top + window.scrollY - 110
-    window.scrollTo({ top: y, behavior: 'smooth' })
     setTocOpen(false)
+    requestAnimationFrame(() => {
+      const el = passageRefs.current[i] || document.getElementById(`passage-${i + 1}`)
+      if (!el) return
+      const y = el.getBoundingClientRect().top + window.scrollY - 110
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
+    })
   }
 
   function goBack() {
@@ -123,22 +180,6 @@ export default function ReadPage() {
 
   const isLiturgy = /^liturgy\b/i.test(work?.title || '')
   const isCouncil = /^council\b/i.test(work?.title || '')
-
-  const chapters = (() => {
-    if (!work) return []
-    const chaps = []
-    let current = null
-    for (let i = 0; i < work.passages.length; i++) {
-      const h = work.passages[i].header
-      if (i === 0 || h !== current) {
-        chaps.push({ header: h, firstIndex: i, count: 1 })
-        current = h
-      } else {
-        chaps[chaps.length - 1].count++
-      }
-    }
-    return chaps
-  })()
 
   function classifyPassage(text) {
     const t = text.trim()
@@ -170,8 +211,27 @@ export default function ReadPage() {
     return text
   }
 
+  function passageSavePayload(p) {
+    return {
+      id: p.id,
+      passage: p.text,
+      author: work.author,
+      work: work.title,
+      work_id: work.work_id,
+      header: p.header,
+    }
+  }
+
+  function handlePassageDoubleClick(p) {
+    if (!work) return
+    const wasSaved = isSaved(p.id)
+    toggleSave(p.id, passageSavePayload(p))
+    if (wasSaved) setScrollHighlightId(prev => (Number(prev) === Number(p.id) ? null : prev))
+    window.getSelection()?.removeAllRanges()
+  }
+
   return (
-    <div className="read-page page-fade">
+    <div className={`read-page page-fade${tocOpen ? ' is-toc-open' : ''}`}>
       <div className="read-progress-bar" style={{ width: `${scrollPct}%` }} />
 
       {/* Matches the main site header exactly */}
@@ -187,40 +247,70 @@ export default function ReadPage() {
         <div className="read-header-right">
           <ThemeToggle />
           {work && <span className="read-header-title">{work.title}</span>}
-          {work && chapters.length > 0 && (
-            <button className="toc-mobile-btn" onClick={() => setTocOpen(o => !o)} title="Chapter list">
-              {tocOpen ? <IoClose /> : <IoMenu />}
+          {work && hasChapters && (
+            <button
+              type="button"
+              className={`read-chapters-btn${tocOpen ? ' is-open' : ''}`}
+              onClick={() => setTocOpen(o => !o)}
+              aria-expanded={tocOpen}
+              aria-label="Choose chapter"
+            >
+              Chapters
+              <IoChevronDown />
             </button>
           )}
         </div>
       </header>
 
-      {tocOpen && work && (
-        <div className="toc-drawer">
-          <p className="toc-drawer-label">Chapters</p>
-          <div className="toc-drawer-chapters">
-            {chapters.map((ch, ci) => (
-              <button key={ci} className="toc-chapter-btn" onClick={() => scrollToPassage(ch.firstIndex)}>
-                <span className="toc-chapter-name">{displayChapterName(ch.header, ci)}</span>
-                <span className="toc-chapter-count">{ch.count}</span>
+      {tocOpen && work && hasChapters && createPortal(
+        <div className="read-chapters-overlay">
+          <button
+            type="button"
+            className="toc-backdrop"
+            onClick={() => setTocOpen(false)}
+            aria-label="Close chapter list"
+          />
+          <div className="read-chapters-panel" role="dialog" aria-label="Chapters">
+            <div className="read-chapters-panel-head">
+              <p className="toc-drawer-label">Choose a chapter</p>
+              <button
+                type="button"
+                className="toc-sheet-close"
+                onClick={() => setTocOpen(false)}
+                aria-label="Close chapter list"
+              >
+                <IoClose />
               </button>
-            ))}
+            </div>
+            <nav className="toc-sheet-list" onClick={e => e.stopPropagation()}>
+              {chapters.map((ch, ci) => (
+                <button
+                  key={ci}
+                  type="button"
+                  className={`toc-chapter-btn${ci === activeChapterIdx ? ' is-active' : ''}`}
+                  onClick={() => scrollToPassage(ch.firstIndex)}
+                >
+                  <span className="toc-chapter-num">{ci + 1}</span>
+                  <span className="toc-chapter-name">{displayChapterName(ch.header, ci)}</span>
+                </button>
+              ))}
+            </nav>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      <div className="read-body">
-        {work && chapters.length > 0 && (
+      <div className={`read-body${work && hasChapters ? ' has-sidebar' : ''}`}>
+        <div className="read-layout">
+        {work && hasChapters && (
           <aside className="read-toc">
             <div className="toc-card">
               <p className="toc-label">Chapters</p>
-              <p className="toc-count">{chapters.length} chapter{chapters.length !== 1 ? 's' : ''} · {work.passages.length} passages</p>
-              <div className="toc-divider" />
               <nav className="toc-chapter-list">
                 {chapters.map((ch, ci) => (
                   <button
                     key={ci}
-                    className="toc-chapter-btn"
+                    className={`toc-chapter-btn${ci === activeChapterIdx ? ' is-active' : ''}`}
                     onClick={() => scrollToPassage(ch.firstIndex)}
                     title={`${ch.count} passage${ch.count !== 1 ? 's' : ''}`}
                   >
@@ -253,7 +343,8 @@ export default function ReadPage() {
                   const cls = [
                     'read-passage',
                     variant && `read-${variant}`,
-                    p.id === scrollTarget && 'read-passage--highlight',
+                    Number(p.id) === scrollHighlightId && 'read-passage--highlight',
+                    isSaved(p.id) && 'read-passage--saved',
                   ].filter(Boolean).join(' ')
 
                   return (
@@ -267,6 +358,8 @@ export default function ReadPage() {
                         id={`passage-${i + 1}`}
                         className={cls}
                         ref={el => passageRefs.current[i] = el}
+                        onDoubleClick={() => handlePassageDoubleClick(p)}
+                        title={isSaved(p.id) ? 'Double-click to unsave' : 'Double-click to save'}
                       >
                         {isCouncil && variant !== 'rubric' ? renderCouncilText(p.text) : p.text}
                       </p>
@@ -276,6 +369,7 @@ export default function ReadPage() {
               </div>
             </article>
           )}
+        </div>
         </div>
       </div>
 

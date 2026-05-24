@@ -6,8 +6,7 @@ const ThemeContext = createContext(null)
 
 function readStoredMode() {
   if (typeof window === 'undefined') return 'light'
-  const stored = localStorage.getItem(COLOR_MODE_KEY)
-  return stored === 'dark' ? 'dark' : 'light'
+  return localStorage.getItem(COLOR_MODE_KEY) === 'dark' ? 'dark' : 'light'
 }
 
 export function ThemeProvider({ children }) {
@@ -22,12 +21,8 @@ export function ThemeProvider({ children }) {
     setMode(m => (m === 'light' ? 'dark' : 'light'))
   }, [])
 
-  const setColorMode = useCallback(next => {
-    setMode(next === 'dark' ? 'dark' : 'light')
-  }, [])
-
   return (
-    <ThemeContext.Provider value={{ mode, toggle, setColorMode, isDark: mode === 'dark' }}>
+    <ThemeContext.Provider value={{ mode, toggle, isDark: mode === 'dark' }}>
       {children}
     </ThemeContext.Provider>
   )
