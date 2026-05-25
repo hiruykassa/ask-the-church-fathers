@@ -36,15 +36,15 @@ The site runs end-to-end on localhost: scrape the full pre-Chalcedon corpus, sta
 
 ### Current corpus snapshot
 
-| Metric           | Count  |
-|------------------|--------|
-| Authors loaded   | 118    |
-| Works loaded     | 389    |
-| Passages loaded  | ~71,600 |
-| Councils         | 14     |
-| Liturgies        | 3      |
-| Apocrypha        | 25     |
-| Miscellaneous    | 16     |
+| Metric           | Count   |
+|------------------|---------|
+| Authors loaded   | 123     |
+| Works loaded     | 411     |
+| Passages loaded  | ~107,400 |
+| Councils         | 15      |
+| Liturgies        | 3       |
+| Apocrypha        | 25      |
+| Miscellaneous    | 16      |
 
 The ETL scrapes all chapters of each work from New Advent — the full pre-Chalcedon corpus is loaded.
 
@@ -54,11 +54,11 @@ The ETL scrapes all chapters of each work from New Advent — the full pre-Chalc
 
 ### What works today
 
-- **Full pre-Chalcedon corpus** — 118 authors, 389 works, ~65,700 passages covering all major Fathers, councils, apocrypha, liturgies, and miscellaneous texts before 451 AD
+- **Full pre-Chalcedon corpus** — 123 authors, 411 works, ~107,400 passages covering major Fathers, councils, apocrypha, liturgies, and miscellaneous texts before 451 AD (plus the 449 Ephesus synod as *Council of Ephesus 2*)
 - **Multi-chapter scraping** — ETL walks every chapter URL for each work, not just the first page
 - **Passage section headers** — ETL captures `<h2>`–`<h6>` headings from source pages and stores them as passage headers; displayed in search results (grouped under header labels) and in the book reader (as section dividers with headers in the TOC)
 - **Full-text search (FTS5)** — SQLite FTS5 across passage text, author name, and work title; results ranked by relevance (top 100). User queries are sanitized so apostrophes and special characters do not break search.
-- **Author detection** — loads the live author list from `/api/authors`; queries like `"Augustine prayer"` auto-filter to that Father; author-only queries (e.g. `"Athanasius of Alexandria"`) show a **works list** instead of passage hits
+- **Backend query parsing** — `/api/search` uses Claude to split a query into author + keywords; author-only queries (e.g. `"Athanasius of Alexandria"`) return a **works list**; mixed queries (e.g. `"Augustine grace"`) run FTS filtered to that author
 - **Author filter chip** — click ✕ to broaden the search back to all authors
 - **Flat search results** — relevance-ordered passage cards with author, work title, section header, snippet, save button, and link to the full work
 - **Save passages** — bookmark from search results or **double-click a passage** in the reader; saved passages persist in `localStorage` and appear in the Saved tab
@@ -92,7 +92,7 @@ All content work is done:
 
 - [x] **Multi-chapter scraper.** ETL walks every chapter URL for each work.
 - [x] **Bulk-load all pre-Chalcedon Fathers.** 118 authors loaded from the New Advent index.
-- [x] **Bulk-load pre-Chalcedon councils.** 14 councils loaded (Carthage 257 through Chalcedon 451).
+- [x] **Bulk-load pre-Chalcedon councils.** 15 councils loaded (Carthage 257 through Chalcedon 451, plus Ephesus 449 as *Council of Ephesus 2* from Perry 1881).
 - [x] **Bulk-load pre-Chalcedon apocrypha and miscellaneous.** 25 apocrypha, 3 liturgies, 16 miscellaneous texts loaded.
 - [x] **Polite scraping.** `time.sleep(1)` between requests.
 - [x] **Passage section headers.** `<h2>`–`<h6>` headings scraped and stored per passage.
@@ -152,7 +152,7 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 
 **Included (all now loaded):**
 - Church Fathers whose work falls before 451 AD (~118 author entries). Examples: Justin Martyr, Irenaeus, Tertullian, Origen, Athanasius, Basil the Great, Gregory Nazianzen, Gregory of Nyssa, Augustine, Jerome, Chrysostom, Ambrose, Cyril of Jerusalem, Hippolytus, Cyprian, Clement of Alexandria, Leo the Great, Lactantius, Ephraim the Syrian, Eusebius of Caesarea, and many more.
-- Pre-Chalcedon ecumenical and local councils (14): Carthage 257, Ancyra 314, Neocaesarea 315, Nicaea I 325, Antioch 341, Gangra 343, Sardica 344, Constantinople I 381, Constantinople 382, Laodicea 363, Constantinople 394, Carthage 419, Ephesus 431, Chalcedon 451.
+- Pre-Chalcedon ecumenical and local councils (15): Carthage 257, Ancyra 314, Neocaesarea 315, Nicaea I 325, Antioch 341, Gangra 343, Sardica 344, Constantinople I 381, Constantinople 382, Laodicea 363, Constantinople 394, Carthage 419, Ephesus 431, Ephesus 449 (*Council of Ephesus 2*), Chalcedon 451.
 - Pre-Chalcedon apocryphal texts (25): Gospel of Peter, Gospel of Thomas, Gospel of Nicodemus, Acts of Paul and Thecla, Acts of Thomas, Apocalypse of Peter, Protoevangelium of James, Testaments of the Twelve Patriarchs, and others.
 - Pre-Chalcedon liturgical texts (3): Liturgy of James, Liturgy of Mark, Liturgy of the Blessed Apostles.
 - Pre-Chalcedon miscellaneous orthodox texts (16): Didache, Apostolic Constitutions, Apostolic Canons, Passion of the Scillitan Martyrs, Teaching of the Apostles, and others.
@@ -218,12 +218,13 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 ### Request Flow — Search (current)
 
 1. User types a query and presses Enter
-2. `App.jsx` calls `detectAuthor(query)` against the live list from `GET /api/authors`
-3. **Author-only query** (e.g. `"Augustine"` or `"Athanasius of Alexandria"`): `GET /api/authors/:id/works` → `AuthorWorksView` lists that Father's works; clicking a work opens `/read/:workId`
-4. **Author + topic** (e.g. `"Augustine grace"`): topic is sent to `GET /api/search?q=<topic>`; results are client-filtered to that author; an author chip appears (click ✕ to broaden)
-5. **Topic only**: `GET /api/search?q=<query>` → FTS5 `MATCH` on `passages_fts`, ranked, limit 100
-6. `SearchResults.jsx` renders a flat relevance-ordered list of passage cards (author, work, section header, snippet)
-7. Sticky compact search bar with "Library" back button; floating scroll-to-top after scrolling down
+2. `App.jsx` calls `GET /api/search?q=<query>`
+3. Flask parses the query (Claude) into `{ author, keywords }` against the cached author list
+4. **Author-only query** (e.g. `"Augustine"`): response includes `author_only: true` and `author_id` → frontend fetches works and shows `AuthorWorksView`
+5. **Author + topic** (e.g. `"Augustine grace"`): FTS runs on keywords, filtered to that author; an author chip appears (click ✕ to broaden)
+6. **Topic only**: FTS5 `MATCH` on `passages_fts`, ranked, limit 100
+7. `SearchResults.jsx` renders a flat relevance-ordered list of passage cards (author, work, section header, snippet)
+8. Sticky compact search bar with "Library" back button; floating scroll-to-top after scrolling down
 
 ### Request Flow — Search (planned)
 
@@ -278,11 +279,13 @@ The scraper:
 
 Not required to run the site — only to build or repair the database. See `tools/corpus/README.md`.
 
-- **`etl.py`** — full New Advent scrape; rebuilds FTS at the end
+- **`etl.py`** — full New Advent / CCEL scrape; rebuilds FTS at the end
 - **`repair_text.py`** — fix bad scrapes and rebuild FTS
-- **`scrape_utils.py`**, **`discover_urls.py`**, **`verify_urls.py`**, **`query.py`** — parsing and maintenance helpers
+- **`add_cyril_letters.py`** — incremental Cyril christological letters
+- **`add_ephesus_449.py`** — Council of Ephesus 2 (449) from Perry 1881 PDF ([Internet Archive](https://archive.org/details/secondsynodofeph00perruoft)); save as `tools/corpus/sources/ephesus_449_perry.pdf`, then `pip install pypdf`
+- **`scrape_utils.py`**, **`fts.py`**, **`ccel_urls.py`**, **`strip_scripture_refs.py`** — parsing, FTS rebuild, and maintenance helpers
 
-**Runtime backend** (`backend/`): `app.py`, `database.py`, `seed.py`, and a local `database.db` (gitignored, ~140 MB with full corpus).
+**Runtime backend** (`backend/`): `app.py`, `utils.py`, `database.py`, `seed.py`, and a local `database.db` (gitignored).
 
 After `tools/corpus/etl.py` or `repair_text.py` finishes, `passages_fts` is rebuilt automatically. Running `backend/database.py` creates the FTS table and populates it from any existing passages.
 
@@ -334,7 +337,7 @@ Rows are inserted from `passages` joined to `authors` and `works`. Search uses `
 `works.section` is used for the sidebar's five top-level browse buckets:
 - `Father` (331 works)
 - `Liturgy` (3 works)
-- `Council` (14 works)
+- `Council` (15 works)
 - `Apocrypha` (25 works)
 - `Miscellaneous` (16 works)
 
@@ -395,8 +398,9 @@ ask-the-church-fathers/
 ├── backend/                # Runtime API (all you need to run the site)
 │   ├── .env                # NOT committed — ANTHROPIC_API_KEY
 │   ├── app.py              # Flask API
+│   ├── utils.py            # Text cleaning for API responses
 │   ├── database.py         # Creates schema + FTS index
-│   ├── database.db         # Local corpus (gitignored; ~140 MB full load)
+│   ├── database.db         # Local corpus (gitignored)
 │   ├── requirements.txt
 │   └── seed.py             # Tiny dev dataset (optional)
 │
@@ -405,7 +409,11 @@ ask-the-church-fathers/
 │   ├── etl.py
 │   ├── scrape_utils.py
 │   ├── repair_text.py
-│   └── …
+│   ├── fts.py
+│   ├── add_cyril_letters.py
+│   ├── add_ephesus_449.py
+│   ├── ephesus_449_perry.py
+│   └── sources/            # Local PDFs (gitignored)
 │
 ├── public/
 │   ├── cross-mark.png      # Hero cross (Ethiopian Orthodox mark)
@@ -431,7 +439,10 @@ ask-the-church-fathers/
 │   │   │   ├── SiteFooter.jsx
 │   │   │   └── SiteHeader.jsx   # About / Contact pages
 │   │   ├── ui/
-│   │   │   └── ThemeToggle.jsx
+│   │   │   ├── ThemeToggle.jsx
+│   │   │   ├── FormattedPassage.jsx
+│   │   │   ├── EmptyState.jsx
+│   │   │   └── LoadingBlock.jsx
 │   │   ├── AccordionSection.jsx
 │   │   ├── AuthorCard.jsx
 │   │   ├── AuthorWorksView.jsx
@@ -447,6 +458,9 @@ ask-the-church-fathers/
 │   ├── hooks/
 │   │   ├── useSavedPassages.js  # localStorage bookmarks
 │   │   └── useScrollReveal.js
+│   │
+│   ├── utils/
+│   │   └── passageText.js
 │   │
 │   ├── theme/
 │   │   ├── ThemeProvider.jsx
@@ -565,15 +579,17 @@ The system prompt instructs Claude to:
 
 ## Author Detection
 
-`detectAuthor(query)` in `App.jsx` uses the live author list from `GET /api/authors` (cached in a ref on mount):
+Search queries are parsed on the **backend** (`parse_user_query` in `app.py`):
 
-1. Exact or substring match on full author name
-2. Otherwise, any name word longer than 3 characters found in the query
-3. `isAuthorOnlyQuery()` treats geographic/honorific qualifiers (`of Alexandria`, `the Great`, etc.) as part of the name, not a separate topic
+1. Claude splits the user's query into `{ author, keywords }` using the cached author list loaded at startup
+2. Author name is resolved with fuzzy matching against `AUTHOR_NAMES`
+3. **Author-only** (keywords empty): response sets `author_only: true` with `author_id` — frontend loads works via `GET /api/authors/:id/works`
+4. **Author + topic**: FTS runs on keywords, SQL-filtered to that author
+5. **Topic only**: plain FTS across all authors
 
 Examples:
-- `"Augustine"` → author-only → works list via `GET /api/authors/:id/works`
-- `"Augustine grace"` → FTS search for `grace`, filtered to Augustine; author chip shown
+- `"Augustine"` → author-only → works list
+- `"Augustine grace"` → FTS for `grace`, filtered to Augustine; author chip shown
 - `"Athanasius of Alexandria"` → author-only even if DB stores `"Athanasius"`
 
 ---
@@ -584,7 +600,7 @@ Examples:
 |--------|---------------------|-------------|
 | GET    | `/api/health`       | Returns `{ "status": "ok" }` |
 | GET    | `/api/hello?name=`  | Greeting test endpoint (debugging only) |
-| GET    | `/api/search?q=`           | FTS5 search (ranked, max 100). Returns `{ query, results: [{id, passage, author, work, work_id, header}] }`. Empty or invalid queries return `[]`. |
+| GET    | `/api/search?q=`           | FTS5 search (ranked, max 100). Returns `{ query, keywords, author, author_id, author_only, results: [{id, passage, author, work, work_id, header}] }`. |
 | GET    | `/api/authors`             | All authors: `{ results: [{id, name, tradition}] }`. |
 | GET    | `/api/authors/:id/works`   | Works for one author: `{ name, works: [{id, title}] }`. 404 if author has no works. |
 | GET    | `/api/library`             | Catalog grouped by section: `{ sections: { Father: [...], Council: [...], ... } }`. |
@@ -635,9 +651,10 @@ ANTHROPIC_API_KEY=sk-ant-...
 python seed.py
 ```
 
-**Option B — scrape the full corpus from New Advent (~71,600 passages; run from project root):**
+**Option B — scrape the full corpus from New Advent (~107k passages; run from project root):**
 ```bash
 python tools/corpus/etl.py
+python tools/corpus/add_ephesus_449.py   # after downloading Perry PDF (see tools/corpus/README.md)
 ```
 
 Verify what landed in the DB:

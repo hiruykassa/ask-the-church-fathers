@@ -1,16 +1,21 @@
-# Corpus tools (not required to run the site)
+# Corpus tools
 
-Scripts for scraping, repairing, and inspecting `backend/database.db`.
-Run from the **project root**.
+Scripts for building and maintaining `backend/database.db`. Run from the **project root**.
 
 | Script | Purpose |
 |--------|---------|
-| `etl.py` | Full New Advent scrape (~71k passages). Rebuilds FTS at the end. |
-| `repair_text.py` | Fix bad headers/footers and rebuild FTS |
+| `etl.py` | Full corpus scrape from New Advent / CCEL (~106k passages) |
+| `repair_text.py` | Fix bad scrapes, complete multi-chapter works, rebuild FTS |
+| `add_cyril_letters.py` | Add or refresh Cyril christological letters |
+| `add_ephesus_449.py` | Add Council of Ephesus 2 (449) from Perry 1881 PDF |
+| `ephesus_449_perry.py` | PDF parser for the 449 synod acts |
+| `strip_scripture_refs.py` | Strip inline scripture citations from all passages |
 | `scrape_utils.py` | Shared HTML parser (imported by other scripts) |
-| `discover_urls.py` | Find chapter URLs on New Advent |
-| `verify_urls.py` | Check URLs are reachable |
-| `query.py` | Print passages to the terminal (debug) |
+| `ccel_urls.py` | URL lists for multi-chapter CCEL works |
+| `cyril_letters_config.py` | Cyril letter sources and scrape rules |
+| `fts.py` | Rebuild the passages full-text search index |
+| `db_path.py` | Resolves path to `backend/database.db` |
 
-**To run the website** you only need `backend/app.py` and a populated `backend/database.db`
-(use `backend/seed.py` for a tiny dev dataset, or run `etl.py` once for the full corpus).
+**Ephesus 449 PDF:** download [Perry (1881)](https://archive.org/details/secondsynodofeph00perruoft) and save as `tools/corpus/sources/ephesus_449_perry.pdf` (gitignored). Requires `pip install pypdf`.
+
+**To run the site:** `backend/app.py` + a populated `backend/database.db` (or `backend/seed.py` for a tiny dev dataset).

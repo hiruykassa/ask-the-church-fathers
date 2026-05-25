@@ -20,7 +20,7 @@ export default function AboutPage() {
           <section className="about-section">
             <h2 className="about-heading">Who Built This</h2>
             <p className="about-text">
-              I am Hiruy Kassa, an Ethiopian Orthodox layman and a computer
+              I am Hiruy Kassa, an Oriental Orthodox computer
               science student. I built this site because I wanted the Church
               Fathers to be easy to find and read, especially for people who
               are trying to learn what early Christians actually taught.

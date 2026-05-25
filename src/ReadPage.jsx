@@ -3,21 +3,27 @@ import { createPortal } from 'react-dom'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { IoClose, IoChevronBack, IoArrowUp, IoChevronDown } from 'react-icons/io5'
 import ThemeToggle from './components/ui/ThemeToggle'
+import FormattedPassage from './components/ui/FormattedPassage'
 import useSavedPassages from './hooks/useSavedPassages'
+import { stripHtml, hasPassageHtml } from './utils/passageText'
 import './App.css'
 import './ReadPage.css'
 
-const API = 'http://localhost:5001'
+const API = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:5001'
 
 const LITURGY_ROLES = /\b(priest|deacon|people|bishop|reader|choir|singer|catechumen)\b/i
 const RUBRIC_STARTS = /^(prayer of|then the|after the|before the|\(aloud)/i
-const SPEAKER_RE    = /^(.{5,120}?\bsaid[,:]\s*)/
+const SPEAKER_RE    = /^(.{5,120}?\bsaid\s*[:\-,—–]+\s*)/
 const BOOK_HEADER_RE = /^The .+ \(Book [IVXLC\d]+\)$/i
+const SERMON_HEADER_RE = /^SERMON\s+([IVXLC\d]+)/i
 
 function displayChapterName(header, index) {
   if (!header) return index === 0 ? 'Introduction' : `Section ${index + 1}`
   if (header === 'Contents.' || header === 'Contents') return 'Table of Contents'
+  const sermon = header.match(SERMON_HEADER_RE)
+  if (sermon) return `Sermon ${sermon[1]}`
   if (BOOK_HEADER_RE.test(header)) return header.replace(/^The\s+/i, '')
+  if (header.length > 72) return header.slice(0, 69).replace(/\s+\S*$/, '') + '…'
   return header
 }
 
@@ -182,7 +188,7 @@ export default function ReadPage() {
   const isCouncil = /^council\b/i.test(work?.title || '')
 
   function classifyPassage(text) {
-    const t = text.trim()
+    const t = stripHtml(text).trim()
     const len = t.length
 
     if (isLiturgy && len <= 200) {
@@ -199,16 +205,18 @@ export default function ReadPage() {
   }
 
   function renderCouncilText(text) {
-    const match = text.match(SPEAKER_RE)
+    const plain = stripHtml(text)
+    const match = plain.match(SPEAKER_RE)
     if (match) {
+      const rest = plain.slice(match[1].length)
       return (
         <>
           <span className="read-speaker">{match[1]}</span>
-          {text.slice(match[1].length)}
+          {hasPassageHtml(text) ? rest : text.slice(match[1].length)}
         </>
       )
     }
-    return text
+    return <FormattedPassage text={text} />
   }
 
   function passageSavePayload(p) {
@@ -361,7 +369,9 @@ export default function ReadPage() {
                         onDoubleClick={() => handlePassageDoubleClick(p)}
                         title={isSaved(p.id) ? 'Double-click to unsave' : 'Double-click to save'}
                       >
-                        {isCouncil && variant !== 'rubric' ? renderCouncilText(p.text) : p.text}
+                        {isCouncil && variant !== 'rubric'
+                          ? renderCouncilText(p.text)
+                          : <FormattedPassage text={p.text} />}
                       </p>
                     </div>
                   )

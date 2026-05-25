@@ -23,12 +23,15 @@ export default function SavedView({ saved, onToggleSave, isSaved, navigate, quer
       {Object.entries(byAuthor).map(([author, passages]) => (
         <AuthorCard
           key={author}
-          author={author}
-          passages={passages}
+          group={{ author, passages }}
           onToggleSave={onToggleSave}
           isSaved={isSaved}
-          navigate={navigate}
-          query={query}
+          onNavigate={(workId, passageId) =>
+            navigate(`/read/${workId}`, {
+              state: { restoreQuery: query, scrollToPassage: passageId },
+            })
+          }
+          defaultOpen
         />
       ))}
     </div>

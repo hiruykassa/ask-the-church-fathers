@@ -10,6 +10,8 @@ backend/.env
 
 # SQLite databases
 *.db
+*.db-shm
+*.db-wal
 
 # OS junk
 .DS_Store
@@ -20,6 +22,7 @@ __pycache__/
 
 # Corpus tool artifacts
 tools/corpus/audit*
+tools/corpus/sources/*.pdf
 *.log
 backend/audit*
 

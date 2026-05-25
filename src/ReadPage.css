@@ -435,7 +435,18 @@ html[data-theme='dark'] .read-error { color: #e87060; }
   padding-right: 16px;
   border-left: none;
 }
-.read-passage:last-child { margin-bottom: 0; }
+.read-passage em,
+.read-passage i {
+  font-style: italic;
+}
+.read-passage span.pg {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.72em;
+  color: var(--text-faint);
+  margin: 0 0.35em;
+  white-space: nowrap;
+}
+
 
 .read-passage--saved {
   cursor: pointer;

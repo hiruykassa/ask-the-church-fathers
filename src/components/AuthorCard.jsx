@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { IoChevronDown, IoChevronUp, IoHeart, IoHeartOutline } from 'react-icons/io5'
+import { stripHtml } from '../utils/passageText'
 
 /**
  * Displays a single author's search results as a collapsible card.
@@ -63,9 +64,10 @@ export default function AuthorCard({ group, isSaved, onToggleSave, onNavigate, d
                   <p className="passage-header-label">{sec.header}</p>
                 )}
                 {sec.passages.map(p => {
-                  const snippet = p.passage.length > 320
-                    ? p.passage.slice(0, 320).replace(/\s\S*$/, '') + '…'
-                    : p.passage
+                  const plain = stripHtml(p.passage || '')
+                  const snippet = plain.length > 320
+                    ? plain.slice(0, 320).replace(/\s\S*$/, '') + '…'
+                    : plain
 
                   return (
                     <div key={p.id} className="passage-row">

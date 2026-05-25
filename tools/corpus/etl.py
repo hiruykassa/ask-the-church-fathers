@@ -3,6 +3,15 @@ import time
 
 from db_path import DB
 from scrape_utils import fetch_and_parse
+from ccel_urls import (
+    CYRIL_AGAINST_NESTORIUS,
+    CYRIL_ON_JOHN,
+    CYRIL_ON_LUKE,
+    NESTORIUS_BAZAAR,
+    PALLADIUS_DIALOGUS,
+    PALLADIUS_LAUSIAC,
+    THEODORE_ACTS_PROLOGUE,
+)
 
 conn = sqlite3.connect(DB)
 cursor = conn.cursor()
@@ -2626,6 +2635,9 @@ scrape_work(
     ]
 )
 
+# Council of Ephesus (449): Perry 1881 English (local PDF). Run add_ephesus_449.py after full ETL.
+# scrape_work(...) omitted — see tools/corpus/add_ephesus_449.py
+
 scrape_work(
     author_name = "Council of Chalcedon (451)",
     birth_yr = 451,
@@ -3279,10 +3291,49 @@ scrape_work(
         {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_diodore_01_text.htm"], "title": "Against Diodore of Tarsus (Fragments)", "section": "Father"},
         {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_theodore_01_text.htm"], "title": "Against Theodore of Mopsuestia (Fragments)", "section": "Father"},
         {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_synousiasts_01_text.htm"], "title": "Against the Synousiasts (Fragments)", "section": "Father"},
-        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_on_john_01_book1.htm"], "title": "Commentary on John", "section": "Father"},
-        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_nestorius_01_book1.htm"], "title": "Five Tomes Against Nestorius", "section": "Father"},
+        {"urls": CYRIL_ON_JOHN, "title": "Commentary on John", "section": "Father"},
+        {"urls": CYRIL_AGAINST_NESTORIUS, "title": "Five Tomes Against Nestorius", "section": "Father"},
         {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_against_julian_00_address.htm"], "title": "Against Julian", "section": "Father"},
-        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/cyril_on_luke_01_sermons_01_11.htm"], "title": "Commentary on Luke", "section": "Father"},
+        {"urls": CYRIL_ON_LUKE, "title": "Commentary on Luke", "section": "Father"},
+    ],
+    skip_hr_break=True,
+)
+
+scrape_work(
+    author_name="Nestorius",
+    birth_yr=386,
+    death_yr=450,
+    rite="Antiochene",
+    bio="Patriarch of Constantinople whose Christology was condemned at Ephesus; his Bazaar of Heracleides is his chief surviving work.",
+    work_dic=[
+        {"urls": NESTORIUS_BAZAAR, "title": "The Bazaar of Heracleides", "section": "Father"},
+    ],
+    skip_hr_break=True,
+)
+
+scrape_work(
+    author_name="Palladius",
+    birth_yr=363,
+    death_yr=431,
+    rite="Greek",
+    bio="Bishop and ascetic writer whose Lausiac History records the lives of desert monks.",
+    work_dic=[
+        {"urls": PALLADIUS_LAUSIAC, "title": "The Lausiac History", "section": "Father"},
+        {"urls": PALLADIUS_DIALOGUS, "title": "Dialogue on the Life of St. John Chrysostom", "section": "Father"},
+    ],
+    skip_hr_break=True,
+)
+
+scrape_work(
+    author_name="Theodore of Mopsuestia",
+    birth_yr=350,
+    death_yr=428,
+    rite="Antiochene",
+    bio="Bishop of Mopsuestia and leading Antiochene exegete, condemned posthumously at Constantinople II.",
+    work_dic=[
+        {"urls": THEODORE_ACTS_PROLOGUE, "title": "Prologue to Commentary on Acts", "section": "Father"},
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/theodore_of_mopsuestia_nicene_02_text.htm"], "title": "Commentary on the Nicene Creed", "section": "Father"},
+        {"urls": ["https://www.ccel.org/ccel/pearse/morefathers/files/theodore_of_mopsuestia_lordsprayer_02_text.htm"], "title": "Commentary on the Lord's Prayer, Baptism and the Eucharist", "section": "Father"},
     ],
     skip_hr_break=True,
 )
@@ -3293,28 +3344,15 @@ _cursor.execute("SELECT id FROM authors WHERE name = ?", ("Cyril of Alexandria",
 _cyril_row = _cursor.fetchone()
 if _cyril_row:
     from add_cyril_letters import insert_cyril_letters
-    insert_cyril_letters(_cursor, _cyril_row[0])
+    insert_cyril_letters(_conn, _cursor, _cyril_row[0])
     _conn.commit()
 _conn.close()
 
+from fts import rebuild_fts
+
 conn = sqlite3.connect(DB)
 cursor = conn.cursor()
-
-cursor.execute("DROP TABLE IF EXISTS passages_fts")
-cursor.execute("""
-    CREATE VIRTUAL TABLE passages_fts USING fts5(
-        text, author_name, work_title,
-        content='', content_rowid=id
-    )
-""")
-cursor.execute("""
-    INSERT INTO passages_fts(rowid, text, author_name, work_title)
-    SELECT p.id, p.text, a.name, w.title
-    FROM passages p
-    JOIN works w ON p.work_id = w.id
-    JOIN authors a ON w.author_id = a.id
-""")
-
+rebuild_fts(cursor)
 conn.commit()
 conn.close()
 

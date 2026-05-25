@@ -87,6 +87,7 @@ export const RIGHT_SECTIONS = [
       { title: 'Council of Nicaea (325)',          query: 'Nicaea Trinity homoousios' },
       { title: 'Council of Constantinople (381)',  query: 'Constantinople Holy Spirit creed' },
       { title: 'Council of Ephesus (431)',         query: 'Ephesus Theotokos Mary' },
+      { title: 'Council of Ephesus 2',             query: 'Ephesus Eutyches Flavian Dioscorus' },
       { title: 'Council of Chalcedon (451)',       query: 'Chalcedon two natures Christ' },
     ],
   },

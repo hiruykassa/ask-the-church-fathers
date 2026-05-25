@@ -13,32 +13,15 @@ import time
 
 from cyril_letters_config import CYRIL_LETTERS
 from db_path import DB
+from scrape_utils import split_long_passages
 
 AUTHOR = "Cyril of Alexandria"
 
 
-def rebuild_fts(cursor):
-    cursor.execute("DROP TABLE IF EXISTS passages_fts")
-    cursor.execute(
-        """
-        CREATE VIRTUAL TABLE passages_fts USING fts5(
-            text, author_name, work_title,
-            content='', content_rowid=id
-        )
-        """
-    )
-    cursor.execute(
-        """
-        INSERT INTO passages_fts(rowid, text, author_name, work_title)
-        SELECT p.id, p.text, a.name, w.title
-        FROM passages p
-        JOIN works w ON p.work_id = w.id
-        JOIN authors a ON w.author_id = a.id
-        """
-    )
+from fts import rebuild_fts
 
 
-def insert_cyril_letters(cursor, author_id, replace=False):
+def insert_cyril_letters(conn, cursor, author_id, replace=False):
     """Insert configured letters if not already present."""
     for work_def in CYRIL_LETTERS:
         title = work_def["title"]
@@ -56,7 +39,7 @@ def insert_cyril_letters(cursor, author_id, replace=False):
             cursor.execute("DELETE FROM works WHERE id = ?", (work_id,))
             print(f"  Replace: {title}")
 
-        chunks = work_def["scrape"]()
+        chunks = split_long_passages(work_def["scrape"]())
         if not chunks:
             print(f"  No content scraped: {title}")
             continue
@@ -71,6 +54,7 @@ def insert_cyril_letters(cursor, author_id, replace=False):
                 "INSERT INTO passages (work_id, header, text) VALUES (?, ?, ?)",
                 (work_id, chunk["header"], chunk["text"]),
             )
+        conn.commit()
         print(f"  Added {title}: {len(chunks)} passages")
         time.sleep(1)
 
@@ -84,7 +68,9 @@ def main():
     )
     args = parser.parse_args()
 
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(DB, timeout=60)
+    conn.execute("PRAGMA busy_timeout = 60000")
+    conn.execute("PRAGMA journal_mode = WAL")
     cursor = conn.cursor()
 
     cursor.execute("SELECT id FROM authors WHERE name = ?", (AUTHOR,))
@@ -95,9 +81,8 @@ def main():
         return
 
     print(f"Adding letters for {AUTHOR}...")
-    insert_cyril_letters(cursor, row[0], replace=args.replace)
+    insert_cyril_letters(conn, cursor, row[0], replace=args.replace)
 
-    conn.commit()
     print("Rebuilding FTS index...")
     rebuild_fts(cursor)
     conn.commit()

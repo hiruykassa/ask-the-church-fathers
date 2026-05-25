@@ -10,6 +10,15 @@ import time
 
 from db_path import DB
 from scrape_utils import fetch_and_parse
+from ccel_urls import (
+    CYRIL_AGAINST_NESTORIUS,
+    CYRIL_ON_JOHN,
+    CYRIL_ON_LUKE,
+    NESTORIUS_BAZAAR,
+    PALLADIUS_DIALOGUS,
+    PALLADIUS_LAUSIAC,
+    THEODORE_ACTS_PROLOGUE,
+)
 
 # Works that pointed at index pages instead of leaf chapters (author, title, urls, skip_hr)
 JUSTIN_DIALOGUE_URLS = [f"https://www.newadvent.org/fathers/0128{n}.htm" for n in range(1, 10)]
@@ -50,6 +59,17 @@ RESCRAPE_TARGETS = [
     ),
 ]
 
+# Multi-chapter CCEL works that were previously scraped from a single index URL
+COMPLETE_WORKS = [
+    ("Cyril of Alexandria", "Commentary on John", CYRIL_ON_JOHN, True),
+    ("Cyril of Alexandria", "Five Tomes Against Nestorius", CYRIL_AGAINST_NESTORIUS, True),
+    ("Cyril of Alexandria", "Commentary on Luke", CYRIL_ON_LUKE, True),
+    ("Nestorius", "The Bazaar of Heracleides", NESTORIUS_BAZAAR, True),
+    ("Palladius", "The Lausiac History", PALLADIUS_LAUSIAC, True),
+    ("Palladius", "Dialogue on the Life of St. John Chrysostom", PALLADIUS_DIALOGUS, True),
+    ("Theodore of Mopsuestia", "Prologue to Commentary on Acts", THEODORE_ACTS_PROLOGUE, True),
+]
+
 BOOK_HEADER_RE = re.compile(r"^The .+ \(Book [IVXLC\d]+\)$", re.I)
 
 
@@ -78,26 +98,7 @@ def normalize_headers(cursor):
     print(f"Removed footer fragments: {cursor.rowcount}")
 
 
-def rebuild_fts(cursor):
-    cursor.execute("DROP TABLE IF EXISTS passages_fts")
-    cursor.execute(
-        """
-        CREATE VIRTUAL TABLE passages_fts USING fts5(
-            text, author_name, work_title,
-            content='', content_rowid=id
-        )
-        """
-    )
-    cursor.execute(
-        """
-        INSERT INTO passages_fts(rowid, text, author_name, work_title)
-        SELECT p.id, p.text, a.name, w.title
-        FROM passages p
-        JOIN works w ON p.work_id = w.id
-        JOIN authors a ON w.author_id = a.id
-        """
-    )
-    print("Rebuilt passages_fts index")
+from fts import rebuild_fts
 
 
 def rescrape_work(cursor, author_name, work_title, urls, skip_hr_break=False):
@@ -142,7 +143,9 @@ def rescrape_work(cursor, author_name, work_title, urls, skip_hr_break=False):
 
 
 def main():
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(DB, timeout=60)
+    conn.execute("PRAGMA busy_timeout = 60000")
+    conn.execute("PRAGMA journal_mode = WAL")
     cursor = conn.cursor()
 
     print("Normalizing headers...")
@@ -150,6 +153,10 @@ def main():
 
     print("\nRe-scraping index-only works...")
     for author, title, urls, skip_hr in RESCRAPE_TARGETS:
+        rescrape_work(cursor, author, title, urls, skip_hr)
+
+    print("\nCompleting multi-chapter CCEL works...")
+    for author, title, urls, skip_hr in COMPLETE_WORKS:
         rescrape_work(cursor, author, title, urls, skip_hr)
 
     print("\nRebuilding search index...")

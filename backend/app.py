@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 import os
 import re
 
+from utils import strip_html, remove_scripture_refs
+
 
 def prepare_fts_query(q):
     """Turn user input into a safe FTS5 MATCH expression (one quoted token per word)."""
@@ -17,21 +19,29 @@ def prepare_fts_query(q):
         return None
     return " ".join('"' + t.replace('"', '""') + '"' for t in tokens)
 
+
 # Load environment variables from .env (e.g. ANTHROPIC_API_KEY)
 load_dotenv()
 
 
 def get_db_connection():
-    return sqlite3.connect("database.db")
+    conn = sqlite3.connect("database.db", timeout=60)
+    conn.execute("PRAGMA busy_timeout = 60000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    return conn
 
 
-def get_author_names():
+# Cache author names at startup so we don't hit the DB on every search
+def _load_author_names():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM authors ORDER BY name")
     names = [row[0] for row in cursor.fetchall()]
     conn.close()
     return names
+
+
+AUTHOR_NAMES = _load_author_names()
 
 
 def get_author_id_by_name(name):
@@ -98,25 +108,16 @@ def parse_user_query(raw_query, author_names):
             seen["keywords"] = line.split(":", 1)[1].strip()
     return seen
 
+
 app = Flask(__name__)
-# Allow cross-origin requests so the React frontend (localhost:5173) can call this API
 CORS(app)
 
 
-# Simple health check — used to confirm the server is running
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok"})
 
-# Test endpoint — returns a greeting. Useful for verifying the server responds to query params
-@app.route("/api/hello")
-def hello():
-    name = request.args.get("name", "World")
-    return jsonify({"message": f"Hello, {name}!"})
 
-# Full-text search across all passages in the database.
-# Accepts ?q=<query> and returns all passages whose text contains the query string.
-# Joins passages → works → authors so each result includes the author name and work title.
 @app.route("/api/search")
 def search():
     q = request.args.get("q", "").strip()
@@ -130,9 +131,8 @@ def search():
             "results": [],
         })
 
-    author_names = get_author_names()
-    parsed = parse_user_query(q, author_names)
-    author = resolve_author_name(parsed.get("author", "none"), author_names)
+    parsed = parse_user_query(q, AUTHOR_NAMES)
+    author = resolve_author_name(parsed.get("author", "none"), AUTHOR_NAMES)
 
     keywords_raw = (parsed.get("keywords") or "").strip()
     if keywords_raw.lower() in ("none", "n/a"):
@@ -193,7 +193,7 @@ def search():
 
     passages = [{
         "id": row[0],
-        "passage": row[1],
+        "passage": strip_html(row[1]),
         "author": row[2],
         "work": row[3],
         "work_id": row[4],
@@ -209,43 +209,37 @@ def search():
         "results": passages,
     })
 
-# Returns all Church Fathers stored in the authors table.
-# Used by the frontend to populate the sidebar author list.
+
 @app.route("/api/authors")
 def authors():
-    conn = sqlite3.connect("database.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT id, name, tradition FROM authors"
-    )
+    cursor.execute("SELECT id, name, tradition FROM authors")
     rows = cursor.fetchall()
-    authors = []
-    for row in rows:
-        authors.append({
-            "id": row[0],
-            "name": row[1],
-            "tradition": row[2]
-        })
-
     conn.close()
 
-    return jsonify({"results": authors})
+    authors_list = [{
+        "id": row[0],
+        "name": row[1],
+        "tradition": row[2],
+    } for row in rows]
 
-# Returns a single passage by its ID, including the author name and work title.
-# Returns 404 if no passage with that ID exists.
+    return jsonify({"results": authors_list})
+
+
 @app.route("/api/passages/<int:id>")
 def get_passage(id):
-    conn = sqlite3.connect("database.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
         SELECT passages.id, passages.text, authors.name, works.title, passages.header
-        FROM passages 
+        FROM passages
         JOIN works ON passages.work_id = works.id
         JOIN authors ON works.author_id = authors.id
-        WHERE passages.id = ? 
-                   """, (id,))
+        WHERE passages.id = ?
+    """, (id,))
 
     row = cursor.fetchone()
     conn.close()
@@ -261,11 +255,10 @@ def get_passage(id):
         "header": row[4],
     })
 
-# Returns all passages for a specific work by its ID, used by the /read/:workId page.
-# Returns the work title, author name, and all matching passages in order.
+
 @app.route("/api/works/<int:work_id>")
 def get_work(work_id):
-    conn = sqlite3.connect("database.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -292,15 +285,13 @@ def get_work(work_id):
         "work_id": work_id,
         "title": work_row[0],
         "author": work_row[1],
-        "passages": [{"id": r[0], "text": r[1], "header": r[2]} for r in passage_rows],
+        "passages": [{"id": r[0], "text": remove_scripture_refs(r[1]), "header": r[2]} for r in passage_rows],
     })
 
 
-# Returns all authors grouped by the section of their works.
-# Used by the frontend Full Library catalog to render live data from the database.
 @app.route("/api/library")
 def library():
-    conn = sqlite3.connect("database.db")
+    conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -347,10 +338,6 @@ def library():
     return jsonify({"sections": sections})
 
 
-# AI synthesis endpoint — takes a topic query and a list of passages, sends them to
-# Claude, and streams the response back as plain text chunks.
-# Streaming means the frontend can display words as they arrive rather than waiting
-# for the full response before showing anything.
 @app.route("/api/synthesize", methods=["POST"])
 def synthesize():
     data = request.get_json(silent=True) or {}
@@ -359,11 +346,11 @@ def synthesize():
     if not passages:
         return jsonify({"error": "No passages provided"}), 400
 
-    # Format each passage as "Author, Work: passage text" for the prompt
-    passages_text = ""
+    # Format each passage clearly separated so Claude can distinguish them
+    passage_blocks = []
     for p in passages:
-        text = f"{p['author']}, {p['work']}: {p['passage']}"
-        passages_text = passages_text + text
+        passage_blocks.append(f"{p['author']}, {p['work']}: {strip_html(p.get('passage') or '')}")
+    passages_text = "\n\n".join(passage_blocks)
 
     prompt = f"""You are a patristic historian. Your sole task is to report what the Church Fathers said in the passages below. You are not interpreting, not theologizing, not balancing perspectives, and not arranging material for palatability.
 
@@ -377,22 +364,19 @@ Passages from the Church Fathers:
 Rules:
 1. Use ONLY the passages above. Do not introduce any claim, figure, council, or position from outside these passages.
 2. Present each Father's position as that Father himself would have stated it, in its strongest form. If a Father's central argument was controversial, lead with the controversial claim. Do not bury it in qualifications or arrange the material to make it acceptable to any modern audience.
-3. Let the Fathers speak. Favor their own words and phrases from the passages over paraphrase. When a passage contains a direct formulation — a definition, a condemnation, an analogy — use it.
+3. Let the Fathers speak. Favor their own words and phrases from the passages over paraphrase. When a passage contains a direct formulation, a definition, a condemnation, an analogy, use it.
 4. If a Father has a defining formula or technical phrase that is central to his position, state it explicitly and prominently. Do not paraphrase around it.
 5. If only one Father appears in the results, report that Father's position directly. Do not frame it as one side of a debate. Do not introduce opposing views from outside the passages.
 6. If multiple Fathers appear, present each one individually. Do not group them into camps or frame one as the opposition to another.
 7. If a council is mentioned in the passages, report what it defined in its own language. Do not interpret it through any later tradition.
 8. Report condemnations as historical fact without calling any position orthodox, heretical, correct, or wrong.
 9. Stay entirely within the historical period. Do not mention any tradition, denomination, or development after 500 AD.
-10. Use the terminology the Fathers themselves used (physis, ousia, prosōpon, hypostasis). Do not define or simplify these terms.
+10. Use the terminology the Fathers themselves used (physis, ousia, prosopon, hypostasis). Do not define or simplify these terms.
 11. Maximum 3 short paragraphs. Each paragraph should be no more than 5 sentences. Third person. No disclaimers. No meta-commentary.
 12. Do not use em dashes. Use commas, periods, or semicolons instead."""
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-    # Generator function that yields text chunks from the Claude streaming API.
-    # Using a generator with Flask's Response lets us push each token to the
-    # client as it arrives instead of buffering the entire response.
     def generate():
         with client.messages.stream(
             model="claude-sonnet-4-6",
@@ -404,10 +388,10 @@ Rules:
 
     return Response(generate(), mimetype="text/plain")
 
-#search by author
+
 @app.route("/api/authors/<int:author_id>/works")
 def get_author_works(author_id):
-    conn = sqlite3.connect("database.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -416,27 +400,20 @@ def get_author_works(author_id):
         JOIN authors ON works.author_id = authors.id
         WHERE works.author_id = ?
         ORDER BY works.title
-                """, (author_id,))
-        
+    """, (author_id,))
 
     rows = cursor.fetchall()
     if not rows:
+        conn.close()
         return jsonify({"error": "Author not found"}), 404
 
-    works_list = []
     author_name = rows[0][0]
-    for row in rows:
-        works_list.append({
-            "title": row[1],
-            "id": row[2],
-        })
+    works_list = [{"title": row[1], "id": row[2]} for row in rows]
 
     conn.close()
-    
+
     return jsonify({"name": author_name, "works": works_list})
 
 
 if __name__ == "__main__":
     app.run(debug=True, port=5001)
-
-
