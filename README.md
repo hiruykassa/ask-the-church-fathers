@@ -17,6 +17,7 @@ Type a topic, keyword, or a Father's name — get matching passages, then ask an
 - [Data Source & ETL](#data-source--etl)
 - [Database Schema](#database-schema)
 - [Search Behavior](#search-behavior)
+- [Search Strategy (in progress)](#search-strategy-in-progress)
 - [Project Structure](#project-structure)
 - [Frontend Deep Dive](#frontend-deep-dive)
 - [Backend Deep Dive](#backend-deep-dive)
@@ -32,7 +33,7 @@ Type a topic, keyword, or a Father's name — get matching passages, then ask an
 
 The site runs end-to-end on localhost: scrape the full pre-Chalcedon corpus, start the Flask backend, start the React frontend, type a query, get matching passages, click "Ask the Fathers" and stream a Claude synthesis. The whole pipeline works.
 
-**It is NOT yet production-ready.** Search quality, hardening, and deployment work is still needed before this is a site real users can rely on. See [Roadmap](#roadmap--whats-left).
+**It is NOT yet production-ready.** Search quality is actively evolving: production search today is **FTS5 + Claude Haiku** for query parsing, while **vector embeddings (Voyage AI)** are being built and evaluated. Hardening and deployment work is still needed before this is a site real users can rely on. See [Roadmap](#roadmap--whats-left) and [Search Strategy](#search-strategy-in-progress).
 
 ### Current corpus snapshot
 
@@ -57,8 +58,9 @@ The ETL scrapes all chapters of each work from New Advent — the full pre-Chalc
 - **Full pre-Chalcedon corpus** — 123 authors, 411 works, ~107,400 passages covering major Fathers, councils, apocrypha, liturgies, and miscellaneous texts before 451 AD (plus the 449 Ephesus synod as *Council of Ephesus 2*)
 - **Multi-chapter scraping** — ETL walks every chapter URL for each work, not just the first page
 - **Passage section headers** — ETL captures `<h2>`–`<h6>` headings from source pages and stores them as passage headers; displayed in search results (grouped under header labels) and in the book reader (as section dividers with headers in the TOC)
-- **Full-text search (FTS5)** — SQLite FTS5 across passage text, author name, and work title; results ranked by relevance (top 100). User queries are sanitized so apostrophes and special characters do not break search.
-- **Backend query parsing** — `/api/search` uses Claude to split a query into author + keywords; author-only queries (e.g. `"Athanasius of Alexandria"`) return a **works list**; mixed queries (e.g. `"Augustine grace"`) run FTS filtered to that author
+- **Full-text search (FTS5)** — SQLite FTS5 across passage text, author name, and work title; results ranked by relevance (top 100). User queries are sanitized so apostrophes and special characters do not break search. This is what `/api/search` uses **today** for passage retrieval after keywords are extracted.
+- **Backend query parsing (Claude Haiku)** — `/api/search` uses `claude-haiku-4-5` to split a query into author + keywords against a cached author list; author-only queries (e.g. `"Athanasius of Alexandria"`) return a **works list**; mixed queries (e.g. `"Augustine grace"`) run FTS on keywords, filtered to that author when resolved
+- **Embeddings pipeline (WIP, not wired to search yet)** — `backend/embed_passages.py` batch-embeds passages with **Voyage `voyage-3`** into an `embeddings` table; `app.py` has Voyage client + `cosine_similarity` / `unpack_vector` helpers and a stub `vector_search()` — passage ranking still uses FTS5 only
 - **Author filter chip** — click ✕ to broaden the search back to all authors
 - **Flat search results** — relevance-ordered passage cards with author, work title, section header, snippet, save button, and link to the full work
 - **Save passages** — bookmark from search results or **double-click a passage** in the reader; saved passages persist in `localStorage` and appear in the Saved tab
@@ -105,7 +107,10 @@ All content work is done:
 ### Tier 2 — Search Quality
 
 - [x] **SQLite FTS5 full-text search** — `passages_fts` indexes passage text, author name, and work title; `/api/search` uses `MATCH` with ranked results (limit 100).
-- [ ] **Semantic search** — embeddings for conceptual matches (e.g. "Trinity" → "Triune").
+- [ ] **Hybrid search (planned)** — see [Search Strategy](#search-strategy-in-progress): Voyage vector similarity for passage ranking, Claude Haiku for author/keyword parsing, FTS5-only fallback when Anthropic or Voyage quotas are exhausted (no AI on that path).
+- [x] **Embedding storage script** — `embed_passages.py` writes `voyage-3` vectors to `embeddings` (BLOB per passage); run after corpus load, idempotent (skips already-embedded rows).
+- [ ] **Wire vector search into `/api/search`** — embed query, cosine-rank against stored vectors, respect author filter from Haiku parse.
+- [ ] **API quota fallback** — detect or handle Anthropic/Voyage rate limits and serve FTS5 + raw keyword tokens with no LLM calls.
 - [ ] **Pagination** — currently the top 100 matches are returned at once.
 
 ### Tier 3 — Backend Hardening
@@ -187,7 +192,8 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 ┌─────────────────────────────────────────────────────────────┐
 │             Flask API (localhost:5001)                       │
 │                                                             │
-│   GET  /api/search?q=           →  FTS5 search (ranked)     │
+│   GET  /api/search?q=           →  Haiku parse + FTS5 (today)│
+│                                 →  (+ Voyage vectors planned)│
 │   GET  /api/works/:id           →  all passages for a work  │
 │   GET  /api/authors/:id/works   →  works list for an author │
 │   GET  /api/library             →  catalog by section       │
@@ -195,17 +201,15 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 │   GET  /api/authors             →  list all authors         │
 │   GET  /api/passages/:id        →  single passage           │
 │   GET  /api/health              →  { status: "ok" }         │
-└────────────────────────┬────────────────────────────────────┘
-          │                               │
-          ▼                               ▼
-┌──────────────────┐           ┌─────────────────────┐
-│  SQLite DB       │           │  Anthropic API      │
-│  (database.db)   │           │  claude-sonnet-4-6  │
-│                  │           │  (streamed)         │
-│  authors         │           └─────────────────────┘
-│  works           │
-│  passages        │
-└──────────────────┘
+└────────────┬───────────────────────┬────────────────────────┘
+             │                       │
+             ▼                       ▼
+┌────────────────────────┐  ┌────────────────────────────┐
+│  SQLite (database.db)  │  │  External APIs             │
+│  authors, works,       │  │  Anthropic: Haiku (search  │
+│  passages, passages_fts│  │    parse), Sonnet (synth)  │
+│  embeddings (WIP)      │  │  Voyage: voyage-3 (WIP)    │
+└────────────────────────┘  └────────────────────────────┘
           ▲
           │ one-time scrape
 ┌──────────────────┐
@@ -219,16 +223,17 @@ The intended corpus is **everything from the New Advent Fathers index that pre-d
 
 1. User types a query and presses Enter
 2. `App.jsx` calls `GET /api/search?q=<query>`
-3. Flask parses the query (Claude) into `{ author, keywords }` against the cached author list
+3. Flask calls **Claude Haiku** (`parse_user_query`) → `{ author, keywords }` against the cached `AUTHOR_NAMES` list; `resolve_author_name` fuzzy-matches Haiku's author string to a DB name
 4. **Author-only query** (e.g. `"Augustine"`): response includes `author_only: true` and `author_id` → frontend fetches works and shows `AuthorWorksView`
-5. **Author + topic** (e.g. `"Augustine grace"`): FTS runs on keywords, filtered to that author; an author chip appears (click ✕ to broaden)
-6. **Topic only**: FTS5 `MATCH` on `passages_fts`, ranked, limit 100
-7. `SearchResults.jsx` renders a flat relevance-ordered list of passage cards (author, work, section header, snippet)
-8. Sticky compact search bar with "Library" back button; floating scroll-to-top after scrolling down
+5. **Author + topic** or **topic only**: keywords are turned into a safe FTS5 `MATCH` string (`prepare_fts_query`), then SQLite **FTS5** on `passages_fts` with optional `LOWER(authors.name)` filter; `ORDER BY rank LIMIT 100`
+6. `SearchResults.jsx` renders a flat relevance-ordered list of passage cards (author, work, section header, snippet)
+7. Sticky compact search bar with "Library" back button; floating scroll-to-top after scrolling down
 
-### Request Flow — Search (planned)
+> **Not in the live path yet:** `vector_search()` in `app.py` only calls `voyage_client.embed` and does not rank or return passages. Semantic ranking requires running `embed_passages.py` and finishing the vector branch in `/api/search`.
 
-See [Search Behavior](#search-behavior) for the new design — results will be grouped by **work title** with expandable passages inside.
+### Request Flow — Search (planned: hybrid + fallback)
+
+See [Search Strategy](#search-strategy-in-progress) for the tiered retrieval plan and [Search Behavior](#search-behavior) for UI grouping by work title.
 
 ### Request Flow — AI Synthesis
 
@@ -285,9 +290,9 @@ Not required to run the site — only to build or repair the database. See `tool
 - **`add_ephesus_449.py`** — Council of Ephesus 2 (449) from Perry 1881 PDF ([Internet Archive](https://archive.org/details/secondsynodofeph00perruoft)); save as `tools/corpus/sources/ephesus_449_perry.pdf`, then `pip install pypdf`
 - **`scrape_utils.py`**, **`fts.py`**, **`ccel_urls.py`**, **`strip_scripture_refs.py`** — parsing, FTS rebuild, and maintenance helpers
 
-**Runtime backend** (`backend/`): `app.py`, `utils.py`, `database.py`, `seed.py`, and a local `database.db` (gitignored).
+**Runtime backend** (`backend/`): `app.py`, `utils.py`, `database.py`, `embed_passages.py`, `seed.py`, and a local `database.db` (gitignored).
 
-After `tools/corpus/etl.py` or `repair_text.py` finishes, `passages_fts` is rebuilt automatically. Running `backend/database.py` creates the FTS table and populates it from any existing passages.
+After `tools/corpus/etl.py` or `repair_text.py` finishes, `passages_fts` is rebuilt automatically. Running `backend/database.py` creates the FTS table and populates it from any existing passages. The `embeddings` table is created by `embed_passages.py` (not `database.py` yet).
 
 ---
 
@@ -333,6 +338,17 @@ CREATE VIRTUAL TABLE passages_fts USING fts5(
 Rows are inserted from `passages` joined to `authors` and `works`. Search uses `MATCH` with `ORDER BY rank LIMIT 100`. The API sanitizes user input (quoted tokens) so FTS5 syntax characters do not cause errors.
 
 `passages.header` stores the section heading (from `<h2>`–`<h6>` tags on the source page) that a passage falls under. Shown on search result cards and as section dividers in the book reader.
+
+### Embeddings table (WIP — `embed_passages.py`)
+
+```sql
+CREATE TABLE embeddings (
+    passage_id INTEGER PRIMARY KEY,
+    vector     BLOB    -- float32 array packed with struct (voyage-3 dimension)
+);
+```
+
+One row per passage. Text is embedded from HTML-stripped passage body (`strip_html`). The batch job embeds in chunks of 128 and skips rows that already have a vector. At query time (once wired), the plan is to embed the user's topic keywords with the same model and rank passages by cosine similarity (`utils.cosine_similarity` + `utils.unpack_vector`).
 
 `works.section` is used for the sidebar's five top-level browse buckets:
 - `Father` (331 works)
@@ -390,15 +406,88 @@ Concretely:
 
 ---
 
+## Search Strategy (in progress)
+
+Search is mid-refactor. The README documents **what runs today**, **what is partially built**, and **the direction being evaluated** — not a finalized architecture.
+
+### What runs today
+
+| Step | Mechanism | Cost |
+|------|-----------|------|
+| Parse query → author + keywords | Claude Haiku (`claude-haiku-4-5-20251001`), ~150 max tokens | Anthropic API |
+| Rank passages | SQLite FTS5 `passages_fts`, keyword tokens from Haiku | None (local DB) |
+| Author-only browse | No FTS; return `author_only` + works list | Haiku only |
+
+Synthesis (`/api/synthesize`) is separate: **Claude Sonnet** streams over user-selected passages — not part of search retrieval.
+
+### What exists in code but is not wired to `/api/search`
+
+- **`backend/embed_passages.py`** — offline job: Voyage `voyage-3` embeddings for all passages missing from `embeddings`
+- **`app.py`** — `voyageai.Client`, stub `vector_search()`, imports `cosine_similarity` / `unpack_vector`
+- **`utils.py`** — BLOB unpack + cosine similarity for future in-memory or SQL-side ranking
+
+### Planned tiered pipeline (direction under evaluation)
+
+```
+User query
+    │
+    ▼
+┌─────────────────────────────────────┐
+│ 1. Claude Haiku                     │  author + topic keywords
+│    (same parse_user_query as today) │
+└─────────────────┬───────────────────┘
+                  │
+     author-only? ├──yes──► works list (no passage search)
+                  │
+                  no
+                  ▼
+┌─────────────────────────────────────┐
+│ 2. Voyage voyage-3                  │  embed keywords → cosine rank
+│    vector search over embeddings    │  optional SQL filter by author
+└─────────────────┬───────────────────┘
+                  │
+     API quota /  ├──exhausted──►
+     rate limit? │
+                  ▼
+┌─────────────────────────────────────┐
+│ 3. FTS5 fallback (no AI)            │  MATCH on raw or lightly tokenized
+│    passages_fts                     │  query text; no Haiku, no Voyage
+└─────────────────────────────────────┘
+```
+
+**Intent:** use semantics where API budget allows (e.g. "Triune" near passages about the Trinity without exact keyword overlap), keep Haiku for **author disambiguation** against 123 canonical names, and degrade to **deterministic FTS5** when Anthropic or Voyage tokens are unavailable so the site still returns something useful.
+
+Exact fallback triggers (HTTP 429 vs pre-check vs cached parse) are not implemented yet — still choosing behavior.
+
+### Tradeoffs being weighed (not decided)
+
+| Approach | Strengths | Weaknesses |
+|----------|-----------|------------|
+| **FTS5 only** | Free, fast, predictable, works offline | Lexical match; misses synonyms and conceptual phrasing; user must guess Fathers' vocabulary |
+| **Haiku parse + FTS5** (today) | Natural-language queries; author names normalized to DB spellings | Every search costs a small Haiku call; keywords Haiku extracts may not match patristic diction FTS expects |
+| **Voyage vectors** | Semantic recall across ~107k passages; same embedding model for index and query | Embedding all passages costs Voyage quota + storage; query embed per search; needs author filter applied in SQL or post-filter |
+| **Haiku + vectors** (planned default) | Best of NL parsing + semantic ranking | Two paid APIs per search unless parse is cached |
+| **FTS5 fallback** | No API spend; site stays up under quota pressure | Loses Haiku author parsing and semantic ranking — user may need exact words and author spelling |
+
+Open questions while choosing:
+
+- Whether to **cache** Haiku parse results per query string to cut repeat costs
+- Whether vector search scans **all** embeddings or a pre-filtered subset (by author / work)
+- Whether fallback skips Haiku entirely (parse author with simple string match?) or only skips Voyage
+- How synthesis passage selection should interact if search ranking changes
+
+---
+
 ## Project Structure
 
 ```
 ask-the-church-fathers/
 │
 ├── backend/                # Runtime API (all you need to run the site)
-│   ├── .env                # NOT committed — ANTHROPIC_API_KEY
-│   ├── app.py              # Flask API
-│   ├── utils.py            # Text cleaning for API responses
+│   ├── .env                # NOT committed — ANTHROPIC_API_KEY, VOYAGE_API_KEY
+│   ├── app.py              # Flask API (FTS search; vector path stubbed)
+│   ├── embed_passages.py   # One-time / incremental Voyage embedding job
+│   ├── utils.py            # Text cleaning, cosine similarity, vector unpack
 │   ├── database.py         # Creates schema + FTS index
 │   ├── database.db         # Local corpus (gitignored)
 │   ├── requirements.txt
@@ -537,7 +626,13 @@ Each entry in the catalog is clickable — it fires a search for that author/wor
 
 The Flask app runs with `debug=True` on port `5001`. CORS is enabled for all origins via `flask-cors` so the Vite dev server on `5173` can reach it freely. (Production deployment will need to lock CORS down to specific origins — see Tier 3.)
 
-`database.py` is run once before starting the app to ensure all three tables exist.
+`database.py` is run once before starting the app to ensure core tables and `passages_fts` exist.
+
+**Search-related modules:**
+
+- `parse_user_query` / `resolve_author_name` / `prepare_fts_query` — live
+- `voyage_client` + `vector_search` — started but not used by `/api/search` yet
+- `/api/search` — Haiku parse → FTS5 only (see [Search Strategy](#search-strategy-in-progress))
 
 ### Streaming Synthesis
 
@@ -579,13 +674,15 @@ The system prompt instructs Claude to:
 
 ## Author Detection
 
-Search queries are parsed on the **backend** (`parse_user_query` in `app.py`):
+Search queries are parsed on the **backend** (`parse_user_query` in `app.py`) with **Claude Haiku**:
 
-1. Claude splits the user's query into `{ author, keywords }` using the cached author list loaded at startup
-2. Author name is resolved with fuzzy matching against `AUTHOR_NAMES`
+1. Haiku splits the user's query into `{ author, keywords }` using the cached author list loaded at startup (`AUTHOR_NAMES`)
+2. Author name is resolved with fuzzy matching (`resolve_author_name`) against `AUTHOR_NAMES`
 3. **Author-only** (keywords empty): response sets `author_only: true` with `author_id` — frontend loads works via `GET /api/authors/:id/works`
-4. **Author + topic**: FTS runs on keywords, SQL-filtered to that author
-5. **Topic only**: plain FTS across all authors
+4. **Author + topic**: passage retrieval uses keywords (FTS5 today; planned: Voyage vectors with same author SQL filter)
+5. **Topic only**: passage retrieval across all authors
+
+On the **planned FTS5-only fallback** when API quotas are exhausted, author parsing via Haiku would be skipped — exact behavior (regex, substring match on author names, or raw query as FTS tokens) is still TBD. See [Search Strategy](#search-strategy-in-progress).
 
 Examples:
 - `"Augustine"` → author-only → works list
@@ -600,7 +697,7 @@ Examples:
 |--------|---------------------|-------------|
 | GET    | `/api/health`       | Returns `{ "status": "ok" }` |
 | GET    | `/api/hello?name=`  | Greeting test endpoint (debugging only) |
-| GET    | `/api/search?q=`           | FTS5 search (ranked, max 100). Returns `{ query, keywords, author, author_id, author_only, results: [{id, passage, author, work, work_id, header}] }`. |
+| GET    | `/api/search?q=`           | Haiku parse + FTS5 (ranked, max 100). Planned: Voyage vector rank with FTS5-only fallback on API limits. Returns `{ query, keywords, author, author_id, author_only, results: [{id, passage, author, work, work_id, header}] }`. |
 | GET    | `/api/authors`             | All authors: `{ results: [{id, name, tradition}] }`. |
 | GET    | `/api/authors/:id/works`   | Works for one author: `{ name, works: [{id, title}] }`. 404 if author has no works. |
 | GET    | `/api/library`             | Catalog grouped by section: `{ sections: { Father: [...], Council: [...], ... } }`. |
@@ -619,9 +716,11 @@ Examples:
 | Markdown | react-markdown (renders AI synthesis) |
 | Icons    | react-icons (io5, md) |
 | Backend  | Python 3, Flask, Flask-CORS, SQLite |
-| AI       | Anthropic Claude (`claude-sonnet-4-6`), streamed via Flask `Response` generator |
+| AI (search parse) | Anthropic Claude Haiku (`claude-haiku-4-5-20251001`) — author + keyword extraction |
+| AI (synthesis) | Anthropic Claude Sonnet (`claude-sonnet-4-6`), streamed via Flask `Response` generator |
+| Embeddings (WIP) | Voyage AI (`voyage-3`) via `voyageai` Python SDK — batch in `embed_passages.py`, query path stubbed in `app.py` |
 | Scraping | requests + BeautifulSoup4 (source: newadvent.org/fathers) |
-| Env vars | python-dotenv |
+| Env vars | python-dotenv (`ANTHROPIC_API_KEY`, `VOYAGE_API_KEY` for embeddings / future vector search) |
 
 ---
 
@@ -638,11 +737,14 @@ python database.py               # creates tables + FTS index (populates FTS if 
 python app.py                    # API runs on http://localhost:5001
 ```
 
-AI synthesis requires an Anthropic API key. Create `backend/.env`:
+Create `backend/.env` (not committed):
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_API_KEY=sk-ant-...   # required for search parse + synthesis
+VOYAGE_API_KEY=...             # required to run embed_passages.py and future vector search
 ```
+
+AI synthesis and search parsing require Anthropic. Vector indexing requires Voyage.
 
 ### 2 — Populate the Database
 
@@ -663,6 +765,16 @@ sqlite3 backend/database.db "SELECT COUNT(DISTINCT a.name) AS authors, COUNT(DIS
 ```
 
 > **Note:** `database.db` is not in git (too large). Clone the repo, then either run `seed.py`, run `tools/corpus/etl.py`, or copy an existing `database.db` into `backend/`.
+
+**Optional — build passage embeddings (for upcoming vector search):**
+
+```bash
+cd backend
+source .venv/bin/activate
+python embed_passages.py    # idempotent; embeds only passages missing from embeddings
+```
+
+This can take a while on the full corpus (~107k passages) and consumes Voyage API quota. Search still uses FTS5 until vector ranking is wired into `app.py`.
 
 ### 3 — Frontend
 

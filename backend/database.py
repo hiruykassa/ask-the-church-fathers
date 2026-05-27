@@ -59,3 +59,6 @@ conn.commit()
 conn.close()
 
 print("Database created and passages table ready.")
+
+
+

@@ -5,8 +5,9 @@ import anthropic
 from dotenv import load_dotenv
 import os
 import re
+import voyageai
 
-from utils import strip_html, remove_scripture_refs
+from utils import strip_html, remove_scripture_refs, cosine_similarity, unpack_vector
 
 
 def prepare_fts_query(q):
@@ -22,6 +23,16 @@ def prepare_fts_query(q):
 
 # Load environment variables from .env (e.g. ANTHROPIC_API_KEY)
 load_dotenv()
+
+voyage_client = voyageai.Client(api_key=os.getenv("VOYAGE_API_KEY"))
+
+def vector_search(query, limit = 100):
+    voyage_client.embed(list(query), model="voyage-3")
+    result = query_vec = result.embeddings[0]
+    
+
+
+
 
 
 def get_db_connection():
@@ -352,27 +363,27 @@ def synthesize():
         passage_blocks.append(f"{p['author']}, {p['work']}: {strip_html(p.get('passage') or '')}")
     passages_text = "\n\n".join(passage_blocks)
 
-    prompt = f"""You are a patristic historian. Your sole task is to report what the Church Fathers said in the passages below. You are not interpreting, not theologizing, not balancing perspectives, and not arranging material for palatability.
+    prompt = f"""You are a patristic historian. Your sole task is to report what the early Church taught in the passages below. You are not interpreting, not theologizing, not balancing perspectives, not arranging material for palatability, and not trying to offend current traditions.
 
 The user searched: "{query}"
 
-Internally determine the main theological question these passages address. Discard any passage that merely shares a keyword but engages a different question. Do not state the question in your response. Begin directly with what the Fathers said.
+Internally determine the main theological question these passages address. Discard any passage that merely shares a keyword but engages a different question. Do not state the question in your response. Begin directly with what the Fathers or Councils said.
 
-Passages from the Church Fathers:
+Passages from the early Church:
 {passages_text}
 
 Rules:
-1. Use ONLY the passages above. Do not introduce any claim, figure, council, or position from outside these passages.
-2. Present each Father's position as that Father himself would have stated it, in its strongest form. If a Father's central argument was controversial, lead with the controversial claim. Do not bury it in qualifications or arrange the material to make it acceptable to any modern audience.
+1. Use ONLY the passages above. Do not introduce any claim, figure, council, or position from outside these passages and the early church.
+2. Present each position as that Father or council would have stated it, in its strongest form. If a Father's central argument was controversial, lead with the controversial claim. Do not bury it in qualifications or arrange the material to make it acceptable to any modern audience.
 3. Let the Fathers speak. Favor their own words and phrases from the passages over paraphrase. When a passage contains a direct formulation, a definition, a condemnation, an analogy, use it.
 4. If a Father has a defining formula or technical phrase that is central to his position, state it explicitly and prominently. Do not paraphrase around it.
 5. If only one Father appears in the results, report that Father's position directly. Do not frame it as one side of a debate. Do not introduce opposing views from outside the passages.
 6. If multiple Fathers appear, present each one individually. Do not group them into camps or frame one as the opposition to another.
 7. If a council is mentioned in the passages, report what it defined in its own language. Do not interpret it through any later tradition.
 8. Report condemnations as historical fact without calling any position orthodox, heretical, correct, or wrong.
-9. Stay entirely within the historical period. Do not mention any tradition, denomination, or development after 500 AD.
+9. Stay entirely within the historical period. Do not mention any tradition, denomination, or development after 451 AD.
 10. Use the terminology the Fathers themselves used (physis, ousia, prosopon, hypostasis). Do not define or simplify these terms.
-11. Maximum 3 short paragraphs. Each paragraph should be no more than 5 sentences. Third person. No disclaimers. No meta-commentary.
+11. Maximum of 3 and half short paragraphs. Third person. No disclaimers. No meta-commentary.
 12. Do not use em dashes. Use commas, periods, or semicolons instead."""
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))

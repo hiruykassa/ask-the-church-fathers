@@ -6,6 +6,8 @@ doesn't depend on the scraping toolkit to serve requests.
 
 import re
 from bs4 import BeautifulSoup
+import struct 
+import math
 
 _WS = r"[\s ]+"
 _NUMBERED_BOOKS = (
@@ -68,3 +70,13 @@ def strip_html(html):
         return cleaned
     soup = BeautifulSoup(cleaned, "html.parser")
     return _normalize_ref_spacing(soup.get_text(" ", strip=True))
+
+def unpack_vector(blob):
+    return list(struct.unpack(f"{len(blob) // 4}f", blob))
+
+def cosine_similarity(a, b):
+    dot_prod = sum(x * y for x, y in zip(a, b))
+    len_a = math.sqrt(sum(x * x for x in a))
+    len_b = math.sqrt(sum(x * x for x in b))
+    new_prod = len_a * len_b
+    return dot_prod/new_prod
