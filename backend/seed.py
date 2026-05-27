@@ -1,13 +1,25 @@
+"""Load a tiny dev corpus into database.db (5 passages, 3 authors).
+
+Wipes existing ``passages``, ``works``, and ``authors`` rows, then inserts
+hand-written samples for local UI testing. Not for production corpus; use
+``tools/corpus/etl.py`` for the full scrape.
+
+Run once from ``backend/`` after ``database.py``:
+
+    python3 seed.py
+"""
+
 import sqlite3
 
 conn = sqlite3.connect("database.db")
 cursor = conn.cursor()
 
+# Dev-only reset; does not touch embeddings or editorial_cleaned if present
 cursor.execute("DELETE FROM passages")
 cursor.execute("DELETE FROM works")
 cursor.execute("DELETE FROM authors")
 
-#Authors
+# --- authors (3 Fathers for quick UI smoke tests) ---
 cursor.execute("INSERT INTO authors (name, born, died, tradition, bio) values (?, ?, ?, ?, ?)",
                ("Augustine", 354, 430, "Western", "Bishop of Hippo, theologian of grace and original sin.")
             )
@@ -23,7 +35,7 @@ cursor.execute("INSERT INTO authors (name, born, died, tradition, bio) values (?
             )
 athanasius_id = cursor.lastrowid
 
-#Works
+# --- works (one title per author) ---
 cursor.execute("INSERT INTO works (author_id, title, section, source_url) values (?, ?, ?, ?)",
                (augustine_id, "Confessions", "Father", "https://www.ccel.org/ccel/augustine/confessions.html")
             )
@@ -39,7 +51,7 @@ cursor.execute("INSERT INTO works (author_id, title, section, source_url) values
             )
 incarnation_id = cursor.lastrowid
 
-#Passages
+# --- passages (plain text; no HTML in seed data) ---
 cursor.execute("INSERT INTO passages (work_id, text) VALUES (?, ?)",
                 (confessions_id, "Our hearts are restless until they rest in Thee.")
 )

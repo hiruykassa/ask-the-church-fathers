@@ -16,6 +16,15 @@ Scripts for building and maintaining `backend/database.db`. Run from the **proje
 | `fts.py` | Rebuild the passages full-text search index |
 | `db_path.py` | Resolves path to `backend/database.db` |
 
+**Backend batch jobs** (run from `backend/`, see root `README.md`):
+
+| Script | Purpose |
+|--------|---------|
+| `../backend/clean_editorial_notes.py` | Strip anachronistic / modern editorial framing from `passages.text` (Claude Haiku); run `fts.py` after |
+| `../backend/embed_passages.py` | Voyage embeddings for passages missing from `embeddings` |
+
+Typical order after a full scrape: `etl.py` → `clean_editorial_notes.py` → `fts.py` → `embed_passages.py`.
+
 **Ephesus 449 PDF:** download [Perry (1881)](https://archive.org/details/secondsynodofeph00perruoft) and save as `tools/corpus/sources/ephesus_449_perry.pdf` (gitignored). Requires `pip install pypdf`.
 
 **To run the site:** `backend/app.py` + a populated `backend/database.db` (or `backend/seed.py` for a tiny dev dataset).

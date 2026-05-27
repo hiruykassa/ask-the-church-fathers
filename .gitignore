@@ -8,17 +8,21 @@ backend/.venv/
 # Environment variables (keep secrets out of git)
 backend/.env
 
-# SQLite databases
+# SQLite databases and backups
 *.db
 *.db-shm
 *.db-wal
+*.backup.*.db
 
 # OS junk
 .DS_Store
+Thumbs.db
+.fuse_hidden*
 
 # Python cache
 __pycache__/
 *.pyc
+*.pyo
 
 # Corpus tool artifacts
 tools/corpus/audit*
@@ -29,3 +33,4 @@ backend/audit*
 # Editor
 .vscode/
 .cursor/
+.idea/

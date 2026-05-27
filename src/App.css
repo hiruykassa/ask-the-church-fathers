@@ -421,6 +421,10 @@ html[data-theme='light'] .hero-cross-img {
   color: var(--text);
   padding: 17px 0;
 }
+.search-input:focus,
+.search-input:focus-visible {
+  outline: none;
+}
 .search-input::placeholder {
   font-family: var(--font-prose);
   font-style: italic;
@@ -434,7 +438,6 @@ html[data-theme='light'] .hero-cross-img {
   align-items: center;
   gap: 8px;
   border: none;
-  border-left: 1.5px solid var(--border);
   background: linear-gradient(180deg, var(--header-bg) 0%, var(--header-bg-2) 100%);
   color: var(--header-text);
   font-family: 'Inter', sans-serif;
@@ -444,12 +447,11 @@ html[data-theme='light'] .hero-cross-img {
   text-transform: uppercase;
   padding: 0 28px;
   cursor: pointer;
-  transition: background 0.2s var(--ease), border-left-color 0.2s var(--ease), color 0.2s var(--ease);
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
   flex-shrink: 0;
 }
 .search-btn:hover {
   background: linear-gradient(180deg, var(--cross-gold) 0%, color-mix(in srgb, var(--cross-gold) 75%, #000) 100%);
-  border-left-color: var(--cross-gold);
   color: var(--btn-on-gold);
 }
 .search-btn-hint {

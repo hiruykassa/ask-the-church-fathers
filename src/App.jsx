@@ -23,6 +23,7 @@ import ThemeToggle from './components/ui/ThemeToggle'
 import SearchResults from './components/SearchResults'
 import AuthorWorksView from './components/AuthorWorksView'
 import SavedView from './components/SavedView'
+import LoadingBlock from './components/ui/LoadingBlock'
 import { API_BASE } from './api/client'
 import './App.css'
 
@@ -57,8 +58,10 @@ export default function App() {
 
   const [authorWorks,  setAuthorWorks]  = useState(null)
 
-  const [liveFathers,  setLiveFathers]  = useState(null)
-  const [liveSections, setLiveSections] = useState(null)
+  const [liveFathers,      setLiveFathers]      = useState(null)
+  const [liveSections,     setLiveSections]     = useState(null)
+  const [libraryLoading,   setLibraryLoading]   = useState(true)
+  const [libraryError,     setLibraryError]     = useState(false)
 
   const searchGen = useRef(0)
 
@@ -72,7 +75,10 @@ export default function App() {
 
   useEffect(() => {
     fetch(`${API_BASE}/api/library`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Library fetch failed')
+        return res.json()
+      })
       .then(data => {
         const sections = data.sections || {}
         const fatherEntries = (sections.Father || []).map(a => ({
@@ -94,8 +100,14 @@ export default function App() {
             })),
           }))
         setLiveSections(otherSections)
+        setLibraryError(false)
       })
-      .catch(() => { /* fallback to static data */ })
+      .catch(() => {
+        setLibraryError(true)
+      })
+      .finally(() => {
+        setLibraryLoading(false)
+      })
   }, [])
 
   /**
@@ -374,24 +386,34 @@ export default function App() {
                   </ul>
                 </AccordionSection>
 
-                {liveSections
-                  ? liveSections.map((s) => (
-                      <AccordionSection key={s.id} title={s.title}>
-                        <ul className="acc-list">
-                          {s.entries.flatMap(e => e.works || []).map(w => (
-                            <li key={w.id} className="acc-row">
-                              <button
-                                className="acc-row-name"
-                                onClick={() => navigate(`/read/${w.id}`, { state: { restoreQuery: query } })}
-                              >
-                                <span className="acc-row-title">{w.title}</span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </AccordionSection>
-                    ))
-                  : RIGHT_SECTIONS.map((s) => (
+                {libraryLoading && (
+                  <LoadingBlock label="Loading councils, liturgies, and more…" />
+                )}
+
+                {!libraryLoading && liveSections && liveSections.map((s) => (
+                  <AccordionSection key={s.id} title={s.title}>
+                    <ul className="acc-list">
+                      {s.entries.flatMap(e => e.works || []).map(w => (
+                        <li key={w.id} className="acc-row">
+                          <button
+                            className="acc-row-name"
+                            onClick={() => navigate(`/read/${w.id}`, { state: { restoreQuery: query } })}
+                          >
+                            <span className="acc-row-title">{w.title}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </AccordionSection>
+                ))}
+
+                {!libraryLoading && libraryError && (
+                  <>
+                    <p className="library-invite">
+                      Could not reach the library server — make sure the backend is running on port 5001.
+                      Showing a shortened catalog (search only).
+                    </p>
+                    {RIGHT_SECTIONS.map((s) => (
                       <AccordionSection key={s.id} title={s.title}>
                         <ul className="acc-list">
                           {s.entries.map((e, i) => (
@@ -406,8 +428,9 @@ export default function App() {
                           ))}
                         </ul>
                       </AccordionSection>
-                    ))
-                }
+                    ))}
+                  </>
+                )}
               </div>
               </div>
             </>

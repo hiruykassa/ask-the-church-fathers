@@ -35,7 +35,44 @@ def main():
         action="store_true",
         help="Re-import if the council work already exists",
     )
+    parser.add_argument(
+        "--remove",
+        action="store_true",
+        help="Delete this council from the database",
+    )
     args = parser.parse_args()
+
+    if args.remove:
+        conn = sqlite3.connect(DB, timeout=60)
+        conn.execute("PRAGMA busy_timeout = 60000")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM authors WHERE name = ?", (AUTHOR,))
+        row = cursor.fetchone()
+        if not row:
+            print(f"Not found: {AUTHOR}")
+            conn.close()
+            return
+        author_id = row[0]
+        cursor.execute(
+            "SELECT id FROM works WHERE author_id = ? AND title = ?",
+            (author_id, WORK_TITLE),
+        )
+        work_row = cursor.fetchone()
+        if work_row:
+            work_id = work_row[0]
+            cursor.execute("DELETE FROM passages WHERE work_id = ?", (work_id,))
+            cursor.execute("DELETE FROM works WHERE id = ?", (work_id,))
+            print(f"Removed work {WORK_TITLE} (id {work_id}) and its passages")
+        cursor.execute("SELECT COUNT(*) FROM works WHERE author_id = ?", (author_id,))
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("DELETE FROM authors WHERE id = ?", (author_id,))
+            print(f"Removed author {AUTHOR}")
+        print("Rebuilding FTS index...")
+        rebuild_fts(cursor)
+        conn.commit()
+        conn.close()
+        print("Done.")
+        return
 
     chunks = split_long_passages(parse_ephesus_449_acts())
     if not chunks:
@@ -69,14 +106,17 @@ def main():
             return
         work_id = existing[0]
         cursor.execute("DELETE FROM passages WHERE work_id = ?", (work_id,))
-        cursor.execute("DELETE FROM works WHERE id = ?", (work_id,))
-        print(f"Replacing existing work: {WORK_TITLE}")
-
-    cursor.execute(
-        "INSERT INTO works (author_id, title, section, source_url) VALUES (?, ?, ?, ?)",
-        (author_id, WORK_TITLE, SECTION, SOURCE_URL),
-    )
-    work_id = cursor.lastrowid
+        cursor.execute(
+            "UPDATE works SET source_url = ? WHERE id = ?",
+            (SOURCE_URL, work_id),
+        )
+        print(f"Replacing passages for: {WORK_TITLE} (work id {work_id})")
+    else:
+        cursor.execute(
+            "INSERT INTO works (author_id, title, section, source_url) VALUES (?, ?, ?, ?)",
+            (author_id, WORK_TITLE, SECTION, SOURCE_URL),
+        )
+        work_id = cursor.lastrowid
 
     for chunk in chunks:
         cursor.execute(
