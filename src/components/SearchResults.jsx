@@ -1,5 +1,4 @@
 import { IoClose, IoHeart, IoHeartOutline } from 'react-icons/io5'
-import SynthesisPanel from './SynthesisPanel'
 
 /**
  * Displays search results as a flat relevance-ordered list.
@@ -9,7 +8,6 @@ export default function SearchResults({
   query, topicQuery, authorFilter, clearAuthorFilter,
   searching, results,
   isSaved, onToggleSave, navigate,
-  synthesis, synthesizing, getSynthesis,
 }) {
   const total = results.length
 
@@ -44,14 +42,6 @@ export default function SearchResults({
 
       {total > 0 && (
         <>
-          <SynthesisPanel
-            topicQuery={topicQuery || query}
-            authorFilter={authorFilter}
-            synthesis={synthesis}
-            synthesizing={synthesizing}
-            getSynthesis={getSynthesis}
-          />
-
           <div className="results-list">
             {results.map((p, i) => {
               const text = p.passage || ''

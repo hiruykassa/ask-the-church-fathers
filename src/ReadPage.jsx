@@ -249,7 +249,7 @@ export default function ReadPage() {
           <span>{backLabel}</span>
         </button>
         <div className="site-title-btn" style={{ cursor: 'pointer' }} onClick={() => navigate('/')}>
-          <span className="site-title">Ask the Church Fathers</span>
+          <span className="site-title">Ask the Early Church</span>
           <div className="site-title-ornament"><span>What did the early church teach</span></div>
         </div>
         <div className="read-header-right">

@@ -1,9 +1,9 @@
 /**
- * App.jsx — Root page component for "Ask the Church Fathers"
+ * App.jsx — Root page component for "Ask the Early Church"
  *
  * Responsibilities:
  *  - Global state: search query, results, saved passages, active view
- *  - API calls: doSearch() (backend-parsed FTS search), getSynthesis() (streaming AI)
+ *  - API calls: doSearch() (backend-parsed vector search)
  *  - Routing: navigate to /read/:workId with state for back-navigation
  *  - Layout: header, hero/search bar, library catalog, results, footer
  */
@@ -53,9 +53,6 @@ export default function App() {
   const [view,         setView]         = useState('search')
   const [authorFilter, setAuthorFilter] = useState(null)
   const [topicQuery,   setTopicQuery]   = useState('')
-  const [synthesis,    setSynthesis]    = useState('')
-  const [synthesizing, setSynthesizing] = useState(false)
-
   const [authorWorks,  setAuthorWorks]  = useState(null)
 
   const [liveFathers,      setLiveFathers]      = useState(null)
@@ -154,7 +151,6 @@ export default function App() {
     const apiQuery = (searchOverride ?? q).trim()
 
     setQuery(q)
-    setSynthesis('')
     setSearching(true)
     setSearched(true)
     setView('search')
@@ -194,35 +190,6 @@ export default function App() {
     }
   }
 
-  /**
-   * Streams an AI synthesis of the current results from the backend.
-   * Appends each decoded chunk to synthesis as it arrives.
-   */
-  async function getSynthesis() {
-    if (results.length === 0) return
-    setSynthesizing(true)
-    setSynthesis('')
-    try {
-      const res = await fetch(`${API_BASE}/api/synthesize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: topicQuery || query, passages: results }),
-      })
-      if (!res.ok) throw new Error('Network error')
-      const reader  = res.body.getReader()
-      const decoder = new TextDecoder()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        setSynthesis(prev => prev + decoder.decode(value, { stream: true }))
-      }
-    } catch {
-      setSynthesis('Could not reach the synthesis service. Make sure the backend is running.')
-    } finally {
-      setSynthesizing(false)
-    }
-  }
-
   /** Removes the author filter and re-runs the search on topic keywords only. */
   function clearAuthorFilter() {
     const keywords = topicQuery
@@ -247,7 +214,6 @@ export default function App() {
     setResults([])
     setAuthorFilter(null)
     setTopicQuery('')
-    setSynthesis('')
     setAuthorWorks(null)
     setView('search')
   }
@@ -259,7 +225,7 @@ export default function App() {
       <header className="site-header">
         <div className="site-header-spacer" />
         <button className="site-title-btn" onClick={goHome} title="Home">
-          <h1 className="site-title">Ask the Church Fathers</h1>
+          <h1 className="site-title">Ask the Early Church</h1>
           <div className="site-title-ornament">
             <span>What did the early church teach</span>
           </div>
@@ -458,9 +424,6 @@ export default function App() {
               isSaved={isSaved}
               onToggleSave={toggleSave}
               navigate={navigate}
-              synthesis={synthesis}
-              synthesizing={synthesizing}
-              getSynthesis={getSynthesis}
             />
           )}
 

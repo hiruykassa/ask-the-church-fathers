@@ -1,15 +1,15 @@
-"""Flask API for Ask the Church Fathers.
+"""Flask API for Ask the Early Church.
 
 Runtime server for the React frontend. SQLite ``database.db`` holds authors,
 works, passages, FTS index ``passages_fts``, and optional ``embeddings`` /
 ``editorial_cleaned`` rows created by offline batch scripts.
 
 Endpoints (summary):
-    GET  /api/search              Haiku query parse + FTS5 passage ranking
+    GET  /api/search              Haiku query parse + vector search (Voyage embeddings)
     GET  /api/passages/<id>       Single passage with metadata
     GET  /api/works/<work_id>     Full work for the book reader
-    GET  /api/authors, /api/authors/<id>/works, /api/browse
-    POST /api/synthesize          Streamed Claude summary over selected passages
+    GET  /api/authors, /api/authors/<id>/works, /api/library
+    POST /api/synthesize          (disabled — see comment in code)
 
 Offline maintenance (not imported here):
     ``clean_editorial_notes.py`` — strip editorial framing from passage text
@@ -20,7 +20,7 @@ Environment: ``ANTHROPIC_API_KEY``, ``VOYAGE_API_KEY`` (``load_dotenv`` from
 ``.env``). Default dev server: port 5001 when run as ``__main__``.
 """
 
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
 import anthropic
@@ -167,8 +167,7 @@ def parse_user_query(raw_query, author_names):
 
 
 app = Flask(__name__)
-CORS(app)
-
+CORS(app, origins=[os.getenv("ALLOWED_ORIGIN", "http://localhost:5173")])
 
 @app.route("/api/health")
 def health():
@@ -391,59 +390,14 @@ def library():
     return jsonify({"sections": sections})
 
 
-@app.route("/api/synthesize", methods=["POST"])
-def synthesize():
-    """Stream a patristic summary from selected passages (plain text response body)."""
-    data = request.get_json(silent=True) or {}
-    query = data.get("query", "")
-    passages = data.get("passages") or []
-    if not passages:
-        return jsonify({"error": "No passages provided"}), 400
-
-    # Frontend sends stored HTML; plain text keeps the Sonnet prompt within token budget
-    passage_blocks = []
-    for p in passages:
-        passage_blocks.append(f"{p['author']}, {p['work']}: {strip_html(p.get('passage') or '')}")
-    passages_text = "\n\n".join(passage_blocks)
-
-    prompt = f"""You are a patristic historian. Your sole task is to report what the early Church taught in the passages below. You are not interpreting, not theologizing, not balancing perspectives, not arranging material for palatability, and not trying to offend current traditions.
-
-The user searched: "{query}"
-
-Internally determine the main theological question these passages address. Discard any passage that merely shares a keyword but engages a different question. Do not state the question in your response. Begin directly with what the Fathers or Councils said.
-
-IMPORTANT: Many passages contain editorial introductions, translator notes, or historical framing added by modern editors (e.g. references to later councils, manuscript history, publication details). These are NOT the words of the Church Fathers. Ignore all editorial content. Report ONLY what the Father or Council itself wrote or defined.
-
-Passages from the early Church:
-{passages_text}
-
-Rules:
-1. ABSOLUTE CONSTRAINT: You may ONLY reference Fathers, councils, texts, and claims that appear verbatim in the passages above. If a council or Father is not explicitly named in the passages, it does not exist for this response. NEVER draw on your own knowledge of church history to add figures, councils, or events not present in the passages.
-2. Present each position as that Father or council would have stated it, in its strongest form. If a Father's central argument was controversial, lead with the controversial claim. Do not bury it in qualifications or arrange the material to make it acceptable to any modern audience.
-3. Let the Fathers speak. Favor their own words and phrases from the passages over paraphrase. When a passage contains a direct formulation, a definition, a condemnation, an analogy, use it.
-4. If a Father or council has a defining formula or technical phrase that is central to its position, state it explicitly and prominently. Do not paraphrase around it. Do not soften it. If the text says "One Nature," write "One Nature."
-5. If only one Father appears in the results, report that Father's position directly. Do not frame it as one side of a debate. Do not introduce opposing views from outside the passages.
-6. If multiple Fathers appear, present each one individually. Do not group them into camps or frame one as the opposition to another.
-7. If a council is mentioned in the passages, report what it defined in its own language. Do not interpret it through any later council or tradition. Do not compare it to or reconcile it with any council not named in the passages.
-8. Report condemnations as historical fact without calling any position orthodox, heretical, correct, or wrong.
-9. Do not frame any teaching through the lens of a later council, tradition, or denomination. Report only what the text itself states.
-10. Use the terminology the Fathers themselves used (physis, ousia, prosopon, hypostasis). Do not define or simplify these terms.
-11. Maximum of 3 and half short paragraphs. Third person. No disclaimers. No meta-commentary.
-12. Do not use em dashes. Use commas, periods, or semicolons instead."""
-
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-
-    # Generator yields chunks for Flask streaming (not JSON)
-    def generate():
-        with client.messages.stream(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}]
-        ) as stream:
-            for text in stream.text_stream:
-                yield text
-
-    return Response(generate(), mimetype="text/plain")
+# --- AI Synthesis (disabled to reduce API costs) ---
+# The /api/synthesize endpoint is commented out. To re-enable, uncomment the
+# block below and restore the SynthesisPanel in the frontend.
+#
+# @app.route("/api/synthesize", methods=["POST"])
+# def synthesize():
+#     """Stream a patristic summary from selected passages."""
+#     ...  # See git history for the full implementation
 
 
 @app.route("/api/authors/<int:author_id>/works")
@@ -474,4 +428,4 @@ def get_author_works(author_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    app.run(debug=False, port=5001)

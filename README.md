@@ -1,6 +1,6 @@
-# Ask the Church Fathers
+# Ask the Early Church
 
-A web app for searching the writings of the early Church Fathers by topic. Type a question, get semantically matched passages, then ask an AI to synthesize what they collectively taught.
+A web app for searching the writings of the early Church Fathers by topic. Type a question and get semantically matched passages from the patristic corpus. An AI synthesis feature is built but disabled for launch.
 
 Built for Christians of every tradition — Protestant, Catholic, Eastern Orthodox, Oriental Orthodox, and Assyrian Church of the East — to read the primary sources and come to their own conclusions.
 
@@ -10,7 +10,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 ## Project Status
 
-The site runs end-to-end on localhost: start the Flask backend, start the React frontend, type a query, get semantically ranked passages, click "Ask the Fathers" and stream a Claude synthesis. The whole pipeline works.
+The site runs end-to-end on localhost: start the Flask backend, start the React frontend, type a query, and get semantically ranked passages. Search is fully working; AI synthesis is implemented but disabled for launch to reduce API costs.
 
 **Not yet deployed.** Hardening and deployment work is still needed before this is a site real users can rely on. See [Roadmap](#roadmap).
 
@@ -40,12 +40,9 @@ The corpus covers the pre-Chalcedon period: major Church Fathers, ecumenical and
 
 Vector search replaced FTS5 keyword search. The embeddings were generated with Voyage `voyage-3` and are loaded into a numpy matrix at server startup for fast scoring.
 
-### AI Synthesis
+### AI Synthesis (coming soon)
 
-1. User clicks "Ask the Fathers" after viewing search results
-2. Flask sends the passages to **Claude Sonnet** with a carefully tuned prompt
-3. The synthesis is streamed token-by-token back to the browser
-4. The prompt instructs Claude to act as a patristic historian: report only what the Fathers wrote, use their own language, never frame through later traditions, ignore editorial notes from modern translators
+AI synthesis is fully built but disabled for launch due to API costs. The feature streams a historian-style summary of what the Church Fathers collectively taught on the searched topic, powered by Claude Sonnet. It will be enabled once the project has the funding to cover the additional API usage.
 
 ### Book Reader
 
@@ -64,7 +61,6 @@ Flask API (localhost:5001)
     │
     ├── Claude Haiku ── query parsing (author + topic)
     ├── Voyage AI ───── query embedding + cosine ranking
-    ├── Claude Sonnet ── streamed synthesis
     │
     ▼
 SQLite (database.db)
@@ -79,7 +75,7 @@ SQLite (database.db)
 ## Project Structure
 
 ```
-ask-the-church-fathers/
+ask-the-early-church/
 │
 ├── backend/
 │   ├── app.py                  # Flask API — search, synthesis, library endpoints
@@ -174,7 +170,7 @@ FTS5 index (`passages_fts`) exists as a fallback for when API quotas are exhaust
 | GET    | `/api/authors`            | List all authors. |
 | GET    | `/api/authors/:id/works`  | Works list for one author. |
 | GET    | `/api/library`            | Full catalog grouped by section. |
-| POST   | `/api/synthesize`         | Stream AI synthesis. Body: `{ query, passages[] }`. |
+| POST   | `/api/synthesize`         | *(disabled)* Stream AI synthesis. Body: `{ query, passages[] }`. |
 | GET    | `/api/health`             | `{ status: "ok" }` |
 
 ---
@@ -190,7 +186,7 @@ FTS5 index (`passages_fts`) exists as a fallback for when API quotas are exhaust
 - [x] Voyage voyage-3 embeddings for all passages
 - [x] Vector search wired into /api/search (replaced FTS5)
 - [x] Author filter on search results
-- [x] AI synthesis (Claude Sonnet, streamed)
+- [x] AI synthesis (Claude Sonnet, streamed — disabled for launch to reduce costs)
 - [x] Book reader with TOC, scroll progress, passage navigation
 - [x] Liturgy and council text formatting
 - [x] Dark mode
@@ -202,6 +198,7 @@ FTS5 index (`passages_fts`) exists as a fallback for when API quotas are exhaust
 - [ ] Editorial cleanup — strip modern translator framing from passage text (`clean_editorial_notes.py`)
 - [ ] Re-embed modified passages after editorial cleanup
 - [ ] Error handling on all endpoints
+- [ ] Re-enable AI synthesis when budget allows
 - [ ] Rate limiting on `/api/synthesize`
 - [ ] Synthesis result caching
 - [ ] CORS lockdown for production
@@ -232,7 +229,7 @@ FTS5 index (`passages_fts`) exists as a fallback for when API quotas are exhaust
 | Backend          | Python 3, Flask, Flask-CORS, SQLite |
 | Search parsing   | Claude Haiku (`claude-haiku-4-5-20251001`) |
 | Search ranking   | Voyage AI (`voyage-3`) embeddings + numpy cosine similarity |
-| AI synthesis     | Claude Sonnet (`claude-sonnet-4-6`), streamed |
+| AI synthesis     | Claude Sonnet (`claude-sonnet-4-6`), streamed *(disabled for launch)* |
 | Editorial cleanup| Claude Haiku (offline batch job) |
 | Scraping         | requests + BeautifulSoup4 (newadvent.org) |
 

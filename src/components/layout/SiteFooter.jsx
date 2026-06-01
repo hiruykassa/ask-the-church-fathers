@@ -10,7 +10,7 @@ export default function SiteFooter() {
         <Link to="/contact" className="site-footer__nav-link">Contact us</Link>
       </div>
       <p className="site-footer__copy">
-        &copy; {year} Ask the Church Fathers. All rights reserved.
+        &copy; {year} Ask the Early Church. All rights reserved.
       </p>
     </footer>
   )

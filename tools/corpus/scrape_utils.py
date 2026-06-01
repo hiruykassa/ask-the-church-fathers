@@ -9,7 +9,7 @@ CONTAINER_TAGS = frozenset({
     "body", "div", "center", "table", "tbody", "tr", "td",
     "font", "span", "ul", "ol", "li",
 })
-HEADERS = {"User-Agent": "AskTheChurchFathers/1.0 (educational project)"}
+HEADERS = {"User-Agent": "AskTheEarlyChurch/1.0 (educational project)"}
 SKIP_PREFIXES = ("Please help support", "Source.", "Contact information")
 FOOTER_MARKERS = ("about this page", "copyright")
 SENTENCE_SPLIT = re.compile(r'(?<=[.!?])\s+(?=[A-Z"\'])')

@@ -74,10 +74,11 @@ export default function AboutPage() {
           <section className="about-section">
             <h2 className="about-heading">About the AI Summary</h2>
             <p className="about-text">
-              The synthesis feature is a guide, not a final answer. It pulls
-              together passages related to your search so you can see patterns
-              and follow up in the texts. Always read the sources yourself and
-              do not trust the AI completely. It will get things wrong sometimes.
+              An AI synthesis feature is fully built and ready to go, but
+              disabled for now due to API costs. Once funding is in place, it
+              will pull together passages related to your search so you can see
+              patterns and follow up in the texts. For now, read through the
+              search results and explore the full works in the reader.
             </p>
           </section>
         </article>
