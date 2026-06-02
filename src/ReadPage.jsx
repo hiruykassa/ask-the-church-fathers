@@ -362,7 +362,7 @@ export default function ReadPage() {
                           {displayChapterName(p.header, i)}
                         </h2>
                       )}
-                      <p
+                      <div
                         id={`passage-${i + 1}`}
                         className={cls}
                         ref={el => passageRefs.current[i] = el}
@@ -372,7 +372,7 @@ export default function ReadPage() {
                         {isCouncil && variant !== 'rubric'
                           ? renderCouncilText(p.text)
                           : <FormattedPassage text={p.text} />}
-                      </p>
+                      </div>
                     </div>
                   )
                 })}

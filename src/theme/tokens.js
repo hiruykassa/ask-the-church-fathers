@@ -45,12 +45,12 @@ export const themes = {
     borderSoft: '#f2ece4',
     sectionBorder: 'rgba(92, 70, 54, 0.12)',
 
-    text: '#000000',
-    textHeading: '#000000',
-    textMd: '#000000',
-    textDim: '#333333',
-    textFaint: '#555555',
-    textMeta: '#1a1a1a',
+    text: '#211a12',
+    textHeading: '#1a140d',
+    textMd: '#2a2118',
+    textDim: '#4a3f33',
+    textFaint: '#6b5d4b',
+    textMeta: '#2a2118',
 
     heroGlow: 'rgba(92, 70, 54, 0.04)',
     heroGlowGold: 'rgba(196, 160, 53, 0.05)',
@@ -139,10 +139,10 @@ export const tokens = {
 function shadow(level, shadowColor, mode = 'light') {
   const darkBoost = mode === 'dark' ? 2.2 : 1
   const maps = {
-    xs: `0 1px 2px rgba(${shadowColor},${0.05 * darkBoost})`,
-    sm: `0 2px 8px rgba(${shadowColor},${0.14 * darkBoost}), 0 1px 2px rgba(${shadowColor},${0.08 * darkBoost})`,
-    md: `0 10px 28px rgba(${shadowColor},${0.22 * darkBoost}), 0 2px 8px rgba(${shadowColor},${0.12 * darkBoost})`,
-    lg: `0 20px 52px rgba(${shadowColor},${0.32 * darkBoost}), 0 4px 14px rgba(${shadowColor},${0.18 * darkBoost})`,
+    xs: `0 1px 2px rgba(${shadowColor},${0.04 * darkBoost})`,
+    sm: `0 2px 6px rgba(${shadowColor},${0.09 * darkBoost}), 0 1px 2px rgba(${shadowColor},${0.05 * darkBoost})`,
+    md: `0 8px 24px rgba(${shadowColor},${0.14 * darkBoost}), 0 2px 6px rgba(${shadowColor},${0.07 * darkBoost})`,
+    lg: `0 18px 44px rgba(${shadowColor},${0.20 * darkBoost}), 0 4px 12px rgba(${shadowColor},${0.12 * darkBoost})`,
   }
   return maps[level]
 }

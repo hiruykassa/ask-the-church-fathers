@@ -462,6 +462,26 @@ html[data-theme='light'] .hero-cross-img {
   font-weight: 400;
 }
 
+/* — Larger, calmer search bar when used as the hero focal point — */
+.search-section.is-hero .search-bar {
+  border-radius: 14px;
+  box-shadow: var(--shadow-md);
+}
+.search-section.is-hero .search-input {
+  padding: 21px 0;
+  font-size: 1.12rem;
+}
+.search-section.is-hero .search-input::placeholder {
+  font-size: 1.14rem;
+}
+.search-section.is-hero .search-icon {
+  font-size: 1.2rem;
+  margin: 0 20px;
+}
+.search-section.is-hero .search-btn {
+  padding: 0 34px;
+}
+
 .search-hint {
   font-family: 'Crimson Text', serif;
   font-size: 0.88rem;

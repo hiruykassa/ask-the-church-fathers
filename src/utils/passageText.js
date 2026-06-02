@@ -63,13 +63,19 @@ export function sanitizePassageHtml(html) {
       return Array.from(node.childNodes).map(walk).join('')
     }
     if (tag === 'BR') return '<br>'
-    const cls = tag === 'SPAN' && node.classList.contains('pg')
-      ? node.getAttribute('title')
-        ? ` class="pg" title="${node.getAttribute('title').replace(/"/g, '&quot;')}"`
-        : ' class="pg"'
-      : ''
+    if (tag === 'SPAN') {
+      if (!node.classList.contains('pg')) {
+        return Array.from(node.childNodes).map(walk).join('')
+      }
+      const title = node.getAttribute('title')
+      const titleAttr = title
+        ? ` title="${title.replace(/"/g, '&quot;')}"`
+        : ''
+      const inner = Array.from(node.childNodes).map(walk).join('')
+      return `<span class="pg"${titleAttr}>${inner}</span>`
+    }
     const inner = Array.from(node.childNodes).map(walk).join('')
-    return `<${tag.toLowerCase()}${cls}>${inner}</${tag.toLowerCase()}>`
+    return `<${tag.toLowerCase()}>${inner}</${tag.toLowerCase()}>`
   }
 
   return Array.from(doc.body.childNodes).map(walk).join('')

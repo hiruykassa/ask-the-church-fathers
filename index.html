@@ -8,21 +8,7 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#5c4636" />
     <title>Ask the Early Church</title>
-    <script>
-      try {
-        var mode = localStorage.getItem('atcf-color-mode') === 'dark' ? 'dark' : 'light';
-        var html = document.documentElement;
-        html.setAttribute('data-theme', mode);
-        html.style.colorScheme = mode;
-        if (mode === 'dark') {
-          html.style.backgroundColor = '#000000';
-          html.style.color = '#fafafa';
-        } else {
-          html.style.backgroundColor = '#f9f5ee';
-          html.style.color = '#000000';
-        }
-      } catch (e) {}
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -30,7 +30,9 @@ tools/corpus/sources/*.pdf
 *.log
 backend/audit*
 
-# Editor
+# Editor / AI tooling (not part of the app)
 .vscode/
 .cursor/
 .idea/
+.claude/
+CURSOR_PROMPT*.md

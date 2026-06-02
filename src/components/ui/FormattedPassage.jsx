@@ -11,7 +11,7 @@ export default function FormattedPassage({ text, className, ...props }) {
   }
 
   return (
-    <span
+    <div
       className={className}
       {...props}
       dangerouslySetInnerHTML={{ __html: sanitizePassageHtml(text) }}

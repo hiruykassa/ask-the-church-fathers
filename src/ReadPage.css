@@ -419,6 +419,13 @@ html[data-theme='dark'] .read-error { color: #e87060; }
   -webkit-user-select: text;
   cursor: default;
 }
+.read-passage p {
+  margin: 0;
+  text-indent: 1.5em;
+}
+.read-passage p:first-child {
+  text-indent: 0;
+}
 .read-passage--highlight,
 .read-passage--saved {
   background: var(--cross-gold-soft);
