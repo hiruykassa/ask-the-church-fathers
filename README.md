@@ -17,6 +17,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 | Area | Status |
 |------|--------|
 | Hybrid search (vector + FTS) | ✅ Working |
+| Search result caching | ✅ In-memory TTL caches (embed, parse, FTS, hybrid) |
 | Graceful API fallback | ✅ Voyage/Haiku down → FTS-only; DB errors → 503 |
 | Rate limiting | ✅ Per-endpoint limits via flask-limiter |
 | CORS / security headers | ✅ Configured; set `ALLOWED_ORIGIN` in prod |
@@ -54,6 +55,8 @@ Sources: primarily [New Advent](https://www.newadvent.org/fathers/) and [CCEL Pe
 
 Search queries are capped at **500 characters** to prevent API abuse.
 
+Repeated queries are served from in-memory TTL caches (default 1 hour): Voyage query embeddings, Haiku parse results, FTS hits, and fused hybrid rankings. Passage vectors are pre-normalized at startup; author passage indexes are preloaded (no per-search DB lookup). Tune via env vars: `SEARCH_CACHE_TTL_SEC`, `EMBED_CACHE_SIZE`, `PARSE_CACHE_SIZE`, `HYBRID_CACHE_SIZE`, `FTS_CACHE_SIZE`. Cache hit rates are exposed on `/api/health`.
+
 ### AI Synthesis (disabled)
 
 AI synthesis streams a historian-style summary via Claude Sonnet. It is implemented but disabled for launch to control API costs.
@@ -69,10 +72,12 @@ Click any passage to open the full work with scroll progress, table of contents,
 ```
 Browser (React 18 + Vite, localhost:5173)
     │
-    │  HTTP
+    │  Dev: same-origin /api/* (Vite proxies → Flask :5001)
+    │  Prod: VITE_API_URL or direct backend URL
     ▼
 Flask API (localhost:5001)  ← use gunicorn in production
     │
+    ├── search_cache.py ── TTL LRU caches (embed, parse, FTS, hybrid)
     ├── flask-limiter ── rate limits per endpoint
     ├── Claude Haiku ── query parsing (author + topic)
     ├── Voyage AI ───── query embedding
@@ -94,7 +99,7 @@ The API is a **public read-only** service (no authentication). Protections in pl
 |---------|--------|
 | **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages 30/min |
 | **Query length cap** | 500 chars max on search |
-| **CORS** | Locked to `ALLOWED_ORIGIN` (defaults to `http://localhost:5173` in dev with a log warning) |
+| **CORS** | Locked to `ALLOWED_ORIGIN`; in dev, both `localhost` and `127.0.0.1` variants are allowed |
 | **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, etc. |
 | **HTML sanitization** | Passage renderer strips all attributes except page-mark spans (`class="pg"`, `title`) |
 | **Graceful degradation** | Voyage or Haiku failure never returns 500; falls back to FTS |
@@ -124,6 +129,7 @@ ask-the-early-church/
 │
 ├── backend/
 │   ├── app.py                  # Flask API — search, library, security middleware
+│   ├── search_cache.py         # Thread-safe TTL LRU caches for search hot paths
 │   ├── utils.py                # Text cleaning, vector helpers
 │   ├── database.py             # Schema creation + FTS index
 │   ├── embed_passages.py       # Batch: Voyage voyage-3 embeddings
@@ -157,7 +163,7 @@ ask-the-early-church/
 | Method | Endpoint | Rate limit | Description |
 |--------|----------|------------|-------------|
 | GET | `/api/search?q=` | 10/min | Hybrid search. Returns `{ results, author, keywords, author_only }`. |
-| GET | `/api/health` | 60/min | `{ status: "ok" }` |
+| GET | `/api/health` | 60/min | `{ status, embeddings_loaded, cache: { embed, parse, hybrid, fts } }` |
 | GET | `/api/library` | 60/min | Full catalog by section |
 | GET | `/api/authors` | 60/min | All authors |
 | GET | `/api/authors/:id/works` | 30/min | Works for one author |
@@ -171,6 +177,8 @@ Errors: `400` query too long · `429` rate limited · `503` database unavailable
 
 ## Getting Started
 
+Run **both** the backend and frontend. The backend loads passage embeddings into RAM on startup (often 10–15 seconds); wait until you see `Running on http://127.0.0.1:5001` before expecting search or the full library catalog.
+
 ### Backend
 
 ```bash
@@ -179,7 +187,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python database.py          # creates schema (first time)
-python app.py               # dev — http://localhost:5001
+python app.py               # dev — http://127.0.0.1:5001
 ```
 
 Create `backend/.env`:
@@ -188,6 +196,16 @@ Create `backend/.env`:
 ANTHROPIC_API_KEY=sk-ant-...
 VOYAGE_API_KEY=...
 ALLOWED_ORIGIN=http://localhost:5173
+```
+
+Optional cache tuning (defaults are fine for local dev):
+
+```
+SEARCH_CACHE_TTL_SEC=3600
+EMBED_CACHE_SIZE=1024
+PARSE_CACHE_SIZE=512
+HYBRID_CACHE_SIZE=512
+FTS_CACHE_SIZE=512
 ```
 
 ### Populate the database
@@ -220,7 +238,11 @@ npm install
 npm run dev                   # http://localhost:5173
 ```
 
-Set `VITE_API_URL` if the backend is not at `http://localhost:5001`.
+In development, the app calls `/api/...` on the same origin; **Vite proxies** those requests to Flask on port 5001 (`vite.config.js`), so you do not need `VITE_API_URL` locally.
+
+For production builds, set `VITE_API_URL` to your deployed API origin (e.g. `https://api.example.com`).
+
+The home page **retries** `/api/library` a few times if the backend is still starting, then falls back to a shortened static catalog with a notice.
 
 ---
 
@@ -240,11 +262,13 @@ After `clean_editorial_notes.py` or `--repair-text` changes passage text, delete
 
 - [x] Pre-Chalcedon corpus (~107k passages, 125 authors)
 - [x] Hybrid search (Voyage embeddings + FTS5 reciprocal rank fusion)
+- [x] Search hot-path caching + preloaded author passage index
 - [x] Haiku query parsing with API fallback
 - [x] Author-only search → works list
 - [x] Security hardening (rate limits, CSP, CORS, query cap, HTML sanitization)
 - [x] Incremental corpus scripts (Cyril letters, Ephesus 449, missing Fathers)
 - [x] Book reader, dark mode, saved passages (localStorage)
+- [x] Dev Vite `/api` proxy + library fetch retry
 - [x] AI synthesis (disabled for launch)
 
 ### Next

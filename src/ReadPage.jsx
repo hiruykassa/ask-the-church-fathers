@@ -6,10 +6,9 @@ import ThemeToggle from './components/ui/ThemeToggle'
 import FormattedPassage from './components/ui/FormattedPassage'
 import useSavedPassages from './hooks/useSavedPassages'
 import { stripHtml, hasPassageHtml } from './utils/passageText'
+import { API_BASE } from './api/client'
 import './App.css'
 import './ReadPage.css'
-
-const API = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:5001'
 
 const LITURGY_ROLES = /\b(priest|deacon|people|bishop|reader|choir|singer|catechumen)\b/i
 const RUBRIC_STARTS = /^(prayer of|then the|after the|before the|\(aloud)/i
@@ -67,7 +66,7 @@ export default function ReadPage() {
     if (scrollTarget == null) {
       window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' })
     }
-    fetch(`${API}/api/works/${workId}`)
+    fetch(`${API_BASE}/api/works/${workId}`)
       .then(r => {
         if (!r.ok) throw new Error('Work not found')
         return r.json()

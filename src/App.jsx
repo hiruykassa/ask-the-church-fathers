@@ -71,40 +71,52 @@ export default function App() {
   }
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/library`)
-      .then(res => {
-        if (!res.ok) throw new Error('Library fetch failed')
-        return res.json()
-      })
-      .then(data => {
-        const sections = data.sections || {}
-        const fatherEntries = (sections.Father || []).map(a => ({
-          name: a.name,
-          dates: formatDates(a.born, a.died),
-          works: a.works,
-        }))
-        fatherEntries.sort((a, b) => a.name.localeCompare(b.name))
-        setLiveFathers(fatherEntries)
+    let cancelled = false
 
-        const otherSections = Object.keys(SECTION_TITLES)
-          .filter(key => sections[key] && sections[key].length > 0)
-          .map(key => ({
-            id: key.toLowerCase(),
-            title: SECTION_TITLES[key],
-            entries: sections[key].map(a => ({
-              name: a.name,
-              works: a.works,
-            })),
+    const loadLibrary = (attempt = 0) => {
+      fetch(`${API_BASE}/api/library`)
+        .then(res => {
+          if (!res.ok) throw new Error('Library fetch failed')
+          return res.json()
+        })
+        .then(data => {
+          if (cancelled) return
+          const sections = data.sections || {}
+          const fatherEntries = (sections.Father || []).map(a => ({
+            name: a.name,
+            dates: formatDates(a.born, a.died),
+            works: a.works,
           }))
-        setLiveSections(otherSections)
-        setLibraryError(false)
-      })
-      .catch(() => {
-        setLibraryError(true)
-      })
-      .finally(() => {
-        setLibraryLoading(false)
-      })
+          fatherEntries.sort((a, b) => a.name.localeCompare(b.name))
+          setLiveFathers(fatherEntries)
+
+          const otherSections = Object.keys(SECTION_TITLES)
+            .filter(key => sections[key] && sections[key].length > 0)
+            .map(key => ({
+              id: key.toLowerCase(),
+              title: SECTION_TITLES[key],
+              entries: sections[key].map(a => ({
+                name: a.name,
+                works: a.works,
+              })),
+            }))
+          setLiveSections(otherSections)
+          setLibraryError(false)
+          setLibraryLoading(false)
+        })
+        .catch(() => {
+          if (cancelled) return
+          if (attempt < 4) {
+            setTimeout(() => loadLibrary(attempt + 1), 2000)
+            return
+          }
+          setLibraryError(true)
+          setLibraryLoading(false)
+        })
+    }
+
+    loadLibrary()
+    return () => { cancelled = true }
   }, [])
 
   /**
@@ -221,6 +233,8 @@ export default function App() {
   return (
     <div className="page page-fade">
 
+      <a className="skip-link" href="#main-content">Skip to content</a>
+
       {/* HEADER */}
       <header className="site-header">
         <div className="site-header-spacer" />
@@ -289,11 +303,17 @@ export default function App() {
                 <span className="search-home-label">Library</span>
               </button>
             )}
-            <div className="search-bar">
-              <IoSearch className="search-icon" />
+            <div className="search-bar" role="search">
+              <IoSearch className="search-icon" aria-hidden="true" />
+              <label htmlFor="site-search" className="sr-only">
+                Search the early Church Fathers by topic, father, or keyword
+              </label>
               <input
+                id="site-search"
                 className="search-input"
-                type="text"
+                type="search"
+                enterKeyHint="search"
+                autoComplete="off"
                 placeholder="Search by topic, father, or keyword..."
                 value={query}
                 onChange={e => setQuery(e.target.value)}
@@ -306,7 +326,7 @@ export default function App() {
       </section>
 
       {/* MAIN CONTENT */}
-      <main className="main">
+      <main className="main" id="main-content" tabIndex={-1}>
         <div key={view + (searched ? ':r' : ':h')} className="view-fade">
 
           {/* Saved passages tab */}

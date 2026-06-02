@@ -6,12 +6,40 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#5c4636" />
-    <title>Ask the Early Church</title>
+    <meta name="theme-color" content="#5c4636" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14100c" media="(prefers-color-scheme: dark)" />
+    <title>Ask the Early Church — Search the Church Fathers</title>
+    <meta
+      name="description"
+      content="Search the writings of the early Church Fathers by topic, father, or keyword. A free library of patristic texts — councils, liturgies, and the Fathers of the Church."
+    />
+
+    <!-- Open Graph / social sharing -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ask the Early Church" />
+    <meta
+      property="og:description"
+      content="Search the writings of the early Church Fathers by topic, father, or keyword."
+    />
+    <meta property="og:image" content="/apple-touch-icon.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Ask the Early Church" />
+    <meta
+      name="twitter:description"
+      content="Search the writings of the early Church Fathers by topic, father, or keyword."
+    />
+    <meta name="twitter:image" content="/apple-touch-icon.png" />
+
     <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width:42rem;margin:4rem auto;padding:0 1.5rem;font-family:Georgia,serif;line-height:1.6;text-align:center;color:#211a12;">
+        <h1 style="font-size:1.5rem;">Ask the Early Church</h1>
+        <p>This site needs JavaScript enabled to search the writings of the early Church Fathers. Please enable JavaScript in your browser to continue.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

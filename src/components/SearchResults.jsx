@@ -20,7 +20,7 @@ export default function SearchResults({
   return (
     <div className="search-results">
       <div className="results-meta">
-        <span className="results-count">
+        <span className="results-count" role="status" aria-live="polite">
           {searching ? 'Searching…' : `${total} result${total !== 1 ? 's' : ''}`}
         </span>
         {authorFilter && (

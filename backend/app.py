@@ -35,6 +35,7 @@ import voyageai
 import numpy as np
 
 from utils import strip_html, remove_scripture_refs, cosine_similarity, unpack_vector
+from search_cache import embed_cache, parse_cache, hybrid_cache, fts_cache
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,11 @@ load_dotenv()
 
 voyage_client = voyageai.Client(api_key=os.getenv("VOYAGE_API_KEY"))
 
+# Reuse a single Anthropic client across requests so the underlying HTTP
+# connection pool (TLS handshakes, keep-alive) is shared instead of rebuilt
+# on every search. The client is thread-safe.
+anthropic_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
 
 def get_db_connection():
     """SQLite connection with WAL and 60s busy timeout (safe under concurrent reads)."""
@@ -67,52 +73,120 @@ def get_db_connection():
 
 
 def _load_embeddings():
-    """Load all passage embeddings into RAM once at startup."""
+    """Load passage embeddings into RAM as pre-normalized float32 vectors."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT passage_id, vector FROM embeddings")
+        cursor.execute("SELECT passage_id, vector FROM embeddings ORDER BY passage_id")
         rows = cursor.fetchall()
+        if not rows:
+            return [], np.empty((0, 0), dtype=np.float32), {}
         ids = [row[0] for row in rows]
-        vecs = np.array([unpack_vector(row[1]) for row in rows])
-        return ids, vecs
+        vecs = np.array([unpack_vector(row[1]) for row in rows], dtype=np.float32)
+        norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+        norms = np.maximum(norms, 1e-10)
+        vecs_norm = vecs / norms
+        id_to_idx = {pid: idx for idx, pid in enumerate(ids)}
+        return ids, vecs_norm, id_to_idx
     finally:
         conn.close()
 
 
-# Populated at import; empty until embed_passages.py has run
-PASSAGE_IDS, PASSAGE_VECS = _load_embeddings()
+def _load_author_passage_index():
+    """Map author name -> set of passage ids (built once at startup)."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT authors.name, passages.id
+            FROM passages
+            JOIN works ON passages.work_id = works.id
+            JOIN authors ON works.author_id = authors.id
+            """
+        )
+        index = {}
+        for name, passage_id in cursor.fetchall():
+            index.setdefault(name, set()).add(passage_id)
+        return index
+    finally:
+        conn.close()
 
 
-def vector_search(query, limit=100, allowed_ids=None):
-    """Embed the query, score cached passage vectors, return top (id, score) pairs."""
-    if len(PASSAGE_VECS) == 0:
-        return []
+PASSAGE_IDS, PASSAGE_VECS, PASSAGE_ID_TO_IDX = _load_embeddings()
+AUTHOR_PASSAGE_INDEX = _load_author_passage_index()
+
+
+def _cache_key(*parts):
+    return "|".join((part or "").strip().lower() for part in parts)
+
+
+def _top_k_indices(scores, limit):
+    """Return indices of the top `limit` scores (highest first)."""
+    count = scores.shape[0]
+    if count == 0:
+        return np.array([], dtype=np.intp)
+    k = min(limit, count)
+    if count <= k:
+        return np.argsort(scores)[::-1]
+    top = np.argpartition(scores, -k)[-k:]
+    return top[np.argsort(scores[top])[::-1]]
+
+
+def _embed_query_vector(query):
+    """Return a unit-normalized query vector, using the embed cache when possible."""
+    key = _cache_key(query)
+    cached = embed_cache.get(key)
+    if cached is not None:
+        return cached
 
     try:
         result = voyage_client.embed([query], model="voyage-3")
     except Exception as exc:
         log.warning("Voyage embed failed: %s", exc)
+        return None
+
+    vec = np.array(result.embeddings[0], dtype=np.float32)
+    norm = float(np.linalg.norm(vec))
+    if norm == 0:
+        return None
+    vec = vec / norm
+    embed_cache.set(key, vec)
+    return vec
+
+
+def vector_search(query, limit=100, allowed_ids=None):
+    """Score pre-normalized passage vectors; uses embed cache and partial top-k."""
+    if PASSAGE_VECS.shape[0] == 0:
         return []
 
-    query_vec = np.array(result.embeddings[0])
-    query_norm = np.linalg.norm(query_vec)
-    if query_norm == 0:
+    query_vec = _embed_query_vector(query)
+    if query_vec is None:
         return []
-
-    vec_norms = np.linalg.norm(PASSAGE_VECS, axis=1)
-    scores = np.dot(PASSAGE_VECS, query_vec) / (vec_norms * query_norm)
 
     if allowed_ids is not None:
-        allowed = np.array([pid in allowed_ids for pid in PASSAGE_IDS])
-        scores = np.where(allowed, scores, -np.inf)
+        indices = np.array(
+            [PASSAGE_ID_TO_IDX[pid] for pid in allowed_ids if pid in PASSAGE_ID_TO_IDX],
+            dtype=np.intp,
+        )
+        if indices.size == 0:
+            return []
+        scores = PASSAGE_VECS[indices] @ query_vec
+        top_local = _top_k_indices(scores, limit)
+        return [(PASSAGE_IDS[indices[i]], float(scores[i])) for i in top_local]
 
-    top_idx = np.argsort(scores)[::-1][:limit]
-    return [(PASSAGE_IDS[i], float(scores[i])) for i in top_idx if scores[i] > -np.inf]
+    scores = PASSAGE_VECS @ query_vec
+    top_idx = _top_k_indices(scores, limit)
+    return [(PASSAGE_IDS[i], float(scores[i])) for i in top_idx]
 
 
 def fts_search(query, limit=100, author=None):
     """Keyword search via FTS5 BM25; lower score is better."""
+    cache_key = _cache_key("fts", query, author)
+    cached = fts_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     fts_q = prepare_fts_query(query)
     if not fts_q:
         return []
@@ -148,7 +222,9 @@ def fts_search(query, limit=100, author=None):
                 """,
                 (fts_q, limit),
             )
-        return [(row[0], float(row[1])) for row in cursor.fetchall()]
+        hits = [(row[0], float(row[1])) for row in cursor.fetchall()]
+        fts_cache.set(cache_key, hits)
+        return hits
     except sqlite3.Error as exc:
         log.warning("FTS search failed: %s", exc)
         return []
@@ -158,27 +234,17 @@ def fts_search(query, limit=100, author=None):
 
 
 def _author_passage_ids(author):
-    """Passage ids belonging to one author (for scoped vector ranking)."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT passages.id
-            FROM passages
-            JOIN works ON passages.work_id = works.id
-            JOIN authors ON works.author_id = authors.id
-            WHERE LOWER(authors.name) = LOWER(?)
-            """,
-            (author,),
-        )
-        return {row[0] for row in cursor.fetchall()}
-    finally:
-        conn.close()
+    """Passage ids for one author (preloaded index, no DB round-trip)."""
+    return AUTHOR_PASSAGE_INDEX.get(author, set())
 
 
 def hybrid_search(search_text, author=None, limit=100):
     """Merge vector and FTS rankings (reciprocal rank fusion)."""
+    cache_key = _cache_key("hybrid", search_text, author)
+    cached = hybrid_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     allowed_ids = _author_passage_ids(author) if author else None
     vector_hits = vector_search(search_text, limit=limit, allowed_ids=allowed_ids)
     fts_hits = fts_search(search_text, limit=limit, author=author)
@@ -193,7 +259,9 @@ def hybrid_search(search_text, author=None, limit=100):
         fused[pid] = fused.get(pid, 0.0) + 1.0 / (60 + rank + 1)
 
     ranked = sorted(fused.items(), key=lambda item: item[1], reverse=True)
-    return [pid for pid, _ in ranked[:limit]]
+    passage_ids = [pid for pid, _ in ranked[:limit]]
+    hybrid_cache.set(cache_key, passage_ids)
+    return passage_ids
 
 
 def _load_author_names():
@@ -242,31 +310,49 @@ def resolve_author_name(candidate, author_names):
     return None
 
 
-def parse_user_query(raw_query, author_names):
-    """Use Haiku to split natural language into author filter + topic keywords."""
+def _build_parse_system_prompt(author_names):
+    """Static instruction + author roster sent on every parse (cacheable)."""
     names_list = "\n".join(f"- {n}" for n in author_names)
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    return (
+        "You parse natural-language search queries for a library of the early "
+        "Church Fathers.\n\n"
+        "Authors in the database (if a Father is mentioned, you MUST use the "
+        "exact spelling from this list; otherwise use none):\n"
+        f"{names_list}\n\n"
+        "Extract two things:\n"
+        "1. author: — exact name from the list above, or none if no specific Father "
+        "is named.\n"
+        "2. keywords: — only the theological topic words (strip filler like "
+        "\"what did\", \"teach about\", \"the early church\"). If there is no "
+        "topic, use none.\n\n"
+        "Respond with exactly two lines, nothing else:\n"
+        "author: <name or none>\n"
+        "keywords: <topic words or none>"
+    )
 
-    response = client.messages.create(
+
+# Built once: the instruction block + author roster never change at runtime.
+PARSE_SYSTEM_PROMPT = _build_parse_system_prompt(AUTHOR_NAMES)
+
+
+def parse_user_query(raw_query, author_names):
+    """Use Haiku to split natural language into author filter + topic keywords.
+
+    The static instruction + author roster is sent as a cached system prompt so
+    only the short user query varies between calls (prompt caching kicks in once
+    the roster crosses the model's minimum cacheable length).
+    """
+    response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=150,
+        system=[{
+            "type": "text",
+            "text": PARSE_SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }],
         messages=[{
             "role": "user",
-            "content": (
-                f"User search query: {raw_query}\n\n"
-                "Authors in the database (if a Father is mentioned, you MUST use the "
-                "exact spelling from this list; otherwise use none):\n"
-                f"{names_list}\n\n"
-                "Extract two things:\n"
-                "1. author: — exact name from the list above, or none if no specific Father "
-                "is named.\n"
-                "2. keywords: — only the theological topic words (strip filler like "
-                "\"what did\", \"teach about\", \"the early church\"). If there is no "
-                "topic, use none.\n\n"
-                "Respond with exactly two lines, nothing else:\n"
-                "author: <name or none>\n"
-                "keywords: <topic words or none>"
-            ),
+            "content": f"User search query: {raw_query}",
         }],
     )
     res = response.content[0].text
@@ -282,11 +368,19 @@ def parse_user_query(raw_query, author_names):
 
 def parse_user_query_safe(raw_query, author_names):
     """Parse query via Haiku; on failure use raw query as keywords with no author filter."""
+    cache_key = _cache_key("parse", raw_query)
+    cached = parse_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
-        return parse_user_query(raw_query, author_names)
+        parsed = parse_user_query(raw_query, author_names)
     except Exception as exc:
         log.warning("Query parse failed: %s", exc)
-        return {"author": "none", "keywords": raw_query}
+        parsed = {"author": "none", "keywords": raw_query}
+
+    parse_cache.set(cache_key, parsed)
+    return parsed
 
 
 def _fetch_search_results(passage_ids, author=None):
@@ -330,13 +424,30 @@ if not allowed_origin:
     allowed_origin = "http://localhost:5173"
     log.warning("ALLOWED_ORIGIN not set — defaulting to localhost (dev mode)")
 
-CORS(app, origins=[allowed_origin])
+_cors_origins = [allowed_origin]
+if allowed_origin.startswith("http://localhost:"):
+    _cors_origins.append(allowed_origin.replace("http://localhost:", "http://127.0.0.1:"))
+elif allowed_origin.startswith("http://127.0.0.1:"):
+    _cors_origins.append(allowed_origin.replace("http://127.0.0.1:", "http://localhost:"))
+
+CORS(app, origins=_cors_origins)
+
+# In-memory storage is per-process: under multi-worker gunicorn each worker
+# keeps its own counters, so the real limit becomes N× looser. Point
+# RATELIMIT_STORAGE_URI at a shared store (e.g. redis://…) in production so the
+# limits hold across all workers.
+ratelimit_storage = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
+if ratelimit_storage == "memory://":
+    log.warning(
+        "RATELIMIT_STORAGE_URI not set — using per-process memory store. "
+        "Rate limits will not be shared across gunicorn workers."
+    )
 
 limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=["60 per minute"],
-    storage_uri="memory://",
+    storage_uri=ratelimit_storage,
 )
 
 
@@ -367,7 +478,16 @@ def set_security_headers(response):
 @app.route("/api/health")
 def health():
     """Liveness check for deploy and local dev."""
-    return jsonify({"status": "ok"})
+    return jsonify({
+        "status": "ok",
+        "embeddings_loaded": PASSAGE_VECS.shape[0],
+        "cache": {
+            "embed": {"hits": embed_cache.hits, "misses": embed_cache.misses},
+            "parse": {"hits": parse_cache.hits, "misses": parse_cache.misses},
+            "hybrid": {"hits": hybrid_cache.hits, "misses": hybrid_cache.misses},
+            "fts": {"hits": fts_cache.hits, "misses": fts_cache.misses},
+        },
+    })
 
 
 @app.route("/api/search")
@@ -624,5 +744,7 @@ def get_author_works(author_id):
 
 if __name__ == "__main__":
     # DEV ONLY — use gunicorn in production:
+    #   RATELIMIT_STORAGE_URI=redis://localhost:6379 \
     #   gunicorn -w 4 -b 0.0.0.0:5001 app:app
+    # (set a shared RATELIMIT_STORAGE_URI so rate limits hold across workers)
     app.run(debug=False, port=5001)
