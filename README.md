@@ -22,6 +22,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 | Rate limiting | ✅ Per-endpoint limits via flask-limiter |
 | CORS / security headers | ✅ Configured; set `ALLOWED_ORIGIN` in prod |
 | AI synthesis | ⏸ Built, disabled (API cost) |
+| SEO (sitemap, topic pages, meta) | ✅ Ready — regenerate before deploy |
 | Production deploy | ❌ Not yet |
 
 ### Corpus snapshot (local `database.db`)
@@ -144,7 +145,9 @@ ask-the-early-church/
 │   ├── store_keys_in_keychain.sh  # Run yourself — stores keys in macOS Keychain
 │   └── database.db             # NOT committed
 │
-├── tools/corpus/
+├── tools/
+│   ├── generate_seo.py         # Build sitemap + topic pages from database.db
+│   └── corpus/
 │   ├── etl.py                  # Full scrape (wipes DB — use with care)
 │   ├── add_missing_fathers.py  # Incremental authors: Macarius, Melito, Epiphanius, Cyril
 │   ├── add_missing_works.py    # Incremental works for existing authors: Basil
@@ -157,6 +160,9 @@ ask-the-early-church/
 │
 ├── src/                        # React frontend
 ├── public/
+│   ├── robots.txt              # Crawler rules (regenerate with generate:seo)
+│   ├── sitemap.xml             # All work + topic URLs (regenerate with generate:seo)
+│   ├── seo/topics.json         # Topic page content from database
 │   └── theme-init.js           # Theme flash prevention (external script for CSP)
 ├── index.html
 ├── package.json
@@ -275,6 +281,42 @@ etl.py  →  add_* scripts  →  deep_clean.py  →  [clean_editorial_notes.py] 
 
 ---
 
+## SEO (Google search)
+
+The search box alone is not indexable. This repo ships crawlable assets generated from `database.db`:
+
+| Asset | Purpose |
+|-------|---------|
+| `public/sitemap.xml` | All `/read/:workId` URLs + topic pages (417 works, 8 topics) |
+| `public/robots.txt` | Points crawlers at the sitemap |
+| `public/seo/topics.json` | Content for `/topics/:slug` landing pages |
+| Per-route `<title>` / meta | Home, read, about, contact, topics |
+
+**Topic pages** (examples):
+
+- `/topics/cyril-incarnation` — “What Did Saint Cyril Teach on the Incarnation?”
+- `/topics/athanasius-incarnation`, `/topics/augustine-grace`, … (see `/topics`)
+
+**Regenerate** after corpus changes or when your domain is known:
+
+```bash
+# Default site URL is https://asktheearlychurch.com — override at deploy:
+SITE_URL=https://your-domain.com npm run generate:seo
+
+# Production build should use the same domain:
+VITE_SITE_URL=https://your-domain.com npm run build
+```
+
+**After deploy:**
+
+1. Register the site in [Google Search Console](https://search.google.com/search-console)
+2. Submit `https://your-domain.com/sitemap.xml`
+3. Request indexing for `/topics/cyril-incarnation` and other priority URLs
+
+Ranking for competitive queries (e.g. “what did Cyril teach on the incarnation”) takes time and backlinks; topic pages give Google real text from your corpus instead of an empty SPA shell.
+
+---
+
 ## Roadmap
 
 ### Done
@@ -291,11 +333,12 @@ etl.py  →  add_* scripts  →  deep_clean.py  →  [clean_editorial_notes.py] 
 - [x] Book reader, dark mode, saved passages (localStorage)
 - [x] Dev Vite `/api` proxy + library fetch retry
 - [x] AI synthesis (disabled for launch)
+- [x] SEO: sitemap, robots.txt, topic landing pages, dynamic meta tags, SearchAction JSON-LD
 
 ### Next
 
 - [ ] Run the Haiku editorial-framing pass (`clean_editorial_notes.py`) corpus-wide, then re-embed changed passages
-- [ ] Production deploy (frontend + backend + persistent SQLite)
+- [ ] Production deploy (frontend + backend + persistent SQLite) + Search Console sitemap submit
 - [ ] Re-enable AI synthesis when budget allows
 - [ ] Synthesis result caching
 

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate:seo": "python3 tools/generate_seo.py",
     "build": "vite build",
     "preview": "vite preview"
   },

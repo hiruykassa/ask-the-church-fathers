@@ -1,10 +1,16 @@
 import { IoMailOutline, IoLogoGithub } from 'react-icons/io5'
 import SiteHeader from './components/layout/SiteHeader'
 import SiteFooter from './components/layout/SiteFooter'
+import { usePageMeta } from './hooks/usePageMeta'
 import './App.css'
 import './AboutPage.css'
 
 export default function ContactPage() {
+  usePageMeta({
+    title: 'Contact — Ask the Early Church',
+    description: 'Contact Ask the Early Church — report issues, suggest works, or get in touch.',
+    path: '/contact',
+  })
   return (
     <div className="page page-fade">
       <SiteHeader />

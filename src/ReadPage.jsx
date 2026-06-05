@@ -7,6 +7,7 @@ import FormattedPassage from './components/ui/FormattedPassage'
 import useSavedPassages from './hooks/useSavedPassages'
 import { stripHtml, hasPassageHtml } from './utils/passageText'
 import { API_BASE } from './api/client'
+import { usePageMeta } from './hooks/usePageMeta'
 import './App.css'
 import './ReadPage.css'
 
@@ -53,6 +54,15 @@ export default function ReadPage() {
   const [scrollHighlightId, setScrollHighlightId] = useState(null)
 
   const scrollTarget = location.state?.scrollToPassage ?? null
+
+  usePageMeta(work ? {
+    title: `${work.title} — ${work.author} | Ask the Early Church`,
+    description: `Read ${work.title} by ${work.author}. Primary source from the early Church Fathers library.`,
+    path: `/read/${workId}`,
+  } : {
+    title: 'Read — Ask the Early Church',
+    path: `/read/${workId}`,
+  })
 
   useEffect(() => {
     setScrollHighlightId(scrollTarget != null ? Number(scrollTarget) : null)

@@ -1,9 +1,15 @@
 import SiteHeader from './components/layout/SiteHeader'
 import SiteFooter from './components/layout/SiteFooter'
+import { usePageMeta } from './hooks/usePageMeta'
 import './App.css'
 import './AboutPage.css'
 
 export default function AboutPage() {
+  usePageMeta({
+    title: 'About — Ask the Early Church',
+    description: 'Who built Ask the Early Church and why — a free patristic library for searching the early Church Fathers.',
+    path: '/about',
+  })
   return (
     <div className="page page-fade">
       <SiteHeader />
