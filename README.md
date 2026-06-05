@@ -12,7 +12,9 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 **Local development: fully functional.** Start the Flask backend and Vite frontend, search the corpus, and read full works in the book reader.
 
-**Not yet deployed to production.** The backend is security-hardened for deployment, but hosting, persistent disk for `database.db`, and production env vars still need to be configured.
+**Production today:** frontend on **Netlify**, backend on **Render** (Docker). Domain target: **[asktheearlychurch.com](https://asktheearlychurch.com)**.
+
+**Next hosting milestone (~2–3 months):** migrate to **AWS EC2** with multi-service **Docker Compose**, **GitHub Actions** CI/CD, and **CloudWatch** monitoring. The repo does not yet contain Docker/CI files — that is the immediate prep work before AWS.
 
 | Area | Status |
 |------|--------|
@@ -21,9 +23,10 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 | Graceful API fallback | ✅ Voyage/Haiku down → FTS-only; DB errors → 503 |
 | Rate limiting | ✅ Per-endpoint limits via flask-limiter |
 | CORS / security headers | ✅ Configured; set `ALLOWED_ORIGIN` in prod |
-| AI synthesis | ⏸ Built, disabled (API cost) |
-| SEO (sitemap, topic pages, meta) | ✅ Ready — regenerate before deploy |
-| Production deploy | ❌ Not yet |
+| AI synthesis | ⏸ Built, disabled until API budget allows |
+| SEO (sitemap, topic pages, meta) | ✅ Ready — regenerate with real domain before/at cutover |
+| Production (Netlify + Render) | ✅ Live |
+| Docker in repo + AWS migration | 🚧 Planned |
 
 ### Corpus snapshot (local `database.db`)
 
@@ -70,25 +73,49 @@ Click any passage to open the full work with scroll progress, table of contents,
 
 ## Architecture
 
+### Today (local dev)
+
 ```
 Browser (React 18 + Vite, localhost:5173)
     │
     │  Dev: same-origin /api/* (Vite proxies → Flask :5001)
-    │  Prod: VITE_API_URL or direct backend URL
     ▼
-Flask API (localhost:5001)  ← use gunicorn in production
-    │
-    ├── search_cache.py ── TTL LRU caches (embed, parse, FTS, hybrid)
-    ├── flask-limiter ── rate limits per endpoint
-    ├── Claude Haiku ── query parsing (author + topic)
-    ├── Voyage AI ───── query embedding
-    │
+Flask API (localhost:5001)
     ▼
-SQLite (database.db)
-    ├── authors, works, passages
-    ├── passages_fts (FTS5 — hybrid search + API fallback)
-    └── embeddings (Voyage voyage-3, float32 BLOBs)
+SQLite (database.db) + embeddings in RAM
 ```
+
+### Today (production)
+
+```
+Browser → Netlify (static dist/)
+    │
+    │  VITE_API_URL → Render (Docker, gunicorn)
+    ▼
+SQLite on Render persistent disk + embeddings in RAM
+```
+
+### Target (~2–3 months): AWS EC2
+
+```
+Browser → asktheearlychurch.com
+    ▼
+┌─────────────────────────────────────────────┐
+│  EC2 + docker-compose                      │
+│    nginx   — static frontend + /api proxy   │
+│    api     — gunicorn + Flask               │
+│    redis   — shared rate-limit counters     │
+│  EBS volume — /data/database.db (SQLite)    │
+└─────────────────────────────────────────────┘
+    │
+    ├── GitHub Actions — build & deploy on push to main
+    ├── CloudWatch — logs, CPU/RAM/disk, /api/health alarms
+    └── Secrets — API keys in Keychain (local) / AWS SSM or Secrets Manager (prod)
+```
+
+**Why this shape:** keep SQLite on a persistent EBS volume (simplest migration from Render), run Redis in Compose (fixes multi-worker rate limits without ElastiCache cost), and serve the frontend from the same box behind nginx (one domain, simpler CORS/CSP). Corpus stays **~630 MB**; embeddings load into RAM at startup — plan for **≥ 8 GB RAM** on the instance.
+
+**Budget note:** the project is **free forever** (ministry, not commercial). Current Netlify + Render is the low-cost interim stack. Full AWS EC2 at the recommended size is typically **~$60–80/mo** before transfer; migration timing should match when that fits the budget (or use a smaller instance with reduced gunicorn workers until traffic justifies scaling).
 
 ---
 
@@ -335,18 +362,42 @@ Ranking for competitive queries (e.g. “what did Cyril teach on the incarnation
 - [x] AI synthesis (disabled for launch)
 - [x] SEO: sitemap, robots.txt, topic landing pages, dynamic meta tags, SearchAction JSON-LD
 
-### Next
+### Next (now → AWS cutover)
 
-- [ ] Run the Haiku editorial-framing pass (`clean_editorial_notes.py`) corpus-wide, then re-embed changed passages
-- [ ] Production deploy (frontend + backend + persistent SQLite) + Search Console sitemap submit
-- [ ] Re-enable AI synthesis when budget allows
-- [ ] Synthesis result caching
+- [ ] **Docker in repo** — `Dockerfile`, `docker-compose.yml`, nginx config (source of truth for Render and future EC2)
+- [ ] **Align Render** with repo Docker (move dashboard-only config into git)
+- [ ] **`DATABASE_PATH` env** — configurable SQLite path for EBS mount at `/data/database.db`
+- [ ] **Redis in production** — `RATELIMIT_STORAGE_URI` on Render, then Redis service in Compose on AWS
+- [ ] **GitHub Actions CI** — lint/build on PR; deploy workflow stub ready for EC2
+- [ ] **Regenerate SEO** with `SITE_URL=https://asktheearlychurch.com` and submit sitemap in Search Console
+- [ ] **CloudWatch prep** — structured Flask logs + health-check alarm template in `deploy/`
 
-### Future
+### AWS migration (~2–3 months)
 
-- [ ] User accounts and persistent bookmarks
-- [ ] Filter by era, tradition, or topic
-- [ ] Daily passage email/RSS
+- [ ] Provision EC2 + EBS + security group (SSH, 80/443 only)
+- [ ] Deploy docker-compose (nginx + api + redis)
+- [ ] Cut DNS from Netlify/Render → EC2; TLS via Let's Encrypt (Caddy or certbot)
+- [ ] GitHub Actions: build → deploy to EC2 on push to `main`
+- [ ] CloudWatch: log shipping, disk/memory alarms, synthetic `/api/health` checks
+- [ ] EBS snapshot backup playbook for `database.db`
+- [ ] Staging environment (optional second compose stack or smaller EC2)
+
+### Future (product — after stable AWS hosting)
+
+- [ ] **Re-enable AI synthesis** when API budget allows (with rate limits and optional result caching)
+- [ ] **User accounts** — cloud-saved bookmarks (localStorage-only today)
+- [ ] **Native mobile app** (responsive web is enough for now)
+- [ ] **Corpus additions only on request** — no open-ended scrape expansion by default
+- [ ] Filter search by era, tradition, or document type
+- [ ] More SEO topic pages (programmatic from common search queries)
+- [ ] Daily passage email or RSS
+
+### Explicitly out of scope (for now)
+
+- Paid tiers / freemium — **free forever**
+- RDS / Postgres migration — SQLite on EBS unless scale demands otherwise
+- ElastiCache — Redis in Compose is sufficient at current traffic (medium: ~1k–50k visits/mo)
+- Major corpus expansion (full ANF/NPNF, new languages) unless specifically requested
 
 ---
 
