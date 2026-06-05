@@ -28,16 +28,16 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 | Metric | Count |
 |--------|------:|
-| Authors | 125 |
-| Works | 414 |
-| Passages | ~107,000 |
-| Embeddings | ~108,000 |
+| Authors | 126 |
+| Works | 417 |
+| Passages | ~109,500 |
+| Embeddings | ~109,500 (fully embedded) |
 | Councils | 15 |
 | Liturgies | 3 |
 
-Sources: primarily [New Advent](https://www.newadvent.org/fathers/) and [CCEL Pearse More Fathers](https://www.ccel.org/ccel/pearse/morefathers/) (public-domain translations), plus incremental scrapes from christianwritings.org, ecatholic2000.com, and tertullian.org.
+Sources: primarily [New Advent](https://www.newadvent.org/fathers/) and [CCEL Pearse More Fathers](https://www.ccel.org/ccel/pearse/morefathers/) (public-domain translations), plus incremental scrapes from christianwritings.org, ecatholic2000.com, and tertullian.org, and the [Internet Archive](https://archive.org/details/secondsynodofeph00perruoft) (Perry's 1881 translation of the Second Synod of Ephesus).
 
-**Recently added authors:** Macarius of Egypt, Melito of Sardis, Epiphanius of Salamis (excerpts); Cyril of Alexandria — *Scholia on the Incarnation*.
+**Recently added:** Basil the Great — *Nine Homilies on the Hexaemeron* and 325 *Letters* (was a single work); the **Second Council of Ephesus (449)**, the "Robber Synod," from Perry's translation of the Syriac acts; Macarius of Egypt, Melito of Sardis, Epiphanius of Salamis (excerpts); Cyril of Alexandria — *Scholia on the Incarnation*.
 
 ---
 
@@ -55,7 +55,7 @@ Sources: primarily [New Advent](https://www.newadvent.org/fathers/) and [CCEL Pe
 
 Search queries are capped at **500 characters** to prevent API abuse.
 
-Repeated queries are served from in-memory TTL caches (default 1 hour): Voyage query embeddings, Haiku parse results, FTS hits, and fused hybrid rankings. Passage vectors are pre-normalized at startup; author passage indexes are preloaded (no per-search DB lookup). Tune via env vars: `SEARCH_CACHE_TTL_SEC`, `EMBED_CACHE_SIZE`, `PARSE_CACHE_SIZE`, `HYBRID_CACHE_SIZE`, `FTS_CACHE_SIZE`. Cache hit rates are exposed on `/api/health`.
+Repeated queries are served from in-memory TTL caches (default 1 hour): Voyage query embeddings, Haiku parse results, FTS hits, and fused hybrid rankings. Passage vectors are pre-normalized at startup; author passage indexes are preloaded (no per-search DB lookup). Tune via env vars: `SEARCH_CACHE_TTL_SEC`, `EMBED_CACHE_SIZE`, `PARSE_CACHE_SIZE`, `HYBRID_CACHE_SIZE`, `FTS_CACHE_SIZE`.
 
 ### AI Synthesis (disabled)
 
@@ -108,17 +108,19 @@ The API is a **public read-only** service (no authentication). Protections in pl
 ### Production checklist
 
 ```bash
-# Required env vars (host secret store — never commit .env)
-ANTHROPIC_API_KEY=...
-VOYAGE_API_KEY=...
+# API keys: set in your host's secret store (Railway, Fly, Render, etc.) — never in git.
+PRODUCTION=1
 ALLOWED_ORIGIN=https://your-frontend-domain.com
+RATELIMIT_STORAGE_URI=redis://your-redis-host:6379
 
 # Run with gunicorn, not Flask dev server
 cd backend
 gunicorn -w 4 -b 0.0.0.0:5001 app:app
 ```
 
-Keep `backend/.env` out of git. Rotate API keys if exposed. Monitor rate-limit 429s and Voyage/Anthropic usage in their dashboards.
+`PRODUCTION=1` makes missing `ALLOWED_ORIGIN` a startup error (without it, CORS defaults to localhost and blocks your real domain). `RATELIMIT_STORAGE_URI` shares rate-limit counters across gunicorn workers — without Redis, 4 workers effectively allow 4× the per-route limits.
+
+Monitor rate-limit 429s and Voyage/Anthropic usage in their dashboards.
 
 ---
 
@@ -133,17 +135,22 @@ ask-the-early-church/
 │   ├── utils.py                # Text cleaning, vector helpers
 │   ├── database.py             # Schema creation + FTS index
 │   ├── embed_passages.py       # Batch: Voyage voyage-3 embeddings
-│   ├── clean_editorial_notes.py
+│   ├── clean_editorial_notes.py # Haiku pass: strip modern editorial framing
+│   ├── deep_clean.py           # Surgical text cleanup (empties, junk, boilerplate)
 │   ├── seed.py                 # Tiny dev dataset
-│   ├── requirements.txt        # Pinned deps incl. flask-limiter, gunicorn
-│   ├── .env                    # NOT committed
+│   ├── requirements.txt        # Pinned deps incl. flask-limiter, gunicorn, redis
+│   ├── .env.example            # Non-sensitive config template (no API keys)
+│   ├── load_secrets.py         # Keychain + optional config file
+│   ├── store_keys_in_keychain.sh  # Run yourself — stores keys in macOS Keychain
 │   └── database.db             # NOT committed
 │
 ├── tools/corpus/
 │   ├── etl.py                  # Full scrape (wipes DB — use with care)
-│   ├── add_missing_fathers.py  # Incremental: Macarius, Melito, Epiphanius, Cyril
+│   ├── add_missing_fathers.py  # Incremental authors: Macarius, Melito, Epiphanius, Cyril
+│   ├── add_missing_works.py    # Incremental works for existing authors: Basil
 │   ├── add_cyril_letters.py
-│   ├── add_ephesus_449.py
+│   ├── add_ephesus_449.py      # Second Council of Ephesus (449) from Perry PDF
+│   ├── ephesus_449_perry.py    # PDF parser for Perry's 1881 translation
 │   ├── scrape_utils.py
 │   ├── fts.py
 │   └── repair_text.py
@@ -163,7 +170,7 @@ ask-the-early-church/
 | Method | Endpoint | Rate limit | Description |
 |--------|----------|------------|-------------|
 | GET | `/api/search?q=` | 10/min | Hybrid search. Returns `{ results, author, keywords, author_only }`. |
-| GET | `/api/health` | 60/min | `{ status, embeddings_loaded, cache: { embed, parse, hybrid, fts } }` |
+| GET | `/api/health` | 30/min | `{ status, embeddings_loaded }` |
 | GET | `/api/library` | 60/min | Full catalog by section |
 | GET | `/api/authors` | 60/min | All authors |
 | GET | `/api/authors/:id/works` | 30/min | Works for one author |
@@ -190,13 +197,23 @@ python database.py          # creates schema (first time)
 python app.py               # dev — http://127.0.0.1:5001
 ```
 
-Create `backend/.env`:
+**API keys — macOS Keychain (recommended, no plain-text file):**
 
+```bash
+cd backend
+bash store_keys_in_keychain.sh   # prompts in Terminal; do not run via AI
+rm -f ~/.secrets/ask-the-early-church.env   # delete any old plain-text copy
 ```
-ANTHROPIC_API_KEY=sk-ant-...
-VOYAGE_API_KEY=...
-ALLOWED_ORIGIN=http://localhost:5173
+
+**Non-sensitive config (optional):**
+
+```bash
+mkdir -p ~/.secrets
+cp backend/.env.example ~/.secrets/ask-the-early-church.env
+# Edit only ALLOWED_ORIGIN / cache vars — never put API keys here
 ```
+
+For local dev, `ALLOWED_ORIGIN=http://localhost:5173` is optional (defaults to that). Do **not** set `PRODUCTION=1` locally. Do **not** keep a `backend/.env` in the project folder.
 
 Optional cache tuning (defaults are fine for local dev):
 
@@ -216,20 +233,22 @@ FTS_CACHE_SIZE=512
 cd backend && python seed.py
 ```
 
-**Full corpus** (~107k passages):
+**Full corpus** (~109k passages):
 
 ```bash
 cd tools/corpus
 python etl.py               # full wipe + scrape from New Advent/CCEL
 python add_cyril_letters.py
-python add_ephesus_449.py
+python add_ephesus_449.py    # needs sources/ephesus_449_perry.pdf (+ pypdf)
 python add_missing_fathers.py
+python add_missing_works.py  # Basil: Hexaemeron + Letters
 python fts.py
 cd ../../backend
+python deep_clean.py         # remove empties/scraper junk/boilerplate (backs up first)
 python embed_passages.py
 ```
 
-`add_missing_fathers.py` is incremental — it does not wipe existing data. Use `--replace` to re-import a work, `--repair-text` to fix encoding/HTML on already-imported custom scrapes.
+`add_missing_fathers.py`, `add_missing_works.py`, and `add_ephesus_449.py` are incremental — they do not wipe existing data and skip works already present. Use `--replace` to re-import a work; `add_missing_fathers.py --repair-text` fixes encoding/HTML on already-imported custom scrapes. `deep_clean.py` is idempotent and supports `--dry-run`.
 
 ### Frontend
 
@@ -249,10 +268,10 @@ The home page **retries** `/api/library` a few times if the backend is still sta
 ## Corpus Maintenance Pipeline
 
 ```
-etl.py  →  add_* scripts  →  clean_editorial_notes.py  →  fts.py  →  embed_passages.py
+etl.py  →  add_* scripts  →  deep_clean.py  →  [clean_editorial_notes.py]  →  fts.py  →  embed_passages.py
 ```
 
-After `clean_editorial_notes.py` or `--repair-text` changes passage text, delete stale embeddings for affected IDs before re-running `embed_passages.py`.
+`deep_clean.py` removes structural noise (empty passages, scraper nav-junk, transcriber boilerplate) and rebuilds FTS; it backs up `database.db` first and logs every deletion. `clean_editorial_notes.py` (the optional Haiku pass that rewrites prose to strip modern editorial framing) has not been run on the corpus yet. After either script — or `--repair-text` — changes passage text, delete stale embeddings for affected IDs before re-running `embed_passages.py` (both `deep_clean.py` and the add-scripts already clear embeddings for rows they remove).
 
 ---
 
@@ -260,20 +279,22 @@ After `clean_editorial_notes.py` or `--repair-text` changes passage text, delete
 
 ### Done
 
-- [x] Pre-Chalcedon corpus (~107k passages, 125 authors)
+- [x] Pre-Chalcedon corpus (~109k passages, 126 authors)
+- [x] Basil the Great expansion (Hexaemeron + 325 Letters) and Second Council of Ephesus (449)
+- [x] Structural text cleanup (`deep_clean.py`) + full re-embed (zero embedding gaps)
 - [x] Hybrid search (Voyage embeddings + FTS5 reciprocal rank fusion)
 - [x] Search hot-path caching + preloaded author passage index
 - [x] Haiku query parsing with API fallback
 - [x] Author-only search → works list
 - [x] Security hardening (rate limits, CSP, CORS, query cap, HTML sanitization)
-- [x] Incremental corpus scripts (Cyril letters, Ephesus 449, missing Fathers)
+- [x] Incremental corpus scripts (Cyril letters, Ephesus 449, missing Fathers, missing works)
 - [x] Book reader, dark mode, saved passages (localStorage)
 - [x] Dev Vite `/api` proxy + library fetch retry
 - [x] AI synthesis (disabled for launch)
 
 ### Next
 
-- [ ] Editorial cleanup batch job + re-embed
+- [ ] Run the Haiku editorial-framing pass (`clean_editorial_notes.py`) corpus-wide, then re-embed changed passages
 - [ ] Production deploy (frontend + backend + persistent SQLite)
 - [ ] Re-enable AI synthesis when budget allows
 - [ ] Synthesis result caching

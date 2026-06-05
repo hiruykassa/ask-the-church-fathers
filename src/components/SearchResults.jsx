@@ -1,4 +1,27 @@
-import { IoClose, IoHeart, IoHeartOutline } from 'react-icons/io5'
+import { IoBookOutline, IoChevronForward, IoClose, IoHeart, IoHeartOutline } from 'react-icons/io5'
+
+const SNIPPET_MAX = 720
+
+/** One line for work + section header when they repeat the same title. */
+function cardTitle(p) {
+  const work = (p.work || '').trim()
+  const header = (p.header || '').trim()
+  if (!header) return work
+  if (!work) return header
+  const norm = s => s.toLowerCase().replace(/\.\s*$/, '').trim()
+  const w = norm(work)
+  const h = norm(header)
+  if (w === h || h.startsWith(w) || w.startsWith(h)) {
+    return work.length >= header.length ? work : header
+  }
+  return header
+}
+
+function passageSnippet(text) {
+  const plain = text || ''
+  if (plain.length <= SNIPPET_MAX) return plain
+  return plain.slice(0, SNIPPET_MAX).replace(/\s\S*$/, '') + '…'
+}
 
 /**
  * Displays search results as a flat relevance-ordered list.
@@ -11,9 +34,15 @@ export default function SearchResults({
 }) {
   const total = results.length
 
-  function openPassage(p) {
+  function openPassage(p, resultIndex) {
+    if (!p?.work_id) return
     navigate(`/read/${p.work_id}`, {
-      state: { query, fromSearch: true, scrollToPassage: p.id },
+      state: {
+        query,
+        fromSearch: true,
+        scrollToPassage: p.id,
+        resultIndex,
+      },
     })
   }
 
@@ -44,40 +73,32 @@ export default function SearchResults({
         <>
           <div className="results-list">
             {results.map((p, i) => {
-              const text = p.passage || ''
-              const snippet = text.length > 280
-                ? text.slice(0, 280).replace(/\s\S*$/, '') + '…'
-                : text
+              const title = cardTitle(p)
+              const snippet = passageSnippet(p.passage)
 
               return (
                 <article
                   key={p.id}
                   className="result-card"
-                  onClick={() => openPassage(p)}
+                  data-result-index={i}
+                  onClick={() => openPassage(p, i)}
                   onKeyDown={e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      openPassage(p)
+                      openPassage(p, i)
                     }
                   }}
                   role="link"
                   tabIndex={0}
+                  aria-label={`Read passage from ${title || 'work'} by ${p.author || 'author'}`}
                 >
                   <div className="result-card-rank">{i + 1}</div>
                   <div className="result-card-body">
                     <header className="result-card-header">
                       <div className="result-card-info">
                         <h3 className="result-card-author">{p.author}</h3>
-                        <button
-                          type="button"
-                          className="result-card-work"
-                          onClick={e => { e.stopPropagation(); openPassage(p) }}
-                          title="Open the full work"
-                        >
-                          {p.work}
-                        </button>
-                        {p.header && (
-                          <span className="result-card-section">{p.header}</span>
+                        {title && (
+                          <p className="result-card-title">{title}</p>
                         )}
                       </div>
                       <button
@@ -92,6 +113,13 @@ export default function SearchResults({
                       </button>
                     </header>
                     <p className="result-card-quote">{snippet}</p>
+                    <div className="result-card-footer" aria-hidden="true">
+                      <span className="result-card-read-cta">
+                        <IoBookOutline />
+                        Read passage
+                      </span>
+                      <IoChevronForward className="result-card-chevron" />
+                    </div>
                   </div>
                 </article>
               )

@@ -16,8 +16,11 @@ Offline maintenance (not imported here):
     ``embed_passages.py``       — Voyage vectors for future semantic search
     ``database.py``             — create core tables + rebuild FTS once
 
-Environment: ``ANTHROPIC_API_KEY``, ``VOYAGE_API_KEY`` (``load_dotenv`` from
-``.env``). Default dev server: port 5001 when run as ``__main__``.
+API keys: macOS Keychain (service ``ask-the-early-church``) via ``load_secrets``.
+    Non-sensitive config: ``~/.secrets/ask-the-early-church.env``.
+    ``ALLOWED_ORIGIN`` — required when ``PRODUCTION=1`` (CORS).
+    ``RATELIMIT_STORAGE_URI`` — shared store in prod (e.g. ``redis://…``).
+    Default dev server: port 5001 when run as ``__main__``.
 """
 
 from flask import Flask, jsonify, request
@@ -27,8 +30,8 @@ from flask_limiter.errors import RateLimitExceeded
 from flask_limiter.util import get_remote_address
 import sqlite3
 import anthropic
-from dotenv import load_dotenv
 import os
+from load_secrets import load_secrets
 import re
 import logging
 import voyageai
@@ -54,7 +57,14 @@ def prepare_fts_query(q):
     return " ".join('"' + t.replace('"', '""') + '"' for t in tokens)
 
 
-load_dotenv()
+load_secrets()
+
+
+def _is_truthy_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+IS_PRODUCTION = _is_truthy_env("PRODUCTION")
 
 voyage_client = voyageai.Client(api_key=os.getenv("VOYAGE_API_KEY"))
 
@@ -419,7 +429,11 @@ def _fetch_search_results(passage_ids, author=None):
 
 app = Flask(__name__)
 
-allowed_origin = os.getenv("ALLOWED_ORIGIN")
+allowed_origin = os.getenv("ALLOWED_ORIGIN", "").strip()
+if IS_PRODUCTION and not allowed_origin:
+    raise RuntimeError(
+        "ALLOWED_ORIGIN must be set in production (e.g. https://your-frontend-domain.com)"
+    )
 if not allowed_origin:
     allowed_origin = "http://localhost:5173"
     log.warning("ALLOWED_ORIGIN not set — defaulting to localhost (dev mode)")
@@ -436,8 +450,15 @@ CORS(app, origins=_cors_origins)
 # keeps its own counters, so the real limit becomes N× looser. Point
 # RATELIMIT_STORAGE_URI at a shared store (e.g. redis://…) in production so the
 # limits hold across all workers.
-ratelimit_storage = os.getenv("RATELIMIT_STORAGE_URI", "memory://")
-if ratelimit_storage == "memory://":
+ratelimit_storage = os.getenv("RATELIMIT_STORAGE_URI", "memory://").strip() or "memory://"
+if IS_PRODUCTION and ratelimit_storage == "memory://":
+    log.warning(
+        "RATELIMIT_STORAGE_URI not set — using per-process memory store. "
+        "With multiple gunicorn workers, effective limits are N× looser "
+        "(e.g. 4 workers → 40 search req/min instead of 10). "
+        "Set RATELIMIT_STORAGE_URI=redis://… for shared counters."
+    )
+elif ratelimit_storage == "memory://":
     log.warning(
         "RATELIMIT_STORAGE_URI not set — using per-process memory store. "
         "Rate limits will not be shared across gunicorn workers."
@@ -476,17 +497,12 @@ def set_security_headers(response):
 
 
 @app.route("/api/health")
+@limiter.limit("30 per minute", override_defaults=True)
 def health():
     """Liveness check for deploy and local dev."""
     return jsonify({
         "status": "ok",
         "embeddings_loaded": PASSAGE_VECS.shape[0],
-        "cache": {
-            "embed": {"hits": embed_cache.hits, "misses": embed_cache.misses},
-            "parse": {"hits": parse_cache.hits, "misses": parse_cache.misses},
-            "hybrid": {"hits": hybrid_cache.hits, "misses": hybrid_cache.misses},
-            "fts": {"hits": fts_cache.hits, "misses": fts_cache.misses},
-        },
     })
 
 
@@ -743,8 +759,8 @@ def get_author_works(author_id):
 
 
 if __name__ == "__main__":
-    # DEV ONLY — use gunicorn in production:
+    # DEV ONLY — use gunicorn in production (see backend/.env.example):
+    #   PRODUCTION=1 ALLOWED_ORIGIN=https://your-frontend-domain.com \
     #   RATELIMIT_STORAGE_URI=redis://localhost:6379 \
     #   gunicorn -w 4 -b 0.0.0.0:5001 app:app
-    # (set a shared RATELIMIT_STORAGE_URI so rate limits hold across workers)
     app.run(debug=False, port=5001)

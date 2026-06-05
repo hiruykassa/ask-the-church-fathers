@@ -361,6 +361,27 @@
 .read-error { color: #a03020; }
 html[data-theme='dark'] .read-error { color: #e87060; }
 
+html[data-theme='dark'] .read-back-btn {
+  color: var(--header-text-muted);
+}
+html[data-theme='dark'] .read-back-btn:hover {
+  color: var(--header-text);
+}
+
+html[data-theme='dark'] .read-article {
+  background: var(--surface);
+  box-shadow: none;
+}
+
+html[data-theme='dark'] .read-passage {
+  color: var(--text);
+}
+
+html[data-theme='dark'] .read-work-author,
+html[data-theme='dark'] .toc-chapter-name {
+  color: var(--text-dim);
+}
+
 /* ── Article card ── */
 .read-article {
   width: 100%;
@@ -407,13 +428,12 @@ html[data-theme='dark'] .read-error { color: #e87060; }
   flex-direction: column;
 }
 .read-passage {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-size: 1.18rem;
   color: var(--text);
-  line-height: 2;
+  line-height: 1.85;
   margin: 0 0 1.5em;
-  text-align: justify;
-  hyphens: auto;
+  text-align: left;
   scroll-margin-top: 110px;
   user-select: text;
   -webkit-user-select: text;
@@ -467,7 +487,7 @@ html[data-theme='dark'] .read-error { color: #e87060; }
   font-size: 0.78rem;
   font-weight: 600;
   font-style: normal;
-  letter-spacing: 1.8px;
+  letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--cross-gold);
   text-align: left;

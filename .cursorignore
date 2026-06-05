@@ -1,0 +1,7 @@
+# Keep secrets out of Cursor's context (in-repo copies only — real keys are in Keychain)
+.env
+*.env
+**/.env
+!backend/.env.example
+**/secrets/
+backend/.env

@@ -61,6 +61,7 @@ export default function App() {
   const [libraryError,     setLibraryError]     = useState(false)
 
   const searchGen = useRef(0)
+  const pendingResultScroll = useRef(null)
 
   useScrollReveal()
 
@@ -126,7 +127,17 @@ export default function App() {
    */
   useEffect(() => {
     if (location.state?.restoreQuery) {
-      const { restoreQuery: q, restoreAuthorWorks, authorId, authorName } = location.state
+      const {
+        restoreQuery: q,
+        restoreAuthorWorks,
+        authorId,
+        authorName,
+        restoreResultIndex,
+      } = location.state
+      if (restoreResultIndex != null) {
+        const idx = Number(restoreResultIndex)
+        if (!Number.isNaN(idx)) pendingResultScroll.current = idx
+      }
       if (restoreAuthorWorks && authorId) {
         setQuery(q)
         setSearched(true)
@@ -149,6 +160,32 @@ export default function App() {
       window.history.replaceState({}, '')
     }
   }, [location.state?.restoreQuery])
+
+  /** After returning from the reader, scroll back to the result card that was opened. */
+  useEffect(() => {
+    if (searching || pendingResultScroll.current == null || results.length === 0) return
+    const idx = pendingResultScroll.current
+    let tries = 0
+    const prev = history.scrollRestoration
+    history.scrollRestoration = 'manual'
+    const attempt = () => {
+      const el = document.querySelector(`[data-result-index="${idx}"]`)
+      if (el) {
+        pendingResultScroll.current = null
+        el.scrollIntoView({ block: 'center', behavior: 'auto' })
+        history.scrollRestoration = prev
+        return
+      }
+      if (tries++ < 24) {
+        requestAnimationFrame(attempt)
+        return
+      }
+      pendingResultScroll.current = null
+      window.scrollTo({ top: 0, behavior: 'auto' })
+      history.scrollRestoration = prev
+    }
+    requestAnimationFrame(attempt)
+  }, [results, searching])
 
   /**
    * Runs a search via the backend, which parses author/topic and runs FTS.

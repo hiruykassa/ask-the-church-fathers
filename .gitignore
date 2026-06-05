@@ -7,6 +7,10 @@ backend/.venv/
 
 # Environment variables (keep secrets out of git)
 backend/.env
+.env
+*.env
+!backend/.env.example
+**/.secrets/
 
 # SQLite databases and backups
 *.db
@@ -32,7 +36,11 @@ backend/audit*
 
 # Editor / AI tooling (not part of the app)
 .vscode/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .idea/
 .claude/
 CURSOR_PROMPT*.md
+CLAUDE_CODE_PLAN.md
+.cursor/plans/

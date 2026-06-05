@@ -171,6 +171,7 @@ export default function ReadPage() {
         restoreAuthorWorks: !!location.state.fromAuthorWorks,
         authorId: location.state.authorId,
         authorName: location.state.authorName,
+        restoreResultIndex: location.state.resultIndex,
       }})
     } else {
       navigate('/')

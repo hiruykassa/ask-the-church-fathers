@@ -9,7 +9,6 @@ Scripts for building and maintaining `backend/database.db`. Run from the **proje
 | `add_cyril_letters.py` | Add or refresh Cyril christological letters |
 | `add_ephesus_449.py` | Add Council of Ephesus 2 (449) from Perry 1881 PDF |
 | `ephesus_449_perry.py` | PDF parser for the 449 synod acts |
-| `strip_scripture_refs.py` | Strip inline scripture citations from all passages |
 | `scrape_utils.py` | Shared HTML parser (imported by other scripts) |
 | `ccel_urls.py` | URL lists for multi-chapter CCEL works |
 | `cyril_letters_config.py` | Cyril letter sources and scrape rules |

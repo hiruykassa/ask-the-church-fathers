@@ -13,20 +13,20 @@ If ``clean_editorial_notes.py`` changes passage text, delete stale vectors
 (``DELETE FROM embeddings WHERE passage_id IN (...)``) for modified IDs before
 re-running this script; it does not overwrite existing embedding rows.
 
-Requires VOYAGE_API_KEY in ``.env``. Run from ``backend/``:
+Requires VOYAGE_API_KEY in ``~/.secrets/ask-the-early-church.env``. Run from ``backend/``:
 
     python3 embed_passages.py
 """
 
 import sqlite3
 import voyageai
-from dotenv import load_dotenv
 import os
 import struct
+from load_secrets import load_secrets
 from utils import strip_html
 
 
-load_dotenv()
+load_secrets()
 
 client = voyageai.Client(api_key=os.getenv("VOYAGE_API_KEY"))
 

@@ -25,7 +25,7 @@ After modifying text:
 Suggested corpus pipeline:
     etl.py → clean_editorial_notes.py → fts.py → embed_passages.py
 
-Requires ANTHROPIC_API_KEY in ``.env``. Run from ``backend/``:
+Requires ANTHROPIC_API_KEY in ``~/.secrets/ask-the-early-church.env``. Run from ``backend/``:
 
     python3 clean_editorial_notes.py
     python3 clean_editorial_notes.py --dry-run --limit 20
@@ -46,9 +46,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import anthropic
-from dotenv import load_dotenv
+from load_secrets import load_secrets
 
-load_dotenv()
+load_secrets()
 
 # Same Haiku model as search query parsing in app.py
 MODEL = "claude-haiku-4-5-20251001"
@@ -197,7 +197,7 @@ def main() -> None:
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        print("ANTHROPIC_API_KEY is not set (check .env)", file=sys.stderr)
+        print("ANTHROPIC_API_KEY is not set (check ~/.secrets/ask-the-early-church.env)", file=sys.stderr)
         sys.exit(1)
 
     if not DB_PATH.is_file():

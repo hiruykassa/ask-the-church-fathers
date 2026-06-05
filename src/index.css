@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Crimson+Text:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
   --font-display: 'Cinzel', Georgia, serif;
-  --font-prose: 'Cormorant Garamond', 'Crimson Text', Georgia, serif;
+  --font-prose: 'Crimson Text', Georgia, serif;
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
@@ -24,8 +24,8 @@ html {
 }
 
 html {
-  background-color: var(--bg, #f9f5ee);
-  color: var(--text, #211a12);
+  background-color: var(--bg, #faf8f5);
+  color: var(--text, #1f1a14);
 }
 
 html[data-theme='light'] {
@@ -34,6 +34,8 @@ html[data-theme='light'] {
 
 html[data-theme='dark'] {
   color-scheme: dark;
+  background-color: var(--bg, #1c1c1a);
+  color: var(--text, #f5f5f0);
 }
 
 html, body, #root {
@@ -44,8 +46,8 @@ html, body, #root {
 }
 
 body {
-  background-color: var(--bg, #f9f5ee);
-  color: var(--text, #211a12);
+  background-color: var(--bg, #faf8f5);
+  color: var(--text, #1f1a14);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

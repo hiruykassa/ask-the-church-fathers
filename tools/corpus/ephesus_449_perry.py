@@ -44,7 +44,11 @@ EDITORIAL = re.compile(
     re.I,
 )
 SECTION_MARKERS = (
-    (re.compile(r"^SECOND SESSION\.?\s*$", re.I), "Second Session"),
+    # Perry prints "SECOND SESSION." once, but the bracketed sub-headings that
+    # would delimit the rest ([THE FIRST FORMAL ENQUIRY], etc.) are lost in OCR,
+    # so this one marker would otherwise absorb the entire body of the acts.
+    # Label it honestly as the council's acts rather than a single session.
+    (re.compile(r"^SECOND SESSION\.?\s*$", re.I), "Acts of the Council"),
     (re.compile(r"^\[THE FIRST FORMAL ENQUIRY\]", re.I), "The First Formal Enquiry"),
     (re.compile(r"^\[SECOND FORMAL ENQUIRY\.?\]", re.I), "The Second Formal Enquiry"),
     (re.compile(r"^\[THE SECOND REPORT\.\*\]", re.I), "The Second Report"),
@@ -130,6 +134,38 @@ EDITORIAL_PARAGRAPH = re.compile(
     r"Binius \(Concilia|fons et origo|Ecclesiastical Tri-",
     re.I,
 )
+
+
+# Perry's own editorial commentary, manuscript collation notes, and OCR-garbled
+# footnotes — not part of the synod acts. Applied as a final filter so these do
+# not enter the corpus as if they were the council's words.
+PERRY_APPARATUS = re.compile(
+    r"British Museum|the original MS|\bLacun|Le Quien|ed Parthey|Hierocles|"
+    r"Notitia|Brit\.\s?Mus|Concil\.|sub anno|if [I1] may indulge|I will subjoin|"
+    r"without much presumption|names omitted are|we may perhaps explain|"
+    r"I have uniformly|his note \d|like some minor attendant|Dr Neale|"
+    r"We may make a short pause|desire to make a few reflections|"
+    r"following Appendices|We have given this note|incapable of decipherment|"
+    r"suddenly breaks off|Legitur edictum",
+    re.I,
+)
+PERRY_SCRIPTURE_FOOTNOTE = re.compile(
+    r"^[\"“‘Or,\*\s].{0,40}(?:Joel|Psalms?|John|Matthew|Isaiah|Proverbs),?\s+[ivxlc]+,",
+    re.I,
+)
+
+
+def _alpha_ratio(text: str) -> float:
+    return sum(c.isalpha() or c.isspace() for c in text) / max(1, len(text))
+
+
+def _is_perry_apparatus(text: str) -> bool:
+    """True for Perry's editorial/MS notes and OCR-garbled footnote fragments."""
+    if _alpha_ratio(text) < 0.80:
+        return True
+    if PERRY_APPARATUS.search(text):
+        return True
+    return bool(PERRY_SCRIPTURE_FOOTNOTE.search(text))
 
 
 def _load_pdf_pages() -> list[str]:
@@ -334,7 +370,7 @@ def _section_header(paragraph: str, current: str) -> str | None:
         if pattern.search(paragraph):
             return header
     if RESUMPTION_MARKER.search(paragraph):
-        return "Second Session"
+        return "Acts of the Council"
     if paragraph.strip() == "ENGLISH VERSION.":
         return "Opening Documents"
     if DOCUMENT_MARKER.search(paragraph):
@@ -425,20 +461,35 @@ def parse_ephesus_449_acts() -> list[dict]:
 
     for paragraph in paragraphs:
         paragraph = _clean_paragraph(paragraph)
-        if not paragraph or _should_skip(paragraph):
+        if not paragraph:
             continue
 
+        # Detect section transitions BEFORE the skip/length filter. Marker lines
+        # ("SECOND SESSION.", "[THE FIRST FORMAL ENQUIRY]", "RECORDS ... AGAINST
+        # IBAS ...") are short and would otherwise be dropped by _should_skip
+        # before they could advance the header, leaving the whole body of the acts
+        # mislabelled under the preceding section.
         new_header = _section_header(paragraph, header)
         if new_header:
             header = new_header
-            if new_header in {"Second Session", "Opening Documents", "Bishops Present"}:
-                if len(paragraph) < 120 and not DOCUMENT_MARKER.search(paragraph):
-                    if not BISHOP_LINE.match(paragraph):
-                        continue
+            # The bare marker label is not synod content; drop it unless the
+            # paragraph also carries a bishop line or an imperial-document opener.
+            if (
+                len(paragraph) < 120
+                and not DOCUMENT_MARKER.search(paragraph)
+                and not BISHOP_LINE.match(paragraph)
+            ):
+                continue
+
+        if _should_skip(paragraph):
+            continue
 
         chunks.append({"header": header, "text": paragraph})
 
     merged = _merge_fragments(chunks)
+    cleaned: list[dict] = []
     for chunk in merged:
         chunk["text"] = _clean_paragraph(chunk["text"])
-    return merged
+        if chunk["text"] and not _is_perry_apparatus(chunk["text"]):
+            cleaned.append(chunk)
+    return cleaned
