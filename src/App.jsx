@@ -268,7 +268,7 @@ export default function App() {
   }
 
   return (
-    <div className="page page-fade page--modern">
+    <div className="page page-fade">
 
       <a className="skip-link" href="#main-content">Skip to content</a>
 
@@ -324,13 +324,13 @@ export default function App() {
                   </button>
                 </div>
                 <h2 className="hero-headline">
-                  What did the early <em>church</em> teach?
+                  What did the early church teach?
                 </h2>
               </div>
               <blockquote className="hero-quote">
                 <p className="hero-quote-text">&ldquo;{featuredQuote.text}&rdquo;</p>
                 <footer className="hero-quote-attr">
-                  &mdash; {featuredQuote.author}
+                  {featuredQuote.author}
                   {featuredQuote.work && (
                     <span className="hero-quote-work">{featuredQuote.work}</span>
                   )}
@@ -439,7 +439,7 @@ export default function App() {
                 {!libraryLoading && libraryError && (
                   <>
                     <p className="library-invite">
-                      Could not reach the library server — make sure the backend is running on port 5001.
+                      Could not reach the library server. Make sure the backend is running on port 5001.
                       Showing a shortened catalog (search only).
                     </p>
                     {RIGHT_SECTIONS.map((s) => (

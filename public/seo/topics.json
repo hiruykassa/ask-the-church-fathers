@@ -1,14 +1,14 @@
 {
   "siteUrl": "https://asktheearlychurch.com",
-  "generated": "2026-06-05",
+  "generated": "2026-06-06",
   "topics": [
     {
       "slug": "cyril-incarnation",
       "title": "What Did Saint Cyril Teach on the Incarnation?",
-      "description": "Passages from Cyril of Alexandria on the Incarnation of Christ — primary sources from the early Church.",
+      "description": "Passages from Cyril of Alexandria on the Incarnation of Christ, from primary sources in the early Church.",
       "query": "incarnation",
       "author": "Cyril of Alexandria",
-      "intro": "Cyril of Alexandria (d. 444) was a central patristic voice on Christology. Below are excerpts from his works on the Incarnation — the Word made flesh — drawn from the Ask the Early Church corpus.",
+      "intro": "Cyril of Alexandria (d. 444) was a central patristic voice on Christology. Below are excerpts from his works on the Incarnation, the Word made flesh, drawn from the Ask the Early Church corpus.",
       "passages": [
         {
           "id": 282313,
@@ -28,7 +28,7 @@
         },
         {
           "id": 282481,
-          "passage": "[Page headings]",
+          "passage": "I'm ready to help you clean patristic passages from the newadvent.org database. However, I notice that what you've provided is just a header line indicating the author and dates, without any actual passage text to edit.\n\nPlease paste the passage you'd like me to clean, and I'll remove all modern editorial content while preserving only the authentic text of Cyril of Alexandria.",
           "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
           "work_id": 848,
           "work": "Scholia on the Incarnation",
@@ -36,7 +36,7 @@
         },
         {
           "id": 282323,
-          "passage": "15. Another.",
+          "passage": "I notice that this passage contains only a section marker (\"15. Another.\") with no actual patristic text following it. This appears to be a heading or divider without substantive content from Cyril of Alexandria.\n\nEDITORIAL_ONLY",
           "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
           "work_id": 848,
           "work": "Scholia on the Incarnation",
@@ -44,7 +44,7 @@
         },
         {
           "id": 282328,
-          "passage": "16. Another.",
+          "passage": "I need to see the actual text content of this passage. What you've provided is only a heading (\"16. Another.\") with no patristic content to evaluate.\n\nPlease provide the full passage text so I can remove editorial material and return the actual words of Cyril of Alexandria.",
           "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
           "work_id": 848,
           "work": "Scholia on the Incarnation",
@@ -79,7 +79,7 @@
     {
       "slug": "athanasius-incarnation",
       "title": "What Did Athanasius Teach on the Incarnation?",
-      "description": "Read Athanasius of Alexandria on the Incarnation of the Word — patristic primary sources.",
+      "description": "Read Athanasius of Alexandria on the Incarnation of the Word: patristic primary sources.",
       "query": "incarnation",
       "author": "Athanasius of Alexandria",
       "intro": "Athanasius of Alexandria (c. 298–373) defended the full divinity of Christ and wrote extensively on the Incarnation. These passages are from his works in the early Church library.",
@@ -88,7 +88,7 @@
     {
       "slug": "augustine-grace",
       "title": "What Did Augustine Teach on Grace?",
-      "description": "Passages from Augustine of Hippo on grace, salvation, and divine gift — early Church sources.",
+      "description": "Passages from Augustine of Hippo on grace, salvation, and divine gift from the early Church.",
       "query": "grace",
       "author": "Augustine of Hippo",
       "intro": "Augustine of Hippo (354–430) wrote widely on grace and the Christian life. The excerpts below come directly from his works in this corpus.",
@@ -97,7 +97,7 @@
     {
       "slug": "irenaeus-heresy",
       "title": "What Did Irenaeus Teach About Heresy and Tradition?",
-      "description": "Irenaeus of Lyons on heresy, apostolic tradition, and the rule of faith — patristic texts.",
+      "description": "Irenaeus of Lyons on heresy, apostolic tradition, and the rule of faith: patristic texts.",
       "query": "heresy tradition",
       "author": "Irenaeus of Lyons",
       "intro": "Irenaeus of Lyons (c. 130–202) confronted Gnostic teachings and argued for apostolic tradition. These passages address heresy and the faith handed down in the Church.",
@@ -106,7 +106,7 @@
     {
       "slug": "chrysostom-eucharist",
       "title": "What Did John Chrysostom Teach on the Eucharist?",
-      "description": "John Chrysostom on the Eucharist and the Lord's Supper — early Church primary sources.",
+      "description": "John Chrysostom on the Eucharist and the Lord's Supper: early Church primary sources.",
       "query": "Eucharist",
       "author": "John Chrysostom",
       "intro": "John Chrysostom (c. 349–407), bishop of Constantinople, preached often on the Eucharist. Below are representative passages from his works.",
@@ -132,7 +132,7 @@
     {
       "slug": "basil-holy-spirit",
       "title": "What Did Basil the Great Teach on the Holy Spirit?",
-      "description": "Basil of Caesarea on the Holy Spirit — patristic sources from the early Church.",
+      "description": "Basil of Caesarea on the Holy Spirit: patristic sources from the early Church.",
       "query": "Holy Spirit",
       "author": "Basil of Caesarea",
       "intro": "Basil the Great (c. 330–379) wrote On the Holy Spirit and helped shape Trinitarian doctrine. These excerpts are drawn from his writings in the corpus.",
@@ -141,7 +141,7 @@
     {
       "slug": "cyril-nestorius",
       "title": "What Did Cyril of Alexandria Write Against Nestorius?",
-      "description": "Cyril of Alexandria on Nestorius and the unity of Christ's person — primary patristic sources.",
+      "description": "Cyril of Alexandria on Nestorius and the unity of Christ's person: primary patristic sources.",
       "query": "Nestorius",
       "author": "Cyril of Alexandria",
       "intro": "Cyril's controversy with Nestorius (early 5th century) concerned whether Mary is Theotokos and how divine and human natures unite in Christ. These passages reflect Cyril's side of that debate.",
@@ -156,7 +156,7 @@
         },
         {
           "id": 255513,
-          "passage": "Nestorius repeats the same in his second letter to S. Celestine 27. S. Cyril having in his first Ecumenical Letter to Nestorius put forth clearly the mode of the Union in these words, Nestorius does not understand the language and says thus of it,",
+          "passage": "Nestorius repeats the same in his second letter to Celestine. Cyril having in his first Ecumenical Letter to Nestorius put forth clearly the mode of the Union in these words, Nestorius does not understand the language and says thus of it,",
           "header": "PREFACE.",
           "work_id": 809,
           "work": "Five Tomes Against Nestorius",
@@ -180,7 +180,7 @@
         },
         {
           "id": 255567,
-          "passage": "Paul said, 'Mary did not hear the Word;'Nestorius, in harmony, said, 'Mary, my good man, did not bear the Godhead;' [the Anathema approved by Nestorius denied |xxxix that 'Mary bare God' not 'the Godhead.'] Paul, 'For he was not before ages.' Nestorius,---- 'And he assigns a temporal Mother to the Godhead, the Creator of times.' Paul, 'Mary received the Word and is not older than the Word.' 'Nestorius, 'How then did Mary bear Him Who is older than herself?' Paul, 'Mary bore…",
+          "passage": "Paul said, 'Mary did not hear the Word;' Nestorius, in harmony, said, 'Mary, my good man, did not bear the Godhead;' Paul, 'For he was not before ages.' Nestorius, 'And he assigns a temporal Mother to the Godhead, the Creator of times.' Paul, 'Mary received the Word and is not older than the Word.' Nestorius, 'How then did Mary bear Him Who is older than herself?' Paul, 'Mary bore a man like unto us.' Nestorius, 'He Who was born of the Virgin is man.' Paul, 'but a man in all…",
           "header": "PREFACE.",
           "work_id": 809,
           "work": "Five Tomes Against Nestorius",
@@ -215,7 +215,7 @@
     {
       "slug": "leo-chalcedon",
       "title": "What Did Leo the Great Teach on Christ at Chalcedon?",
-      "description": "Leo the Great on Christology and the Council of Chalcedon — early Church documents.",
+      "description": "Leo the Great on Christology and the Council of Chalcedon: early Church documents.",
       "query": "Chalcedon Christ",
       "author": "Leo the Great",
       "intro": "Pope Leo I's Tome to Flavian was decisive at the Council of Chalcedon (451). These passages relate to Leo's Christology and the conciliar tradition.",

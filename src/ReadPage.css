@@ -51,7 +51,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 1.6px;
@@ -77,7 +77,7 @@
 }
 
 .read-header-title {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-size: 0.95rem;
   color: var(--header-text-muted);
   font-style: italic;
@@ -102,7 +102,7 @@
   padding: 6px 10px;
   cursor: pointer;
   color: var(--cross-gold);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 1px;
@@ -215,7 +215,7 @@
 }
 
 .toc-drawer-label {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 2px;
@@ -317,7 +317,7 @@
 }
 
 .toc-chapter-num {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.62rem;
   font-weight: 700;
   color: var(--cross-gold);
@@ -326,7 +326,7 @@
 }
 
 .toc-chapter-name {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-size: 0.84rem;
   color: var(--text-md);
   transition: color 0.15s;
@@ -349,7 +349,7 @@
 
 .read-loading,
 .read-error {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-size: 1rem;
   color: var(--text-dim);
   font-style: italic;
@@ -399,7 +399,7 @@ html[data-theme='dark'] .toc-chapter-name {
   margin-bottom: 36px;
 }
 .read-work-title {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: clamp(1.4rem, 4vw, 2.1rem);
   font-weight: 700;
   color: var(--text);
@@ -408,7 +408,7 @@ html[data-theme='dark'] .toc-chapter-name {
   margin-bottom: 10px;
 }
 .read-work-author {
-  font-family: 'Crimson Text', serif;
+  font-family: var(--font-prose);
   font-style: italic;
   font-size: 1.1rem;
   color: var(--text-md);
@@ -467,7 +467,7 @@ html[data-theme='dark'] .toc-chapter-name {
   font-style: italic;
 }
 .read-passage span.pg {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.72em;
   color: var(--text-faint);
   margin: 0 0.35em;
@@ -483,7 +483,7 @@ html[data-theme='dark'] .toc-chapter-name {
 
 /* Rubrics — speaker labels and stage directions (liturgy + council intros) */
 .read-passage.read-rubric {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.78rem;
   font-weight: 600;
   font-style: normal;
@@ -531,7 +531,7 @@ html[data-theme='dark'] .toc-chapter-name {
 
 /* ── Section headers within the text ── */
 .read-section-header {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--cross-gold);
@@ -553,7 +553,7 @@ html[data-theme='dark'] .toc-chapter-name {
 
 /* ── Passage numbers (inline, used by reader) ── */
 .read-passage-num {
-  font-family: 'Cinzel', serif;
+  font-family: var(--font-display);
   font-size: 0.76rem;
   font-weight: 700;
   color: var(--cross-gold);

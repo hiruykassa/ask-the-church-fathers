@@ -80,7 +80,7 @@ export const RIGHT_SECTIONS = [
       { title: 'Liturgy of St. Basil',           query: 'Liturgy of St. Basil' },
       { title: 'Liturgy of St. John Chrysostom', query: 'Liturgy of St. John Chrysostom' },
       { title: 'Apostolic Constitutions',        query: 'Apostolic Constitutions' },
-      { title: 'Didache — Eucharistic Prayers',  query: 'Didache eucharist' },
+      { title: 'Didache: Eucharistic Prayers',  query: 'Didache eucharist' },
     ],
   },
   {

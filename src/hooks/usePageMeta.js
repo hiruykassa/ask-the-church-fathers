@@ -27,7 +27,7 @@ function setCanonical(href) {
   el.setAttribute('href', href)
 }
 
-const DEFAULT_TITLE = 'Ask the Early Church — Search the Church Fathers'
+const DEFAULT_TITLE = 'Ask the Early Church | Search the Church Fathers'
 const DEFAULT_DESC =
   'Search the writings of the early Church Fathers by topic, father, or keyword. A free library of patristic texts.'
 

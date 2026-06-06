@@ -41,19 +41,19 @@ TOPICS = [
     {
         "slug": "cyril-incarnation",
         "title": "What Did Saint Cyril Teach on the Incarnation?",
-        "description": "Passages from Cyril of Alexandria on the Incarnation of Christ — primary sources from the early Church.",
+        "description": "Passages from Cyril of Alexandria on the Incarnation of Christ, from primary sources in the early Church.",
         "query": "incarnation",
         "author": "Cyril of Alexandria",
         "intro": (
             "Cyril of Alexandria (d. 444) was a central patristic voice on Christology. "
-            "Below are excerpts from his works on the Incarnation — the Word made flesh — "
+            "Below are excerpts from his works on the Incarnation, the Word made flesh, "
             "drawn from the Ask the Early Church corpus."
         ),
     },
     {
         "slug": "athanasius-incarnation",
         "title": "What Did Athanasius Teach on the Incarnation?",
-        "description": "Read Athanasius of Alexandria on the Incarnation of the Word — patristic primary sources.",
+        "description": "Read Athanasius of Alexandria on the Incarnation of the Word: patristic primary sources.",
         "query": "incarnation",
         "author": "Athanasius of Alexandria",
         "intro": (
@@ -65,7 +65,7 @@ TOPICS = [
     {
         "slug": "augustine-grace",
         "title": "What Did Augustine Teach on Grace?",
-        "description": "Passages from Augustine of Hippo on grace, salvation, and divine gift — early Church sources.",
+        "description": "Passages from Augustine of Hippo on grace, salvation, and divine gift from the early Church.",
         "query": "grace",
         "author": "Augustine of Hippo",
         "intro": (
@@ -76,7 +76,7 @@ TOPICS = [
     {
         "slug": "irenaeus-heresy",
         "title": "What Did Irenaeus Teach About Heresy and Tradition?",
-        "description": "Irenaeus of Lyons on heresy, apostolic tradition, and the rule of faith — patristic texts.",
+        "description": "Irenaeus of Lyons on heresy, apostolic tradition, and the rule of faith: patristic texts.",
         "query": "heresy tradition",
         "author": "Irenaeus of Lyons",
         "intro": (
@@ -88,7 +88,7 @@ TOPICS = [
     {
         "slug": "chrysostom-eucharist",
         "title": "What Did John Chrysostom Teach on the Eucharist?",
-        "description": "John Chrysostom on the Eucharist and the Lord's Supper — early Church primary sources.",
+        "description": "John Chrysostom on the Eucharist and the Lord's Supper: early Church primary sources.",
         "query": "Eucharist",
         "author": "John Chrysostom",
         "intro": (
@@ -99,7 +99,7 @@ TOPICS = [
     {
         "slug": "basil-holy-spirit",
         "title": "What Did Basil the Great Teach on the Holy Spirit?",
-        "description": "Basil of Caesarea on the Holy Spirit — patristic sources from the early Church.",
+        "description": "Basil of Caesarea on the Holy Spirit: patristic sources from the early Church.",
         "query": "Holy Spirit",
         "author": "Basil of Caesarea",
         "intro": (
@@ -110,7 +110,7 @@ TOPICS = [
     {
         "slug": "cyril-nestorius",
         "title": "What Did Cyril of Alexandria Write Against Nestorius?",
-        "description": "Cyril of Alexandria on Nestorius and the unity of Christ's person — primary patristic sources.",
+        "description": "Cyril of Alexandria on Nestorius and the unity of Christ's person: primary patristic sources.",
         "query": "Nestorius",
         "author": "Cyril of Alexandria",
         "intro": (
@@ -122,7 +122,7 @@ TOPICS = [
     {
         "slug": "leo-chalcedon",
         "title": "What Did Leo the Great Teach on Christ at Chalcedon?",
-        "description": "Leo the Great on Christology and the Council of Chalcedon — early Church documents.",
+        "description": "Leo the Great on Christology and the Council of Chalcedon: early Church documents.",
         "query": "Chalcedon Christ",
         "author": "Leo the Great",
         "intro": (

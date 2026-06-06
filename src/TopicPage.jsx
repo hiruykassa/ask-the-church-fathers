@@ -6,6 +6,7 @@ import LoadingBlock from './components/ui/LoadingBlock'
 import EmptyState from './components/ui/EmptyState'
 import { usePageMeta } from './hooks/usePageMeta'
 import './App.css'
+import './AboutPage.css'
 import './TopicPage.css'
 
 export default function TopicPage() {
@@ -57,7 +58,7 @@ export default function TopicPage() {
     : ''
 
   return (
-    <div className="page page-fade">
+    <div className="page page-fade page--modern">
       <SiteHeader />
       <div className="header-body-bridge" aria-hidden />
 
@@ -74,7 +75,9 @@ export default function TopicPage() {
         {!loading && topic && (
           <>
             <header className="topic-hero">
-              <h1 className="topic-title">{topic.title}</h1>
+              <span className="about-cross" aria-hidden>&#9841;</span>
+              <h1 className="about-title">{topic.title}</h1>
+              <div className="about-rule" />
               <p className="topic-intro">{topic.intro}</p>
               <Link className="topic-search-cta" to="/" state={{ restoreQuery: searchQuery }}>
                 Search the full corpus

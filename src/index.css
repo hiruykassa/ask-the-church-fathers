@@ -59,6 +59,7 @@ html, body, #root {
 body {
   background-color: var(--bg, #faf8f5);
   color: var(--text, #1f1a14);
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -70,6 +71,7 @@ body {
 button, a, [role="button"], input, select, textarea {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  font-family: inherit;
 }
 
 /* Prevent callout (long-press menu) on icon buttons */

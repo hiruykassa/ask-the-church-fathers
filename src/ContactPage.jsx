@@ -7,8 +7,8 @@ import './AboutPage.css'
 
 export default function ContactPage() {
   usePageMeta({
-    title: 'Contact — Ask the Early Church',
-    description: 'Contact Ask the Early Church — report issues, suggest works, or get in touch.',
+    title: 'Contact | Ask the Early Church',
+    description: 'Contact Ask the Early Church: report issues, suggest works, or get in touch.',
     path: '/contact',
   })
   return (

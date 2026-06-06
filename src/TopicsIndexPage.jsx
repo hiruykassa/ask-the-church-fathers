@@ -5,6 +5,7 @@ import SiteFooter from './components/layout/SiteFooter'
 import LoadingBlock from './components/ui/LoadingBlock'
 import { usePageMeta } from './hooks/usePageMeta'
 import './App.css'
+import './AboutPage.css'
 import './TopicPage.css'
 
 export default function TopicsIndexPage() {
@@ -12,7 +13,7 @@ export default function TopicsIndexPage() {
   const [loading, setLoading] = useState(true)
 
   usePageMeta({
-    title: 'Patristic Topics — Ask the Early Church',
+    title: 'Patristic Topics | Ask the Early Church',
     description:
       'Read what the early Church Fathers taught on the Incarnation, grace, the Eucharist, the Holy Spirit, and more.',
     path: '/topics',
@@ -29,15 +30,17 @@ export default function TopicsIndexPage() {
   }, [])
 
   return (
-    <div className="page page-fade">
+    <div className="page page-fade page--modern">
       <SiteHeader />
       <div className="header-body-bridge" aria-hidden />
 
       <main className="topic-main">
         <header className="topic-hero">
-          <h1 className="topic-title">What Did the Early Church Teach?</h1>
+          <span className="about-cross" aria-hidden>&#9841;</span>
+          <h1 className="about-title">What Did the Early Church Teach?</h1>
+          <div className="about-rule" />
           <p className="topic-intro">
-            Curated passages from the patristic corpus — primary sources you can read
+            Curated passages from the patristic corpus: primary sources you can read
             and search further.
           </p>
         </header>
