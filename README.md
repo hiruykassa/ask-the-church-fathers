@@ -12,22 +12,22 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 **Local development: fully functional.** Start the Flask backend and Vite frontend, search the corpus, and read full works in the book reader.
 
-**Production target:** frontend on **Netlify**, backend on **Render** (Docker). Domain: **[asktheearlychurch.com](https://asktheearlychurch.com)**. Corpus prep is complete — ready to deploy.
+**Production target:** frontend on **Netlify** (free), backend on **Hugging Face Spaces** (Docker, always-on free CPU). Domain: **[asktheearlychurch.com](https://asktheearlychurch.com)**. Database fetched from GitHub Releases at startup. Free-forever stack.
 
-**After launch:** migrate to **AWS EC2** with **Docker Compose**, **GitHub Actions** CI/CD, and **CloudWatch** monitoring when traffic or cost warrants it. Docker files are not yet in the repo — that is prep work for the AWS move.
+**After launch:** migrate to **AWS EC2** with **Docker Compose**, **GitHub Actions** CI/CD, and **CloudWatch** monitoring when traffic or cost warrants it.
 
 | Area | Status |
 |------|--------|
 | Hybrid search (vector + FTS) | ✅ Working |
 | Search result caching | ✅ In-memory TTL caches (embed, parse, FTS, hybrid) |
-| Graceful API fallback | ✅ Voyage/Haiku down → FTS-only; DB errors → 503 |
+| Graceful API fallback | ✅ Voyage/Gemini/Groq down → FTS-only; DB errors → 503 |
 | Rate limiting | ✅ Per-endpoint limits via flask-limiter |
 | CORS / security headers | ✅ Configured; set `ALLOWED_ORIGIN` in prod |
 | AI synthesis | ⏸ Built, disabled until API budget allows |
 | SEO (sitemap, topic pages, meta) | ✅ Ready — regenerate with real domain before/at cutover |
 | Editorial cleanup (`clean_editorial_notes.py`) | ✅ Full corpus pass (Haiku batch API) |
 | Re-embedding after editorial cleanup | ✅ Complete |
-| Production (Netlify + Render) | ⏸ Ready — not yet deployed |
+| Production (Netlify + HF Spaces) | ⏸ Ready — not yet deployed |
 | Docker in repo + AWS migration | 🚧 Planned |
 
 ### Corpus snapshot (local `database.db`)
@@ -52,7 +52,7 @@ Sources: primarily [New Advent](https://www.newadvent.org/fathers/) and [CCEL Pe
 ### Search
 
 1. User types a natural-language query (e.g. "What did Chrysostom teach about the Eucharist?")
-2. **Claude Haiku** parses the query into an optional author filter + topic keywords (falls back to raw query if Haiku is unavailable)
+2. **Gemini 2.5 Flash** parses the query into an optional author filter + topic keywords (Groq Llama 3.3 70B fallback; falls back to raw query if both are unavailable)
 3. **Hybrid ranking** merges two signals via reciprocal rank fusion:
    - **Voyage AI** — embeds keywords and scores against pre-computed passage vectors (loaded into RAM at startup)
    - **FTS5** — keyword match on passage text (BM25)
@@ -61,7 +61,7 @@ Sources: primarily [New Advent](https://www.newadvent.org/fathers/) and [CCEL Pe
 
 Search queries are capped at **500 characters** to prevent API abuse.
 
-Repeated queries are served from in-memory TTL caches (default 1 hour): Voyage query embeddings, Haiku parse results, FTS hits, and fused hybrid rankings. Passage vectors are pre-normalized at startup; author passage indexes are preloaded (no per-search DB lookup). Tune via env vars: `SEARCH_CACHE_TTL_SEC`, `EMBED_CACHE_SIZE`, `PARSE_CACHE_SIZE`, `HYBRID_CACHE_SIZE`, `FTS_CACHE_SIZE`.
+Repeated queries are served from in-memory TTL caches (default 1 hour): Voyage query embeddings, Gemini/Groq parse results, FTS hits, and fused hybrid rankings. Passage vectors are pre-normalized at startup; author passage indexes are preloaded (no per-search DB lookup). Tune via env vars: `SEARCH_CACHE_TTL_SEC`, `EMBED_CACHE_SIZE`, `PARSE_CACHE_SIZE`, `HYBRID_CACHE_SIZE`, `FTS_CACHE_SIZE`.
 
 ### AI Synthesis (disabled)
 
@@ -92,9 +92,9 @@ SQLite (database.db) + embeddings in RAM
 ```
 Browser → Netlify (static dist/)
     │
-    │  VITE_API_URL → Render (Docker, gunicorn)
+    │  VITE_API_URL → Hugging Face Spaces (Docker, gunicorn, always-on free)
     ▼
-SQLite on Render persistent disk + embeddings in RAM
+SQLite fetched from GitHub Releases at startup + embeddings in RAM
 ```
 
 ### Target (~2–3 months): AWS EC2
@@ -138,19 +138,27 @@ The API is a **public read-only** service (no authentication). Protections in pl
 ### Production checklist
 
 ```bash
-# API keys: set in your host's secret store (Railway, Fly, Render, etc.) — never in git.
+# Set in your host's secret store (HF Spaces → Settings → Variables and secrets) — never in git.
 PRODUCTION=1
-ALLOWED_ORIGIN=https://your-frontend-domain.com
-RATELIMIT_STORAGE_URI=redis://your-redis-host:6379
+ALLOWED_ORIGIN=https://asktheearlychurch.com
+VOYAGE_API_KEY=...        # Voyage AI dashboard
+GEMINI_API_KEY=...        # Google AI Studio (1,500 free req/day)
+GROQ_API_KEY=...          # Groq console (1,000 free req/day — fallback)
+DB_URL=...                # GitHub Releases download URL for database.db
+DAILY_API_BUDGET_USD=0    # free providers — no spend to track
+VOYAGE_MODEL=voyage-3
 
-# Run with gunicorn, not Flask dev server
+# RATELIMIT_STORAGE_URI intentionally omitted — in-memory limiter (acceptable for low traffic)
+# Redis can be added later if per-worker rate limits become a problem.
+
+# Run with gunicorn (HF Spaces uses backend/Dockerfile which does this automatically)
 cd backend
-gunicorn -w 4 -b 0.0.0.0:5001 app:app
+gunicorn -w 1 -b 0.0.0.0:7860 app:app
 ```
 
-`PRODUCTION=1` makes missing `ALLOWED_ORIGIN` a startup error (without it, CORS defaults to localhost and blocks your real domain). `RATELIMIT_STORAGE_URI` shares rate-limit counters across gunicorn workers — without Redis, 4 workers effectively allow 4× the per-route limits.
+`PRODUCTION=1` makes missing `ALLOWED_ORIGIN` a startup error. Without `RATELIMIT_STORAGE_URI`, each gunicorn worker keeps its own counters — effective limits are N× looser under multi-worker configs.
 
-Monitor rate-limit 429s and Voyage/Anthropic usage in their dashboards.
+Monitor rate-limit 429s and Voyage/Gemini/Groq usage in their dashboards.
 
 ---
 
@@ -374,9 +382,11 @@ Ranking for competitive queries (e.g. “what did Cyril teach on the incarnation
 
 ### Next (now → launch)
 
-- [ ] **Deploy to Netlify + Render** — first production launch at [asktheearlychurch.com](https://asktheearlychurch.com)
+- [ ] **Upload `database.db` to GitHub Releases** — `gh release create db-v1 backend/database.db --title "Database v1" --notes "Corpus snapshot"`; set `DB_URL` in HF Spaces secrets
+- [ ] **Deploy backend to Hugging Face Spaces** (Docker, free CPU) — set `VOYAGE_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `PRODUCTION=1`, `ALLOWED_ORIGIN`, `DB_URL`
+- [ ] **Deploy frontend to Netlify** — set `VITE_API_URL=https://<space>.hf.space`; `netlify.toml` handles build config
+- [ ] **Cut DNS** — point `asktheearlychurch.com` to Netlify; cert auto-issued
 - [ ] **Regenerate SEO** with `SITE_URL=https://asktheearlychurch.com` and submit sitemap in Search Console
-- [ ] **Redis on Render** — set `RATELIMIT_STORAGE_URI` so rate limits hold across gunicorn workers
 
 ### AWS migration (future)
 
@@ -410,7 +420,7 @@ Plan is to run on Netlify + Render until traffic or cost warrants moving. When r
 | Styling | CSS custom properties |
 | Backend | Python 3, Flask, Flask-CORS, Flask-Limiter, gunicorn |
 | Database | SQLite + FTS5 |
-| Search parsing | Claude Haiku |
+| Search parsing | Gemini 2.5 Flash (Groq Llama 3.3 70B fallback) |
 | Search ranking | Voyage `voyage-3` + FTS5 hybrid |
 | Scraping | requests + BeautifulSoup4 |
 

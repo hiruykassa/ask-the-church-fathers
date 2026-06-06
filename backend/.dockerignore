@@ -1,0 +1,15 @@
+# Keep secrets and bulky local-only files out of the image.
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.db-shm
+*.db-wal
+*.backup.*.db
+*.log
+tests/
+audit*

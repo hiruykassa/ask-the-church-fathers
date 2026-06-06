@@ -5,7 +5,7 @@ works, passages, FTS index ``passages_fts``, and optional ``embeddings`` /
 ``editorial_cleaned`` rows created by offline batch scripts.
 
 Endpoints (summary):
-    GET  /api/search              Haiku query parse + vector search (Voyage embeddings)
+    GET  /api/search              Gemini query parse + vector search (Voyage embeddings)
     GET  /api/passages/<id>       Single passage with metadata
     GET  /api/works/<work_id>     Full work for the book reader
     GET  /api/authors, /api/authors/<id>/works, /api/library
@@ -29,7 +29,9 @@ from flask_limiter import Limiter
 from flask_limiter.errors import RateLimitExceeded
 from flask_limiter.util import get_remote_address
 import sqlite3
-import anthropic
+# import anthropic  # kept for future re-enable of Haiku parse path
+import google.genai as genai
+from groq import Groq
 import os
 from load_secrets import load_secrets
 import re
@@ -39,6 +41,8 @@ import numpy as np
 
 from utils import strip_html, remove_scripture_refs, cosine_similarity, unpack_vector
 from search_cache import embed_cache, parse_cache, hybrid_cache, fts_cache
+from telemetry import budget_remaining, record_spend, log_ai_call
+import time as _time
 
 log = logging.getLogger(__name__)
 
@@ -67,11 +71,19 @@ def _is_truthy_env(name: str) -> bool:
 IS_PRODUCTION = _is_truthy_env("PRODUCTION")
 
 voyage_client = voyageai.Client(api_key=os.getenv("VOYAGE_API_KEY"))
+# Pin the embedding model. Changing this requires re-embedding the corpus
+# (see embed_passages.py) — vectors in the DB are model-specific.
+VOYAGE_MODEL = os.getenv("VOYAGE_MODEL", "voyage-3")
 
-# Reuse a single Anthropic client across requests so the underlying HTTP
-# connection pool (TLS handshakes, keep-alive) is shared instead of rebuilt
-# on every search. The client is thread-safe.
-anthropic_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+# Reuse single clients across requests — connection pools are shared and thread-safe.
+# Clients are None when the key is absent (e.g. CI smoke tests) — parse_user_query
+# raises immediately so parse_user_query_safe falls back to raw keywords.
+# anthropic_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))  # future use
+_gemini_key = os.getenv("GEMINI_API_KEY")
+gemini_client = genai.Client(api_key=_gemini_key) if _gemini_key else None
+
+_groq_key = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=_groq_key) if _groq_key else None
 
 
 def get_db_connection():
@@ -150,11 +162,21 @@ def _embed_query_vector(query):
     if cached is not None:
         return cached
 
+    if not budget_remaining():
+        log.warning("Voyage embed skipped: daily API budget exhausted")
+        return None
+
+    _t0 = _time.perf_counter()
     try:
-        result = voyage_client.embed([query], model="voyage-3")
+        result = voyage_client.embed([query], model=VOYAGE_MODEL)
     except Exception as exc:
+        log_ai_call("voyage", VOYAGE_MODEL,
+                    (_time.perf_counter() - _t0) * 1000, ok=False, error=str(exc))
         log.warning("Voyage embed failed: %s", exc)
         return None
+    log_ai_call("voyage", VOYAGE_MODEL,
+                (_time.perf_counter() - _t0) * 1000, ok=True)
+    record_spend("voyage_embed")
 
     vec = np.array(result.embeddings[0], dtype=np.float32)
     norm = float(np.linalg.norm(vec))
@@ -346,26 +368,89 @@ PARSE_SYSTEM_PROMPT = _build_parse_system_prompt(AUTHOR_NAMES)
 
 
 def parse_user_query(raw_query, author_names):
-    """Use Haiku to split natural language into author filter + topic keywords.
+    """Use Gemini 2.5 Flash (Groq Llama 3.3 70B fallback) to split natural language
+    into author filter + topic keywords.
 
-    The static instruction + author roster is sent as a cached system prompt so
-    only the short user query varies between calls (prompt caching kicks in once
-    the roster crosses the model's minimum cacheable length).
+    Falls back to Groq on any Gemini error (including 429). If both fail, raises
+    so parse_user_query_safe falls back to raw query as keywords.
     """
-    response = anthropic_client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=150,
-        system=[{
-            "type": "text",
-            "text": PARSE_SYSTEM_PROMPT,
-            "cache_control": {"type": "ephemeral"},
-        }],
-        messages=[{
-            "role": "user",
-            "content": f"User search query: {raw_query}",
-        }],
-    )
-    res = response.content[0].text
+    if gemini_client is None and groq_client is None:
+        raise RuntimeError("Neither GEMINI_API_KEY nor GROQ_API_KEY is set")
+
+    _gemini_model = "gemini-2.5-flash"
+    _t0 = _time.perf_counter()
+    try:
+        if gemini_client is None:
+            raise RuntimeError("GEMINI_API_KEY not set; skipping to Groq")
+        response = gemini_client.models.generate_content(
+            model=_gemini_model,
+            contents=f"User search query: {raw_query}",
+            config=genai.types.GenerateContentConfig(
+                system_instruction=PARSE_SYSTEM_PROMPT,
+                max_output_tokens=150,
+            ),
+        )
+        log_ai_call("gemini", _gemini_model,
+                    (_time.perf_counter() - _t0) * 1000, ok=True)
+        record_spend("gemini_parse")
+        res = response.text
+    except Exception as exc:
+        log_ai_call("gemini", _gemini_model,
+                    (_time.perf_counter() - _t0) * 1000, ok=False, error=str(exc))
+        log.warning("Gemini parse failed (%s) — trying Groq fallback", exc)
+        _groq_model = "llama-3.3-70b-versatile"
+        _t1 = _time.perf_counter()
+        try:
+            if groq_client is None:
+                raise RuntimeError("GROQ_API_KEY not set")
+            gr = groq_client.chat.completions.create(
+                model=_groq_model,
+                messages=[
+                    {"role": "system", "content": PARSE_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"User search query: {raw_query}"},
+                ],
+                max_tokens=150,
+            )
+            log_ai_call("groq", _groq_model,
+                        (_time.perf_counter() - _t1) * 1000, ok=True)
+            record_spend("groq_parse")
+            res = gr.choices[0].message.content
+        except Exception as exc2:
+            log_ai_call("groq", _groq_model,
+                        (_time.perf_counter() - _t1) * 1000, ok=False, error=str(exc2))
+            raise
+
+    # ---- Anthropic Haiku path (disabled — kept for future use) ----
+    # _model = "claude-haiku-4-5-20251001"
+    # _t0 = _time.perf_counter()
+    # try:
+    #     response = anthropic_client.messages.create(
+    #         model=_model,
+    #         max_tokens=150,
+    #         system=[{
+    #             "type": "text",
+    #             "text": PARSE_SYSTEM_PROMPT,
+    #             "cache_control": {"type": "ephemeral"},
+    #         }],
+    #         messages=[{
+    #             "role": "user",
+    #             "content": f"User search query: {raw_query}",
+    #         }],
+    #     )
+    # except Exception as exc:
+    #     log_ai_call("anthropic", _model,
+    #                 (_time.perf_counter() - _t0) * 1000, ok=False, error=str(exc))
+    #     raise
+    # log_ai_call(
+    #     "anthropic", _model,
+    #     (_time.perf_counter() - _t0) * 1000, ok=True,
+    #     tokens_in=getattr(response.usage, "input_tokens", None),
+    #     tokens_out=getattr(response.usage, "output_tokens", None),
+    # )
+    # record_spend("anthropic_parse")
+    # res = response.content[0].text
+    # ---- End Anthropic path ----
+
     seen = {"author": "none", "keywords": ""}
     for line in res.split("\n"):
         line = line.strip()
@@ -377,11 +462,17 @@ def parse_user_query(raw_query, author_names):
 
 
 def parse_user_query_safe(raw_query, author_names):
-    """Parse query via Haiku; on failure use raw query as keywords with no author filter."""
+    """Parse query via Gemini/Groq; on failure use raw query as keywords with no author filter."""
     cache_key = _cache_key("parse", raw_query)
     cached = parse_cache.get(cache_key)
     if cached is not None:
         return cached
+
+    if not budget_remaining():
+        log.warning("Gemini/Groq parse skipped: daily API budget exhausted")
+        parsed = {"author": "none", "keywords": raw_query}
+        parse_cache.set(cache_key, parsed)
+        return parsed
 
     try:
         parsed = parse_user_query(raw_query, author_names)
@@ -493,6 +584,12 @@ def set_security_headers(response):
         "connect-src 'self'; "
         "frame-ancestors 'none'"
     )
+    # HSTS — production only. Setting it during local http://localhost dev
+    # would force browsers to upgrade to https and break the workflow.
+    if IS_PRODUCTION:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
     return response
 
 

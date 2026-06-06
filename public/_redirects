@@ -1,0 +1,4 @@
+# SPA fallback — every unknown path is served the React app so client-side
+# routing handles it. Without this, /read/123, /topics/eucharist, etc. would
+# 404 on hard refresh on Netlify.
+/*    /index.html   200

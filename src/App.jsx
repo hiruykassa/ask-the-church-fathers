@@ -268,7 +268,7 @@ export default function App() {
   }
 
   return (
-    <div className="page page-fade">
+    <div className="page page-fade page--modern">
 
       <a className="skip-link" href="#main-content">Skip to content</a>
 
@@ -307,23 +307,28 @@ export default function App() {
         <div className="search-section-inner">
           {!searched && view === 'search' && (
             <>
-              <div className="hero-block">
-                <button
-                  type="button"
-                  className="hero-cross-btn"
-                  onClick={refreshHome}
-                  title="Refresh home page"
-                  aria-label="Refresh home page"
-                >
-                  <img
-                    src="/cross-mark.png"
-                    alt=""
-                    className="hero-cross-img"
-                  />
-                </button>
+              <div className="hero-intro">
+                <div className="hero-block">
+                  <button
+                    type="button"
+                    className="hero-cross-btn"
+                    onClick={refreshHome}
+                    title="Refresh home page"
+                    aria-label="Refresh home page"
+                  >
+                    <img
+                      src="/cross-mark.png"
+                      alt=""
+                      className="hero-cross-img"
+                    />
+                  </button>
+                </div>
+                <h2 className="hero-headline">
+                  What did the early <em>church</em> teach?
+                </h2>
               </div>
               <blockquote className="hero-quote">
-                <p className="hero-quote-text">"{featuredQuote.text}"</p>
+                <p className="hero-quote-text">&ldquo;{featuredQuote.text}&rdquo;</p>
                 <footer className="hero-quote-attr">
                   &mdash; {featuredQuote.author}
                   {featuredQuote.work && (
@@ -331,6 +336,7 @@ export default function App() {
                   )}
                 </footer>
               </blockquote>
+              <hr className="hero-rule" aria-hidden="true" />
             </>
           )}
           <div className="search-bar-row">
