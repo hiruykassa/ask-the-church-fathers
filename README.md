@@ -12,7 +12,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 **Local development: fully functional.** Start the Flask backend and Vite frontend, search the corpus, and read full works in the book reader.
 
-**Production target:** frontend on **Netlify**, backend on **Render** (Docker). Domain: **[asktheearlychurch.com](https://asktheearlychurch.com)**. Not yet deployed — corpus cleanup and re-embedding must complete first.
+**Production target:** frontend on **Netlify**, backend on **Render** (Docker). Domain: **[asktheearlychurch.com](https://asktheearlychurch.com)**. Corpus prep is complete — ready to deploy.
 
 **After launch:** migrate to **AWS EC2** with **Docker Compose**, **GitHub Actions** CI/CD, and **CloudWatch** monitoring when traffic or cost warrants it. Docker files are not yet in the repo — that is prep work for the AWS move.
 
@@ -25,9 +25,9 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 | CORS / security headers | ✅ Configured; set `ALLOWED_ORIGIN` in prod |
 | AI synthesis | ⏸ Built, disabled until API budget allows |
 | SEO (sitemap, topic pages, meta) | ✅ Ready — regenerate with real domain before/at cutover |
-| Editorial cleanup (`clean_editorial_notes.py`) | 🚧 Not yet run — required before deploy |
-| Re-embedding after editorial cleanup | 🚧 Pending editorial cleanup |
-| Production (Netlify + Render) | ⏸ Not yet deployed |
+| Editorial cleanup (`clean_editorial_notes.py`) | ✅ Full corpus pass (Haiku batch API) |
+| Re-embedding after editorial cleanup | ✅ Complete |
+| Production (Netlify + Render) | ⏸ Ready — not yet deployed |
 | Docker in repo + AWS migration | 🚧 Planned |
 
 ### Corpus snapshot (local `database.db`)
@@ -165,7 +165,7 @@ ask-the-early-church/
 │   ├── utils.py                # Text cleaning, vector helpers
 │   ├── database.py             # Schema creation + FTS index
 │   ├── embed_passages.py       # Batch: Voyage voyage-3 embeddings
-│   ├── clean_editorial_notes.py # Haiku pass: strip modern editorial framing
+│   ├── clean_editorial_notes.py # Haiku batch pass: strip modern editorial framing
 │   ├── deep_clean.py           # Surgical text cleanup (empties, junk, boilerplate)
 │   ├── seed.py                 # Tiny dev dataset
 │   ├── requirements.txt        # Pinned deps incl. flask-limiter, gunicorn, redis
@@ -282,10 +282,14 @@ python add_missing_works.py  # Basil: Hexaemeron + Letters
 python fts.py
 cd ../../backend
 python deep_clean.py         # remove empties/scraper junk/boilerplate (backs up first)
-python embed_passages.py
+python clean_editorial_notes.py  # Haiku batch: strip modern editorial framing
+python fts.py                # rebuild FTS after text changes
+python embed_passages.py     # re-embed changed passages
 ```
 
 `add_missing_fathers.py`, `add_missing_works.py`, and `add_ephesus_449.py` are incremental — they do not wipe existing data and skip works already present. Use `--replace` to re-import a work; `add_missing_fathers.py --repair-text` fixes encoding/HTML on already-imported custom scrapes. `deep_clean.py` is idempotent and supports `--dry-run`.
+
+`clean_editorial_notes.py` uses the **Anthropic Message Batches API** (50% cheaper than real-time). It backs up `database.db` before the first write, tracks cleaned passages in `editorial_cleaned`, and supports `--resume` if interrupted. Re-run `fts.py` and `embed_passages.py` after it changes text.
 
 ### Frontend
 
@@ -305,10 +309,10 @@ The home page **retries** `/api/library` a few times if the backend is still sta
 ## Corpus Maintenance Pipeline
 
 ```
-etl.py  →  add_* scripts  →  deep_clean.py  →  [clean_editorial_notes.py]  →  fts.py  →  embed_passages.py
+etl.py  →  add_* scripts  →  deep_clean.py  →  clean_editorial_notes.py  →  fts.py  →  embed_passages.py
 ```
 
-`deep_clean.py` removes structural noise (empty passages, scraper nav-junk, transcriber boilerplate) and rebuilds FTS; it backs up `database.db` first and logs every deletion. `clean_editorial_notes.py` (the optional Haiku pass that rewrites prose to strip modern editorial framing) has not been run on the corpus yet. After either script — or `--repair-text` — changes passage text, delete stale embeddings for affected IDs before re-running `embed_passages.py` (both `deep_clean.py` and the add-scripts already clear embeddings for rows they remove).
+`deep_clean.py` removes structural noise (empty passages, scraper nav-junk, transcriber boilerplate) and rebuilds FTS; it backs up `database.db` first and logs every deletion. `clean_editorial_notes.py` strips modern editorial framing via Haiku batch requests (~$110 estimated for the full corpus). After either script — or `--repair-text` — changes passage text, run `fts.py` then `embed_passages.py` (both `deep_clean.py` and the add-scripts already clear embeddings for rows they remove).
 
 ---
 
@@ -365,11 +369,11 @@ Ranking for competitive queries (e.g. “what did Cyril teach on the incarnation
 - [x] Dev Vite `/api` proxy + library fetch retry
 - [x] AI synthesis (disabled for launch)
 - [x] SEO: sitemap, robots.txt, topic landing pages, dynamic meta tags, SearchAction JSON-LD
+- [x] Editorial cleanup (`clean_editorial_notes.py`) — full corpus Haiku batch pass
+- [x] Re-embed after editorial cleanup (`embed_passages.py`)
 
 ### Next (now → launch)
 
-- [ ] **Run `clean_editorial_notes.py`** — Haiku pass to strip modern editorial framing from passage text (not yet run on corpus)
-- [ ] **Re-run `embed_passages.py`** — delete stale embeddings for affected passages, then re-embed
 - [ ] **Deploy to Netlify + Render** — first production launch at [asktheearlychurch.com](https://asktheearlychurch.com)
 - [ ] **Regenerate SEO** with `SITE_URL=https://asktheearlychurch.com` and submit sitemap in Search Console
 - [ ] **Redis on Render** — set `RATELIMIT_STORAGE_URI` so rate limits hold across gunicorn workers
