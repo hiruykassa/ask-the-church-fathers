@@ -26,7 +26,12 @@ jobs:
         working-directory: backend
         env:
           DB_URL: ${{ secrets.DB_URL }}
-        run: bash prestart.sh
+        run: |
+          if [ -n "$DB_URL" ]; then
+            bash prestart.sh
+          else
+            echo "[ci] DB_URL secret not set — skipping database fetch; smoke tests will be skipped."
+          fi
 
       - name: Run smoke tests
         working-directory: backend
@@ -35,7 +40,12 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           ALLOWED_ORIGIN: http://localhost:5173
-        run: pytest -q
+        run: |
+          if [ -f database.db ]; then
+            pytest -q
+          else
+            echo "[ci] No database.db — skipping smoke tests (set DB_URL secret to enable)"
+          fi
 
   frontend:
     name: Frontend build
