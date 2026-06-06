@@ -56,11 +56,11 @@ export default function ReadPage() {
   const scrollTarget = location.state?.scrollToPassage ?? null
 
   usePageMeta(work ? {
-    title: `${work.title} | ${work.author} | Ask the Early Church`,
+    title: `${work.title} — ${work.author} | Ask the Early Church`,
     description: `Read ${work.title} by ${work.author}. Primary source from the early Church Fathers library.`,
     path: `/read/${workId}`,
   } : {
-    title: 'Read | Ask the Early Church',
+    title: 'Read — Ask the Early Church',
     path: `/read/${workId}`,
   })
 
@@ -258,9 +258,10 @@ export default function ReadPage() {
           <IoChevronBack />
           <span>{backLabel}</span>
         </button>
-        <button className="site-title-btn" onClick={() => navigate('/')} title="Home">
+        <div className="site-title-btn" style={{ cursor: 'pointer' }} onClick={() => navigate('/')}>
           <span className="site-title">Ask the Early Church</span>
-        </button>
+          <div className="site-title-ornament"><span>What did the early church teach</span></div>
+        </div>
         <div className="read-header-right">
           <ThemeToggle />
           {work && <span className="read-header-title">{work.title}</span>}

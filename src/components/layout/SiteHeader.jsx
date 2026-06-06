@@ -7,13 +7,13 @@ export default function SiteHeader() {
 
   return (
     <header className="site-header">
-      {/* grid col 1 — empty left spacer */}
-      <div />
-      {/* grid col 2 — centered title */}
+      <div className="site-header-spacer" />
       <button className="site-title-btn" onClick={() => navigate('/')} title="Home">
-        <span className="site-title">Ask the Early Church</span>
+        <h1 className="site-title">Ask the Early Church</h1>
+        <div className="site-title-ornament">
+          <span>What did the early church teach</span>
+        </div>
       </button>
-      {/* grid col 3 — right nav */}
       <nav className="site-nav">
         <ThemeToggle />
       </nav>

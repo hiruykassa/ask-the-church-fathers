@@ -6,8 +6,8 @@ import './AboutPage.css'
 
 export default function AboutPage() {
   usePageMeta({
-    title: 'About | Ask the Early Church',
-    description: 'Who built Ask the Early Church and why: a free patristic library for searching the early Church Fathers.',
+    title: 'About — Ask the Early Church',
+    description: 'Who built Ask the Early Church and why — a free patristic library for searching the early Church Fathers.',
     path: '/about',
   })
   return (
