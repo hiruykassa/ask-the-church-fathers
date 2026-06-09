@@ -235,15 +235,15 @@
 
 /* ── Body layout ── */
 .read-body {
-  --read-article-width: 880px;
-  --read-toc-width: 220px;
-  --read-column-gap: 32px;
+  --read-article-width: 980px;
+  --read-toc-width: 230px;
+  --read-column-gap: 36px;
   flex: 1;
   display: flex;
   justify-content: center;
   width: 100%;
   margin: 0 auto;
-  padding: 40px 24px 100px;
+  padding: 48px 24px 120px;
   box-sizing: border-box;
 }
 
@@ -388,7 +388,7 @@ html[data-theme='dark'] .toc-chapter-name {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 52px 64px 60px;
+  padding: 64px 88px 72px;
   box-shadow: var(--shadow-sm);
   box-sizing: border-box;
 }
@@ -429,10 +429,10 @@ html[data-theme='dark'] .toc-chapter-name {
 }
 .read-passage {
   font-family: var(--font-prose);
-  font-size: 1.18rem;
+  font-size: 1.22rem;
   color: var(--text);
-  line-height: 1.85;
-  margin: 0 0 1.5em;
+  line-height: 1.95;
+  margin: 0 0 1.6em;
   text-align: left;
   scroll-margin-top: 110px;
   user-select: text;
@@ -566,14 +566,14 @@ html[data-theme='dark'] .toc-chapter-name {
 /* ══════════════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════════════ */
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .read-header-title { display: none; }
   .read-body {
-    --read-article-width: min(880px, 100%);
-    --read-toc-width: 190px;
-    --read-column-gap: 24px;
+    --read-article-width: min(980px, 100%);
+    --read-toc-width: 200px;
+    --read-column-gap: 28px;
   }
-  .read-article { padding: 40px 44px 48px; }
+  .read-article { padding: 52px 60px 60px; }
 }
 
 @media (max-width: 760px) {

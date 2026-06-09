@@ -1,4 +1,4 @@
-import { IoBookOutline } from 'react-icons/io5'
+import { IoBookOutline, IoChevronForward } from 'react-icons/io5'
 import EmptyState from './ui/EmptyState'
 import LoadingBlock from './ui/LoadingBlock'
 
@@ -15,16 +15,18 @@ export default function AuthorWorksView({ author, searching, navigate, query }) 
     )
   }
 
+  const count = author.works.length
+
   return (
     <div className="aw-view">
-      <header className="aw-header">
-        <h2 className="aw-author-name">{author.name}</h2>
-        <p className="aw-count">
-          {author.works.length} work{author.works.length !== 1 ? 's' : ''} in the library
-        </p>
-      </header>
+      <div className="aw-meta">
+        <span className="aw-author-name">{author.name}</span>
+        <span className="aw-count">
+          {count} work{count !== 1 ? 's' : ''}
+        </span>
+      </div>
 
-      <div className="aw-list" role="list">
+      <div className="aw-grid" role="list">
         {author.works.map(w => (
           <button
             key={w.id}
@@ -45,6 +47,7 @@ export default function AuthorWorksView({ author, searching, navigate, query }) 
               <IoBookOutline />
             </span>
             <span className="aw-work-title">{w.title}</span>
+            <IoChevronForward className="aw-work-chevron" aria-hidden />
           </button>
         ))}
       </div>

@@ -1384,61 +1384,59 @@ html[data-theme='dark'] .closing-block {
 /* ═══════════════════════════════════════════════════════════
    AUTHOR WORKS VIEW — shown when searching for just an author name
 ═══════════════════════════════════════════════════════════ */
-.aw-loading {
-  font-family: 'Crimson Text', serif;
-  font-size: 1rem;
-  color: var(--text-dim);
-  font-style: italic;
-  text-align: center;
-  padding: 48px 0;
-}
-
 .aw-view {
-  max-width: 700px;
+  max-width: 880px;
   margin: 0 auto;
+  width: 100%;
 }
 
-.aw-header {
-  text-align: center;
-  margin-bottom: 28px;
+/* Meta bar — matches .results-meta style */
+.aw-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding-bottom: 18px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
 }
 
 .aw-author-name {
   font-family: 'Cinzel', serif;
-  font-size: clamp(1.3rem, 4vw, 1.8rem);
+  font-size: clamp(1.05rem, 2.2vw, 1.3rem);
   font-weight: 700;
-  color: var(--cross-gold);
-  letter-spacing: 1px;
-  margin: 0 0 6px;
+  color: var(--text-heading);
+  letter-spacing: 0.8px;
 }
 
 .aw-count {
   font-family: 'Inter', sans-serif;
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: var(--text-dim);
-  letter-spacing: 0.4px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--cross-gold);
 }
 
-.aw-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* 2-column grid on desktop, 1 column on mobile */
+.aw-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
 .aw-work-card {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 18px 24px;
+  padding: 16px 18px;
   cursor: pointer;
   text-align: left;
   box-shadow: var(--shadow-xs);
-  transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.2s var(--ease);
+  transition: box-shadow 0.22s var(--ease-out), border-color 0.2s var(--ease);
   position: relative;
 }
 .aw-work-card:hover {
@@ -1450,12 +1448,12 @@ html[data-theme='dark'] .closing-block {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--cross-gold-soft);
   color: var(--cross-gold);
-  font-size: 1.1rem;
+  font-size: 1rem;
   flex-shrink: 0;
   transition: background 0.2s, color 0.2s;
 }
@@ -1466,14 +1464,27 @@ html[data-theme='dark'] .closing-block {
 
 .aw-work-title {
   font-family: 'Crimson Text', serif;
-  font-size: 1.12rem;
+  font-size: 1.08rem;
   font-weight: 600;
   color: var(--text);
   line-height: 1.35;
   transition: color 0.15s;
+  flex: 1;
+  min-width: 0;
 }
 .aw-work-card:hover .aw-work-title {
   color: var(--cross-gold);
+}
+
+.aw-work-chevron {
+  font-size: 0.9rem;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  transition: color 0.15s, transform 0.15s var(--ease-out);
+}
+.aw-work-card:hover .aw-work-chevron {
+  color: var(--cross-gold);
+  transform: translateX(2px);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2239,8 +2250,9 @@ html[data-theme='dark'] .site-footer__nav-divider {
   .result-card-rank   { min-width: 36px; font-size: 0.74rem; padding-top: 16px; }
   .result-card-body   { padding: 14px 16px 16px; }
   .result-card-quote  { font-size: 0.98rem; padding-left: 10px; }
-  .aw-work-card       { padding: 14px 16px; gap: 12px; }
-  .aw-work-icon       { width: 30px; height: 30px; font-size: 0.95rem; }
+  .aw-grid            { grid-template-columns: 1fr; }
+  .aw-work-card       { padding: 13px 16px; gap: 12px; }
+  .aw-work-icon       { width: 28px; height: 28px; font-size: 0.9rem; }
   .aw-work-title      { font-size: 1.02rem; }
   .auth-card-head     { padding: 14px 16px; }
   .auth-card-body     { padding: 4px 16px 12px; }
