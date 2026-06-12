@@ -4,7 +4,7 @@ import LoadingBlock from './ui/LoadingBlock'
 
 export default function AuthorWorksView({ author, searching, navigate, query }) {
   if (searching) {
-    return <LoadingBlock label="Loading works…" />
+    return <LoadingBlock label="Loading works..." />
   }
 
   if (!author?.works?.length) {

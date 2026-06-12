@@ -6,8 +6,8 @@ import './AboutPage.css'
 
 export default function AboutPage() {
   usePageMeta({
-    title: 'About — Ask the Early Church',
-    description: 'Who built Ask the Early Church and why — a free patristic library for searching the early Church Fathers.',
+    title: 'About | Ask the Early Church',
+    description: 'Who built Ask the Early Church and why. A free patristic library for searching the early Church Fathers.',
     path: '/about',
   })
   return (
@@ -26,9 +26,9 @@ export default function AboutPage() {
           <section className="about-section">
             <h2 className="about-heading">Who Built This</h2>
             <p className="about-text">
-              I am Hiruy Kassa, an Oriental Orthodox computer
+              Hi, my name is Hiruy Kassa, an Oriental Orthodox computer
               science student. I built this site because I wanted the writings and documents of 
-              the early church to be easily accessible, especially for people who
+              the early Church to be easily accessible, especially for people who
               are trying to learn what early Christians actually taught.
             </p>
           </section>
@@ -36,28 +36,33 @@ export default function AboutPage() {
           <section className="about-section">
             <h2 className="about-heading">Why It Exists</h2>
             <p className="about-text">
-              I started this so the Fathers would be accessible in one place,
+              I started this so the documents of the early Church would be accessible in one place,
               and so people could read them without already being pushed toward
               one tradition&apos;s reading of history. If you are asking
               questions about church history, this site is for you.
-            </p>
-            <p className="about-text">
-              My hope is simple: strengthen Christians in what they believe and
-              help answer honest questions about Christianity by pointing people
-              to the sources themselves, not to summaries that skip the hard
-              parts.
             </p>
           </section>
 
           <section className="about-section">
             <h2 className="about-heading">What You Can Do Here</h2>
             <p className="about-text">
-              Search across patristic writings by topic, author, or keyword.
-              Browse the full library and read works in your browser. Save
-              passages you want to come back to.
+              Search the patristic corpus by topic, author, keyword, or scripture
+              reference. Browse the library by collection (the Church Fathers,
+              biblical commentaries, councils, liturgies, apocrypha, and more), or
+              open the commentaries verse by verse to see what each Father wrote on
+              a given passage. Read complete works in the reader, explore curated
+              topic pages, and save passages to come back to.
             </p>
             <p className="about-text">
-              Texts come from public-domain translations on{' '}
+              Most of the library comes from{' '}
+              <a
+                href="https://historicalchristian.faith/by_father.php"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                HistoricalChristianFaith
+              </a>
+              , with additional public-domain translations from{' '}
               <a
                 href="https://www.ccel.org"
                 target="_blank"
@@ -73,18 +78,17 @@ export default function AboutPage() {
               >
                 New Advent
               </a>
-              . I am still expanding the library over time.
+              . The library is still growing.
             </p>
           </section>
 
           <section className="about-section">
             <h2 className="about-heading">About the AI Summary</h2>
             <p className="about-text">
-              An AI synthesis feature is fully built and ready to go, but
-              disabled for now due to API costs. Once funding is in place, it
-              will pull together passages related to your search so you can see
-              patterns and follow up in the texts. For now, read through the
-              search results and explore the full works in the reader.
+            The website has an AI synthesis feature that is fully built and ready to go, but
+            disabled for now due to API costs. Once funding is in place, it
+            will be integrated into the website. It will pull passages related to your search and provide a synthesized answer. For now, read through the
+            search results and explore the full works in the reader.
             </p>
           </section>
         </article>

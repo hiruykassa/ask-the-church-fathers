@@ -30,6 +30,8 @@ cursor.execute("""
         work_id INTEGER,
         header TEXT,
         text TEXT,
+        source_title TEXT,
+        source_url TEXT,
         FOREIGN KEY (work_id) REFERENCES works(id)
     )
 """)

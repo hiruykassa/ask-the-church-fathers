@@ -1,0 +1,159 @@
+/* ═══════════════════════════════════════════════════════════
+   SCRIPTURE BROWSER — verse-first commentary navigation
+═══════════════════════════════════════════════════════════ */
+
+/* — Books grid — */
+.scripture-books {
+  list-style: none;
+  margin: 26px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.scripture-book {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.scripture-book:hover {
+  background: var(--surface2);
+  border-color: var(--text-faint);
+  text-decoration: none;
+}
+.scripture-book-name {
+  font-family: var(--font-display), serif;
+  font-size: 1.08rem;
+  font-weight: 600;
+  color: var(--text-heading);
+  line-height: 1.2;
+}
+.scripture-book-meta {
+  font-family: var(--font-ui), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+/* — Chapter / verse number grids — */
+.scripture-nums {
+  list-style: none;
+  margin: 26px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 10px;
+}
+.scripture-verses {
+  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+}
+.scripture-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-display), serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-heading);
+  text-decoration: none;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.scripture-num:hover {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--btn-on-gold);
+  text-decoration: none;
+}
+/* Verse cells carry a small father-count */
+.scripture-verse {
+  flex-direction: column;
+  gap: 1px;
+  min-height: 58px;
+}
+.scripture-verse-n { font-size: 1.05rem; line-height: 1.1; }
+.scripture-verse-count {
+  font-family: var(--font-ui), sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+.scripture-verse:hover .scripture-verse-count { color: var(--btn-on-gold); }
+
+/* — Catena: each father's explanation on the verse — */
+.catena {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 24px;
+  max-width: 740px;
+}
+.catena-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  cursor: pointer;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+.catena-card:hover {
+  background: var(--surface2);
+  border-color: var(--text-faint);
+}
+.catena-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  margin-bottom: 10px;
+}
+.catena-author {
+  font-family: var(--font-display), serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-heading);
+  line-height: 1.2;
+  margin: 0;
+}
+.catena-work {
+  font-family: var(--font-ui), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.catena-text {
+  font-family: var(--font-prose), serif;
+  font-size: 1.08rem;
+  line-height: 1.72;
+  color: var(--text);
+  margin: 0;
+}
+.catena-cta {
+  display: inline-block;
+  margin-top: 12px;
+  font-family: var(--font-ui), sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+@media (max-width: 620px) {
+  .scripture-books { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .scripture-nums { grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); }
+}

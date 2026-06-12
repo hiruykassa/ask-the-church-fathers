@@ -19,8 +19,10 @@ KEYCHAIN_SERVICE = "ask-the-early-church"
 DEFAULT_SECRETS_PATH = Path.home() / ".secrets" / "ask-the-early-church.env"
 
 _KEYCHAIN_ACCOUNTS = {
-    "ANTHROPIC_API_KEY": "anthropic",
-    "VOYAGE_API_KEY": "voyage",
+    "GEMINI_API_KEY": "gemini",        # primary query parser (Gemini 2.5 Flash)
+    "VOYAGE_API_KEY": "voyage",        # semantic-search embeddings
+    "GROQ_API_KEY": "groq",            # fallback query parser (Llama 3.3 70B)
+    "ANTHROPIC_API_KEY": "anthropic",  # Claude synthesis (currently disabled)
 }
 
 

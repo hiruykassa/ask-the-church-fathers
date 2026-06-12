@@ -63,7 +63,7 @@ export default function TopicPage() {
       <div className="header-body-bridge" aria-hidden />
 
       <main className="topic-main">
-        {loading && <LoadingBlock label="Loading topic…" />}
+        {loading && <LoadingBlock label="Loading topic..." />}
 
         {!loading && error && (
           <EmptyState
@@ -90,13 +90,13 @@ export default function TopicPage() {
                   key={p.id}
                   className="topic-passage"
                   onClick={() => navigate(`/read/${p.work_id}`, {
-                    state: { fromSearch: true, query: searchQuery, scrollToPassage: p.id },
+                    state: { scrollToPassage: p.id },
                   })}
                   onKeyDown={e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
                       navigate(`/read/${p.work_id}`, {
-                        state: { fromSearch: true, query: searchQuery, scrollToPassage: p.id },
+                        state: { scrollToPassage: p.id },
                       })
                     }
                   }}

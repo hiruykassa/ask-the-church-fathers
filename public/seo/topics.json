@@ -1,78 +1,78 @@
 {
   "siteUrl": "https://asktheearlychurch.com",
-  "generated": "2026-06-06",
+  "generated": "2026-06-09",
   "topics": [
     {
-      "slug": "cyril-incarnation",
-      "title": "What Did Saint Cyril Teach on the Incarnation?",
-      "description": "Passages from Cyril of Alexandria on the Incarnation of Christ, from primary sources in the early Church.",
-      "query": "incarnation",
-      "author": "Cyril of Alexandria",
-      "intro": "Cyril of Alexandria (d. 444) was a central patristic voice on Christology. Below are excerpts from his works on the Incarnation, the Word made flesh, drawn from the Ask the Early Church corpus.",
+      "slug": "tertullian-trinity",
+      "title": "What Did Tertullian Teach on the Trinity?",
+      "description": "Tertullian on the Trinity and the three Persons of the one God: primary sources from the early Church.",
+      "query": "Trinity",
+      "author": "Tertullian",
+      "intro": "Tertullian (c. 155–220) was the first to write of the 'Trinity' (Trinitas) in Latin and shaped how the Church speaks of three Persons in one substance. These passages are drawn from his works in the Ask the Early Church corpus.",
       "passages": [
         {
-          "id": 282313,
-          "passage": "One therefore is He Who before the Incarnation is called by the God-inspired Scripture, Only-Begotten, Word, God, Image, Brightness, Impress of the Person of the Father, Life, Glory, Light, Wisdom, Power, Arm, Right Hand, Most Highest, Magnificence, Lord of Sabaoth, and other like names, truly most God-befitting; and after the Incarnation, Man, Christ Jesus, Propitiation, Mediator, Firstfruits of them that slept, First-begotten of the dead, Second Adam, Head of the Body the…",
-          "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
-          "work_id": 848,
-          "work": "Scholia on the Incarnation",
-          "author": "Cyril of Alexandria"
+          "id": 337499,
+          "passage": "If the number of the Trinity also offends you, as if it were not connected in the simple Unity, I ask you how it is possible for a Being who is merely and absolutely One and Singular, to speak in plural phrase, saying, \"Let us make man in our own image, and after our own likeness;\" whereas He ought to have said, \"Let me make man in my own image, and after my own likeness,\" as being a unique and singular Being? In the following passage, however, \"Behold the man is become as…",
+          "header": "Genesis 1:26",
+          "work_id": 3620,
+          "work": "Commentary on Genesis",
+          "author": "Tertullian"
         },
         {
-          "id": 282447,
-          "passage": "17. q See a very similar expression in a little treatise of S. Athariasius on the Incarnation, quoted by S. Cyril, de recta fide to the Princesses Arcadia and Marina, p. 48 a c, and in S. Cyril's Defence of his eighth chapter against the strictures of the Eastern Bishops, p. 178 b and c.",
-          "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
-          "work_id": 848,
-          "work": "Scholia on the Incarnation",
-          "author": "Cyril of Alexandria"
+          "id": 336287,
+          "passage": "But it remains so firm and stable in its own state, notwithstanding the introduction into it of the Trinity, that the Son actually has to restore it entire to the Father; even as the apostle says in his epistle, concerning the very end of all: \"When He shall have delivered up the kingdom to God, even the Father; for He must reign till He hath put all enemies under His feet; \" following of course the words of the Psalm: \"Sit Thou on my right hand, until I make Thine enemies…",
+          "header": "1 Corinthians 15:24",
+          "work_id": 3593,
+          "work": "Commentary on 1 Corinthians",
+          "author": "Tertullian"
         },
         {
-          "id": 282481,
-          "passage": "I'm ready to help you clean patristic passages from the newadvent.org database. However, I notice that what you've provided is just a header line indicating the author and dates, without any actual passage text to edit.\n\nPlease paste the passage you'd like me to clean, and I'll remove all modern editorial content while preserving only the authentic text of Cyril of Alexandria.",
-          "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
-          "work_id": 848,
-          "work": "Scholia on the Incarnation",
-          "author": "Cyril of Alexandria"
+          "id": 338480,
+          "passage": "(The heretics whom we have referred to) deny that nature is susceptible of any change, in order that they may be able to establish and settle their threefold theory, or \"trinity,\" in all its characteristics as to the several natures, because \"a good tree cannot produce evil fruit, nor a corrupt tree good fruit; and nobody gathers figs of thorns, nor grapes of brambles.\" If so, then \"God will not be able any longer to raise up from the stones children unto Abraham; nor to…",
+          "header": "Luke 6:43",
+          "work_id": 3636,
+          "work": "Commentary on Luke",
+          "author": "Tertullian"
         },
         {
-          "id": 282323,
-          "passage": "I notice that this passage contains only a section marker (\"15. Another.\") with no actual patristic text following it. This appears to be a heading or divider without substantive content from Cyril of Alexandria.\n\nEDITORIAL_ONLY",
-          "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
-          "work_id": 848,
-          "work": "Scholia on the Incarnation",
-          "author": "Cyril of Alexandria"
+          "id": 337529,
+          "passage": "\"Behold the man is become as one of us,\" He is either deceiving or amusing us in speaking plurally, if He is One only and singular. Or was it to the angels that He spoke, as the Jews interpret the passage, because these also acknowledge not the Son? Or was it because He was at once the Father, the Son, and the Spirit, that He spoke to Himself in plural terms, making Himself plural on that very account? Nay, it was because He had already His Son close at His side, as a second…",
+          "header": "Genesis 3:23",
+          "work_id": 3620,
+          "work": "Commentary on Genesis",
+          "author": "Tertullian"
         },
         {
-          "id": 282328,
-          "passage": "I need to see the actual text content of this passage. What you've provided is only a heading (\"16. Another.\") with no patristic content to evaluate.\n\nPlease provide the full passage text so I can remove editorial material and return the actual words of Cyril of Alexandria.",
-          "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
-          "work_id": 848,
-          "work": "Scholia on the Incarnation",
-          "author": "Cyril of Alexandria"
+          "id": 288424,
+          "passage": "Against Praxeas ------------ In which he defends, in all essential points, the doctrine of the holy trinity. [Translated by Dr. Holmes.] Chapter I.-Satan's Wiles Against the Truth. How They Take the Form of the Praxean Heresy. Account of the Publication of This Heresy. In various ways has the devil rivalled and resisted the truth. Sometimes his aim has been to destroy the truth by defending it. He maintains that there is one only Lord, the Almighty Creator of the world, in…",
+          "header": "Against Praxeas 1",
+          "work_id": 1416,
+          "work": "Against Praxeas",
+          "author": "Tertullian"
         },
         {
-          "id": 282341,
-          "passage": "20. Another.",
-          "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
-          "work_id": 848,
-          "work": "Scholia on the Incarnation",
-          "author": "Cyril of Alexandria"
+          "id": 288444,
+          "passage": "The Prescription Against Heretics. [Translated by the Rev. Peter Holmes, D.D., F.r.a.s., Etc., Etc.] -------- Chapter I.-Introductory. Heresies Must Exist, and Even Abound; They are a Probation to Faith. The character of the times in which we live is such as to call forth from us even this admonition, that we ought not to be astonished at the heresies (which abound) neither ought their existence to surprise us, for it was foretold that they should come to pass; nor the fact…",
+          "header": "The Prescription Against Heretics. 1",
+          "work_id": 1436,
+          "work": "The Prescription Against Heretics",
+          "author": "Tertullian"
         },
         {
-          "id": 282343,
-          "passage": "21. Another.",
-          "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
-          "work_id": 848,
-          "work": "Scholia on the Incarnation",
-          "author": "Cyril of Alexandria"
+          "id": 288437,
+          "passage": "On the Flesh of Christ. ------------ This was written by our author in confutation of certain heretics who denied the reality of Christ's flesh, or at least its identity with human flesh-fearing that, if they admitted the reality of Christ's flesh, they must also admit his resurrection in the flesh; and, consequently, the resurrection of the human body after death. [Translated by Dr. Holmes.] Chapter I.-The General Purport of This Work. The Heretics, Marcion, Apelles, and…",
+          "header": "On the Flesh of Christ. 1",
+          "work_id": 1429,
+          "work": "On the Flesh of Christ",
+          "author": "Tertullian"
         },
         {
-          "id": 282345,
-          "passage": "22. Another.",
-          "header": "SCHOLIA ON THE INCARNATION OF THE ONLY-BEGOTTEN.",
-          "work_id": 848,
-          "work": "Scholia on the Incarnation",
-          "author": "Cyril of Alexandria"
+          "id": 288422,
+          "passage": "A Treatise on the Soul. [Translated by Peter Holmes, D.D.] -------- Chapter I.-It is Not to the Philosophers that We Resort for Information About the Soul But to God. Having discussed with Hermogenes the single point of the origin of the soul, so far as his assumption led me, that the soul consisted rather in an adaptation of matter than of the inspiration of God, I now turn to the other questions incidental to the subject; and (in my treatment of these) I shall evidently…",
+          "header": "A Treatise on the Soul. 1",
+          "work_id": 1414,
+          "work": "A Treatise on the Soul",
+          "author": "Tertullian"
         }
       ]
     },
@@ -83,7 +83,72 @@
       "query": "incarnation",
       "author": "Athanasius of Alexandria",
       "intro": "Athanasius of Alexandria (c. 298–373) defended the full divinity of Christ and wrote extensively on the Incarnation. These passages are from his works in the early Church library.",
-      "passages": []
+      "passages": [
+        {
+          "id": 293202,
+          "passage": "With the aid of your prayers, I hope to give a true picture of the plans of Paul, that holy man. He was very knowledgeable and skilled in these matters of God, and he knew the power of the Lord's teaching. So he deemed it necessary to teach first about Christ and the mystery of the incarnation. Only then did he point to things in their lives that needed to be corrected. He wanted them first to know the Lord and then to want to do what he told them. For if you don't know the…",
+          "header": "Hebrews 11:5-6",
+          "work_id": 1725,
+          "work": "Commentary on Hebrews",
+          "author": "Athanasius of Alexandria"
+        },
+        {
+          "id": 293229,
+          "passage": "Now what can they [i.e., those who deny the incarnation] say to this, or how can they dare to face this at all? For the prophecy not only indicated that God is to sojourn here but also announces the signs and the time of his coming. For they connect the blind recovering their sight, and the lame walking, and the deaf hearing, and the tongue of the one who stammers being made plain, with the divine coming which is to take place. Let them say, then, when such signs have come…",
+          "header": "Isaiah 35:6",
+          "work_id": 1727,
+          "work": "Commentary on Isaiah",
+          "author": "Athanasius of Alexandria"
+        },
+        {
+          "id": 285541,
+          "passage": "Tome or Synodal Letter to the People of Antioch To our beloved and much-desired fellow-ministers Eusebius, Lucifer, Asterius, Kymatius, and Anatolius, Athanasius and the bishops present in Alexandria from Italy and Arabia, Egypt and Libya; Eusebius, Asterius, Gains, Agathus, Ammonius, Agathodaemon, Dracontius, Adelphius, Hermaeon, Marcus, Theodorus, Andreas, Paphnutius, another Marcus, Zoilus, Menas, George, Lucius, Macarius and the rest, all greeting in Christ. We are…",
+          "header": "Tome or Synodal Letter to the People of Antioch",
+          "work_id": 941,
+          "work": "Tome or Synodal Letter to the People of Antioch",
+          "author": "Athanasius of Alexandria"
+        },
+        {
+          "id": 293316,
+          "passage": "1. This text refers not to the eternal Word but to the Incarnate.\nAnd from not perceiving this they of the sect of Arius, Eusebius and his fellows, indulge impiety against the Lord. For they say, if all things were delivered (meaning by 'all' the Lordship of Creation), there was once a time when He had them not. But if He had them not, He is not of the Father, for if He were, He would on that account have had them always, and would not have required to receive them. But this…",
+          "header": "Luke 10:22",
+          "work_id": 1734,
+          "work": "Commentary on Luke",
+          "author": "Athanasius of Alexandria"
+        },
+        {
+          "id": 285536,
+          "passage": "On Luke X. 22 (Matt. XI. 27) § 1. This Text Refers Not to the Eternal Word But to the Incarnate. \"All things were delivered to Me by My Father. And none knoweth Who the Son is, save the Father; and Who the Father is, save the Son, and he to whomsoever the Son willeth to reveal Him.\" And from not perceiving this they of the sect of Arius, Eusebius and his fellows, indulge impiety against the Lord. For they say, if all things were delivered (meaning by `all' the Lordship of…",
+          "header": "On Luke X. 22 (Matt. XI. 27)",
+          "work_id": 935,
+          "work": "On Luke 10 22 (Matt 11 27)",
+          "author": "Athanasius of Alexandria"
+        },
+        {
+          "id": 285550,
+          "passage": "Discourse IV §§1-5. The substantiality of the Word proved from Scripture. If the One Origin be substantial, Its Word is substantial. Unless the Word and Son be a second Origin, or a work, or an attribute (and so God be compounded), or at the same time Father, or involve a second nature in God, He is from the Father's Essence and distinct from Him. Illustration of John x. 30, drawn from Deut. iv. 4. 1. The Word is God from God; for `the Word was God,' and again, `Of whom are…",
+          "header": "Discourse IV",
+          "work_id": 944,
+          "work": "Four Discourses Against the Arians",
+          "author": "Athanasius of Alexandria"
+        },
+        {
+          "id": 285540,
+          "passage": "To the Bishops of Egypt Chapter I. 1. Christ warned His followers against false prophets. All things whatsoever our Lord and Saviour Jesus Christ, as Luke wrote, `both hath done and taught,' He effected after having appeared for our salvation; for He came, as John saith, `not to condemn the world, but that the world through Him might be saved.' And among the rest we have especially to admire this instance of His goodness, that He was not silent concerning those who should…",
+          "header": "To the Bishops of Egypt",
+          "work_id": 940,
+          "work": "To the Bishops of Egypt",
+          "author": "Athanasius of Alexandria"
+        },
+        {
+          "id": 285530,
+          "passage": "Councils of Ariminum and Seleucia Part I. History of the Councils. Reason why two Councils were called. Inconsistency and folly of calling any; and of the style of the Arian formularies; occasion of the Nicene Council; proceedings at Ariminum; Letter of the Council to Constantius; its decree. Proceedings at Seleucia; reflections on the conduct of the Arians. 1. Perhaps news has reached even yourselves concerning the Council, which is at this time the subject of general…",
+          "header": "Councils of Ariminum and Seleucia",
+          "work_id": 929,
+          "work": "Councils of Ariminum and Seleucia",
+          "author": "Athanasius of Alexandria"
+        }
+      ]
     },
     {
       "slug": "augustine-grace",
@@ -92,16 +157,106 @@
       "query": "grace",
       "author": "Augustine of Hippo",
       "intro": "Augustine of Hippo (354–430) wrote widely on grace and the Christian life. The excerpts below come directly from his works in this corpus.",
-      "passages": []
+      "passages": [
+        {
+          "id": 295953,
+          "passage": "(in Joan. Tr. iii. c. 8. et seq.) But what have ye received? Grace for grace. So that we are to understand that we have received a certain something from His fulness, and over and above this, grace for grace; that we have first received of His fulness, first grace; and again, we have received grace for grace. What grace did we first receive? Faith: which is called grace, because it is given freely. This is the first grace then which the sinner receives, the remission of his…",
+          "header": "John 1:16",
+          "work_id": 1795,
+          "work": "Commentary on John",
+          "author": "Augustine of Hippo"
+        },
+        {
+          "id": 295952,
+          "passage": "\"And of His fullness have all we received.\" What have ye received? \"And grace for grace.\" For so run the words of the Gospel, as we find by a comparison of the Greek copies. He does not say, \"And of His fullness have all we received grace for grace\"; but thus He says: \"And of His fullness have all we received, and grace for grace,\" that is, have we received; so that He would wish us to understand that we have received from His fullness something unexpressed, and something…",
+          "header": "John 1:16",
+          "work_id": 1795,
+          "work": "Commentary on John",
+          "author": "Augustine of Hippo"
+        },
+        {
+          "id": 293950,
+          "passage": "What then is this \"grace for grace\"? By faith we first win God's favor; and for us who were not worthy to have our sins forgiven, from the very fact that, though unworthy, we received so great a gift, it is called grace. What is grace? That which is given gratuitously. That which is bestowed, not paid back. If it was owed, recompense was paid, not grace bestowed.… Having acquired this grace of faith, you will be just by faith. \"For the just man lives by faith.\" And you will…",
+          "header": "1 Timothy 1:13",
+          "work_id": 1764,
+          "work": "Commentary on 1 Timothy",
+          "author": "Augustine of Hippo"
+        },
+        {
+          "id": 300985,
+          "passage": "Do we then make void freedom of choice through grace? God forbid! Rather, we establish freedom of choice. As the law is not made void by faith, so freedom of choice is not made void but established by grace. Freedom of choice is necessary to the fulfillment of the law. But by the law comes the knowledge of sin; by faith comes the obtaining of grace against sin; by grace comes the healing of the soul from sin's sickness; by the healing of the soul comes freedom of choice; by…",
+          "header": "Romans 3:31",
+          "work_id": 1817,
+          "work": "Commentary on Romans",
+          "author": "Augustine of Hippo"
+        },
+        {
+          "id": 295518,
+          "passage": "\"Ye have not chosen me,\" He says, \"but I have chosen you.\" Grace such as that is ineffable. For what were we so long as Christ had not yet chosen us, and we were therefore still destitute of love? For he who hath chosen Him, how can he love Him? Were we, think you, in that condition which is sung of in the psalm: \"I had rather be an abject in the house of the Lord, than dwell in the tents of wickedness\"? Certainly not. What were we then, but sinful and lost? We had not yet…",
+          "header": "John 15:16",
+          "work_id": 1795,
+          "work": "Commentary on John",
+          "author": "Augustine of Hippo"
+        },
+        {
+          "id": 298181,
+          "passage": "Grace is not bestowed according to human merits; otherwise grace would be no longer grace. For grace is so designated because it is given gratuitously.",
+          "header": "Proverbs 19:3",
+          "work_id": 1813,
+          "work": "Commentary on Proverbs",
+          "author": "Augustine of Hippo"
+        },
+        {
+          "id": 295957,
+          "passage": "(in Joan. Tr. iii. c. 8. et seq.) There was not grace in the Old Testament; for the law threatened, but assisted not, commanded, but healed not, showed our weakness, but relieved it not. It prepared the way however for a Physician who was about to come, with the gifts of grace and truth: whence the sentence which follows: For the law was given by Moses, but grace and truth were made by Jesus Christ. The death of thy Lord hath destroyed death, both temporal and eternal; that…",
+          "header": "John 1:17",
+          "work_id": 1795,
+          "work": "Commentary on John",
+          "author": "Augustine of Hippo"
+        },
+        {
+          "id": 298303,
+          "passage": "\"Look, how wide the east is from the west; so far has He set our sins from us\" [ ]. They who know the Sacraments know this; nevertheless, I only say what all may hear. When sin is remitted, your sins fall, your grace rises; your sins are as it were on the decline, your grace which frees you on the rise. \"Truth springs from the earth.\" What means this? Your grace is born, your sins fall, you are in a certain manner made new. You should look to the rising, and turn away from…",
+          "header": "Psalms 103:12",
+          "work_id": 1815,
+          "work": "Commentary on Psalms",
+          "author": "Augustine of Hippo"
+        }
+      ]
     },
     {
       "slug": "irenaeus-heresy",
       "title": "What Did Irenaeus Teach About Heresy and Tradition?",
       "description": "Irenaeus of Lyons on heresy, apostolic tradition, and the rule of faith: patristic texts.",
       "query": "heresy tradition",
-      "author": "Irenaeus of Lyons",
+      "author": "Irenaeus",
       "intro": "Irenaeus of Lyons (c. 130–202) confronted Gnostic teachings and argued for apostolic tradition. These passages address heresy and the faith handed down in the Church.",
-      "passages": []
+      "passages": [
+        {
+          "id": 287649,
+          "passage": "TRANSLATIONS OF CHRISTIAN LITERATURE GENERAL EDITORS: W. J. SPARROW SIMPSON, D.D. W. K. LOWTHER CLARKE, B.D. SERIES IV ORIENTAL TEXTS ST. IRENAEUS ST IRENAEUS THE DEMONSTRATION OF THE APOSTOLIC PREACHING TRANSLATED FROM THE ARMENIAN WITH INTRODUCTION AND NOTES BY J. ARMITAGE ROBINSON, D.D. DEAN OF WELLS LONDON: SOCIETY FOR PROMOTING CHRISTIAN KNOWLEDGE NEW YORK: THE MACMILLAN CO. 1920 PRINTED IN GREAT BRITAIN BY RICHARD CLAY & SONS, LIMITED, BRUNSWICK ST., STAMFORD ST., S.E.…",
+          "header": "ST IRENAEUS",
+          "work_id": 1214,
+          "work": "The Proof of the Apostolic Preaching",
+          "author": "Irenaeus"
+        },
+        {
+          "id": 287644,
+          "passage": "Book I -------- Preface. 1. Inasmuch as certain men have set the truth aside, and bring in lying words and vain genealogies, which, as the apostle says, \"minister questions rather than godly edifying which is in faith,\" and by means of their craftily-constructed plausibilities draw away the minds of the inexperienced and take them captive, [I have felt constrained, my dear friend, to compose the following treatise in order to expose and counteract their machinations.] These…",
+          "header": "Book I",
+          "work_id": 1209,
+          "work": "Irenaeus Against Heresies Book 1",
+          "author": "Irenaeus"
+        },
+        {
+          "id": 287647,
+          "passage": "Book IV. -------- Preface. 1. By transmitting to thee, my very dear friend, this fourth book of the work which is [entitled] The Detection and Refuation of False Knowledge, I shall, as I have promised, add weight, by means of the words of the Lord, to what I have already advanced; so that thou also, as thou hast requested, mayest obtain from me the means of confuting all the heretics everywhere, and not permit them, beaten back at all points, to launch out further into the…",
+          "header": "Book IV.",
+          "work_id": 1212,
+          "work": "Irenaeus Against Heresies Book 4",
+          "author": "Irenaeus"
+        }
+      ]
     },
     {
       "slug": "chrysostom-eucharist",
@@ -112,19 +267,43 @@
       "intro": "John Chrysostom (c. 349–407), bishop of Constantinople, preached often on the Eucharist. Below are representative passages from his works.",
       "passages": [
         {
-          "id": 220215,
-          "passage": "But why adds he also, which we break? For although in the Eucharist one may see this done, yet on the cross not so, but the very contrary. For, A bone of Him, says one, shall not be broken. But that which He suffered not on the cross, this He suffers in the oblation for your sake, and submits to be broken, that he may fill all men.",
-          "header": "1 Corinthians 10:16",
-          "work_id": 662,
-          "work": "Homilies on First Corinthians",
+          "id": 324408,
+          "passage": "At this place we are again assailed by those who take away repentance [the Novatians], and by those who delay to come to baptism. The one saying, that it is not safe for them to come to baptism, since there is no second remission: And the other asserting that it is not safe to impart the mysteries [the Holy Eucharist] to those who have sinned, if there is no second remission.\n\nWhat shall we say then to them both? That he does not take away repentance, nor the propitiation…",
+          "header": "Hebrews 10:26-27",
+          "work_id": 2915,
+          "work": "Commentary on Hebrews",
           "author": "John Chrysostom"
         },
         {
-          "id": 229581,
-          "passage": "Again, the Scripture is wont to give the name of the Flesh to the Mysteries of the Eucharist, and to the whole Church, calling them the Body of Christ. Nay, to induce you to give the name of blessings to the things of which the flesh is the medium, you have only to imagine the extinction of the senses, and you will find the soul deprived of all discernment, and ignorant of what it before knew. For if the power of God is since the creation of the world clearly seen, being…",
-          "header": "Homily 5 on Galatians",
-          "work_id": 676,
-          "work": "Homilies on Galatians",
+          "id": 320980,
+          "passage": "\"The cup of blessing which we bless, is it not a communion of the Blood of Christ?\" What sayest thou, O blessed Paul? When thou wouldest appeal to the hearer's reverence, when thou art making mention of awful mysteries, dost thou give the title of \"cup of blessing\" to that fearful and most tremendous cup? \"Yea,\" saith he; \"and no mean title is that which was spoken. For when I call it 'blessing,' I mean thanksgiving, and when I call it thanksgiving I unfold all the treasure…",
+          "header": "1 Corinthians 10:16",
+          "work_id": 2887,
+          "work": "Commentary on 1 Corinthians",
+          "author": "John Chrysostom"
+        },
+        {
+          "id": 324060,
+          "passage": "Here some make the charge that the Apostle has divided man into two parts, and that he states the essence of which he is compounded to be conflicting with itself, and that the body has a contest with the soul. But this is not so, most certainly; for by \"the flesh,\" he does not mean the body; if he did, what would be the sense of the clause immediately following, \"for it lusteth,\" he says, \"against the Spirit?\" yet the body moves not, but is moved, is not an agent, but is…",
+          "header": "Galatians 5:17",
+          "work_id": 2912,
+          "work": "Commentary on Galatians",
+          "author": "John Chrysostom"
+        },
+        {
+          "id": 287952,
+          "passage": "Homily of St John Chrysostom, archbishop of\nConstantinople, our sainted father: Against those who have abandoned the church and\ndeserted it for hippodromes and theatres. [Translated by Mark Vermes] [272] Can this be tolerated? Can this be accepted? I\nwant to call you to witness against yourselves. That is what God did with the\nHebrews. He called them as witnesses against themselves when he said: \"My\npeople, what have I done to you? How have I hurt you or how have I annoyed…",
+          "header": "Against the circuses and theatres",
+          "work_id": 1277,
+          "work": "Homilies",
+          "author": "John Chrysostom"
+        },
+        {
+          "id": 287954,
+          "passage": "Preface St. Chrysostom's Commentary on the Epistle to the Galatians is continuous, according to chapter and verse, instead of being arranged in Homiles, with a moral or practical application at their close, as in his exposition of other Epistles. It was written in Antioch, as Montfaucon infers from a reference which the Author, makes upon Chap. i. ver. 16 (p. 20) to other of his writings, which certainly were written about the same time in that city. Vid. Hom. de Mutal.…",
+          "header": "Preface",
+          "work_id": 1277,
+          "work": "Homilies",
           "author": "John Chrysostom"
         }
       ]
@@ -136,7 +315,72 @@
       "query": "Holy Spirit",
       "author": "Basil of Caesarea",
       "intro": "Basil the Great (c. 330–379) wrote On the Holy Spirit and helped shape Trinitarian doctrine. These excerpts are drawn from his writings in the corpus.",
-      "passages": []
+      "passages": [
+        {
+          "id": 301910,
+          "passage": "But, if we must go on with our discussion and make a deeper study, let us, from this point, contemplate especially the divine power of the Holy Spirit. We find three creations mentioned in the Scripture; the first, the bringing forth from nonexistence into existence; the second, the change from worse to better; and the third, the resurrection of the dead. In these you will find the Holy Spirit co-operating with the Father and the Son. Take, for instance, the calling into…",
+          "header": "Psalms 104:30",
+          "work_id": 1879,
+          "work": "Commentary on Psalms",
+          "author": "Basil of Caesarea"
+        },
+        {
+          "id": 301562,
+          "passage": "6. And the Spirit of God was borne upon the face of the waters. Does this spirit mean the diffusion of air? The sacred writer wishes to enumerate to you the elements of the world, to tell you that God created the heavens, the earth, water, and air and that the last was now diffused and in motion; or rather, that which is truer and confirmed by the authority of the ancients, by the Spirit of God, he means the Holy Spirit. It is, as has been remarked, the special name, the…",
+          "header": "Genesis 1:2",
+          "work_id": 1857,
+          "work": "Commentary on Genesis",
+          "author": "Basil of Caesarea"
+        },
+        {
+          "id": 301454,
+          "passage": "Let no one be misled by the fact of the apostle's frequently omitting the name of the Father and of the Holy Spirit when making mention of baptism, or on this account imagine that the invocation of the names is not observed. \"As many of you,\" he says, \"as were baptized into Christ have put on Christ;\" and again, \"As many of you as were baptized into Christ were baptized into his death.\" For the naming of Christ is the confession of the whole, shewing forth as it does the God…",
+          "header": "Acts 10:38",
+          "work_id": 1846,
+          "work": "Commentary on Acts",
+          "author": "Basil of Caesarea"
+        },
+        {
+          "id": 301964,
+          "passage": "Where are those who set at naught the Spirit? Where are those who separate it from the creative power? Where are those who dissever it from union with the Father and Son? Let them hear the psalm that says, \"By the word of the Lord the heavens were established; and all the power of them by the spirit of his mouth.\" The term \"Word\" will not be considered as this common form of diction that consists of names and expressions; nor will the Spirit be considered as vapor poured out…",
+          "header": "Psalms 33:6",
+          "work_id": 1879,
+          "work": "Commentary on Psalms",
+          "author": "Basil of Caesarea"
+        },
+        {
+          "id": 301467,
+          "passage": "Peter's words to Sapphira—\"How is it that you have agreed together to tempt the Spirit of the Lord? You did not lie to men, but to God\"—show that sins against the Holy Spirit and against God are the same. And thus you might learn that in every operation the Spirit is closely conjoined with, and inseparable from, the Father and the Son. While God works the differences of operations and the Lord the diversities of administrations, the Holy Spirit is present also, administering…",
+          "header": "Acts 5:4",
+          "work_id": 1846,
+          "work": "Commentary on Acts",
+          "author": "Basil of Caesarea"
+        },
+        {
+          "id": 301983,
+          "passage": "The flesh of the Lord was anointed with the true anointing, by the coming of the Holy Spirit into it, which was called \"the oil of gladness.\" And he was anointed above his fellows; that is to say, all people who are members of Christ. Therefore, a certain partial sharing of the Spirit was given to them, but the Holy Spirit descending on the Son of God, as John says, \"abode on him.\"",
+          "header": "Psalms 45:7",
+          "work_id": 1879,
+          "work": "Commentary on Psalms",
+          "author": "Basil of Caesarea"
+        },
+        {
+          "id": 286813,
+          "passage": "Letter CLIX To Eupaterius and his daughter. 1. You may well imagine what pleasure the letter of your excellencies gave me, if only from its very contents. What, indeed, could give greater gratification to one who prays ever to be in communication with them who fear the Lord, and to share their blessings, than a letter of this kind, whereinquestions are asked about the knowledge of God? For if, to me, \"to live is Christ,\" truly my words ought to be about Christ, my every…",
+          "header": "Letter CLIX 1",
+          "work_id": 1005,
+          "work": "Letters",
+          "author": "Basil of Caesarea"
+        },
+        {
+          "id": 301414,
+          "passage": "As the pen is an instrument for writing when the hand of an experienced person moves it to record what is being written, so also the tongue of the just man, when the Holy Spirit moves it, writes the words of eternal life in the hearts of the faithful, dipped \"not in ink but in the Spirit of the living God.\" The scribe, therefore, is the Holy Spirit, because he is wise and an apt teacher of all. And the Spirit writes swiftly, because the movement of his mind is swift. The…",
+          "header": "2 Corinthians 3:3",
+          "work_id": 1840,
+          "work": "Commentary on 2 Corinthians",
+          "author": "Basil of Caesarea"
+        }
+      ]
     },
     {
       "slug": "cyril-nestorius",
@@ -147,67 +391,67 @@
       "intro": "Cyril's controversy with Nestorius (early 5th century) concerned whether Mary is Theotokos and how divine and human natures unite in Christ. These passages reflect Cyril's side of that debate.",
       "passages": [
         {
-          "id": 261654,
-          "passage": "All the bishops cried out together: Whoever does not anathematize Nestorius let him be anathema. Such an one the right faith anathematizes; such an one the holy Synod anathematizes. Whoever communicates with Nestorius let him be anathema! We anathematize all the apostles of Nestorius: we all anathematize Nestorius as a heretic: let all such as communicate with Nestorius be anathema, etc., etc.",
-          "header": "Extracts from the Acts (Continued)",
-          "work_id": 835,
-          "work": "First Letter to Nestorius",
+          "id": 287355,
+          "passage": "A LIBRARY OF FATHERS OF THE HOLY CATHOLIC CHURCH, ANTERIOR TO THE DIVISION OF THE EAST AND WEST TRANSLATED BY MEMBERS OF THE ENGLISH CHURCH. YET SHALL NOT THY TEACHERS BE REMOVED INTO A CORNER ANY MORE, BUT THINE EYES SHALL SEE THY TEACHERS. Isaiah XXX. 20. --- OXFORD: JAMES PARKER & CO., AND RIVINGTONS, LONDON, OXFORD, AND CAMBRIDGE. [Blank page] TO THE MEMORY OF THE MOST REVEREND FATHER IN GOD WILLIAM LORD ARCHBISHOP OF CANTERBURY, PRIMATE OF ALL ENGLAND, FORMERLY REGIUS…",
+          "header": "Introduction",
+          "work_id": 1108,
+          "work": "Five tomes against Nestorius",
           "author": "Cyril of Alexandria"
         },
         {
-          "id": 255513,
-          "passage": "Nestorius repeats the same in his second letter to Celestine. Cyril having in his first Ecumenical Letter to Nestorius put forth clearly the mode of the Union in these words, Nestorius does not understand the language and says thus of it,",
-          "header": "PREFACE.",
-          "work_id": 809,
-          "work": "Five Tomes Against Nestorius",
+          "id": 307505,
+          "passage": "(Epist. ad Monach. Egypt. [Ep. p. 7.]) What will any one see in the Blessed Virgin more than in other mothers, if she be not the mother of God, but of Christ, or the Lord, as Nestorius says? For it would not be absurd should any one please to name the mother of any anointed person, the mother of Christ. Yet she alone and more than they is called the Holy Virgin, and the mother of Christ. For she bare not a simple man as ye say, but rather the Word incarnate, and made man of…",
+          "header": "Matthew 1:18",
+          "work_id": 2146,
+          "work": "Commentary on Matthew",
           "author": "Cyril of Alexandria"
         },
         {
-          "id": 255698,
-          "passage": "S.Cyril explains his own mind towards Nestorius to a zealous adherent 150 of Nestorius, with a singular simplicity.",
-          "header": "PREFACE.",
-          "work_id": 809,
-          "work": "Five Tomes Against Nestorius",
+          "id": 287350,
+          "passage": "CYRIL THE MOST HOLY ARCHBISHOP OF ALEXANDRIA FIVE-BOOK CONTRADICTION OF THE BLASPHEMIES OF NESTORIUS OR THE FIVE TOMES OF S. CYRIL. [Translated by P.E. P USEY ] Truth of human writings must be tested by Scripture. Arian errors and against Holy Ghost. Errors of heretics on their heads. Nestorius' book of Homilies. S. John i. 1,3,14,18. True Union of Person. Mother of God. \"Made Flesh;\" Manichees have no plea; without it, the curse and decay would still have been our lot. \"…",
+          "header": "Book 1",
+          "work_id": 1108,
+          "work": "Five tomes against Nestorius",
           "author": "Cyril of Alexandria"
         },
         {
-          "id": 255646,
-          "passage": "ii. iii. S. Cyril's two Epistles to Nestorius (previous to the sentence of condemnation which he was commissioned to announce, unless Nestorius should retract) were letters of explanation.",
-          "header": "PREFACE.",
-          "work_id": 809,
-          "work": "Five Tomes Against Nestorius",
+          "id": 287351,
+          "passage": "TOME II. [Translated by P.E. P USEY ] The Word after the Union One Incarnate Person. Similitudes of unlike things united. ' Connection ' does not unite. The Name Christ means God the Son Incarnate. Jacob's pillar a type. To His human nature belong the anointing and His subjection to the Law: yet He is God. Cyrus how christ, the Babylonians how holy. Personal Union. Christ's glory no imparted glory but His own inherent glory. If community of names unite, Emmanuel has nought…",
+          "header": "Book 2",
+          "work_id": 1108,
+          "work": "Five tomes against Nestorius",
           "author": "Cyril of Alexandria"
         },
         {
-          "id": 255567,
-          "passage": "Paul said, 'Mary did not hear the Word;' Nestorius, in harmony, said, 'Mary, my good man, did not bear the Godhead;' Paul, 'For he was not before ages.' Nestorius, 'And he assigns a temporal Mother to the Godhead, the Creator of times.' Paul, 'Mary received the Word and is not older than the Word.' Nestorius, 'How then did Mary bear Him Who is older than herself?' Paul, 'Mary bore a man like unto us.' Nestorius, 'He Who was born of the Virgin is man.' Paul, 'but a man in all…",
-          "header": "PREFACE.",
-          "work_id": 809,
-          "work": "Five Tomes Against Nestorius",
+          "id": 287337,
+          "passage": "A COMMENTARY UPON THE GOSPEL ACCORDING TO S. LUKE, BY S. CYRIL, PATRIARCH OF ALEXANDRIA. NOW FIRST TRANSLATED INTO ENGLISH FROM AN ANCIENT SYRIAC VERSION BY R. PAYNE SMITH, M. A., SUBLIBRARIAN OF THE BODLEIAN LIBRARY, -------- PART I. -------- OXFORD: AT THE UNIVERSITY PRESS. M.DCCC.LIX. [Blank page] PREFACE. When I undertook the task of preparing for the press the Syriac Version of S. Cyril's Commentary upon the Gospel of S. Luke, discovered among the manuscripts lately…",
+          "header": "Translator's Introduction",
+          "work_id": 1106,
+          "work": "Commentary on the Gospel of Luke",
           "author": "Cyril of Alexandria"
         },
         {
-          "id": 255583,
-          "passage": "Then he mentions the plea of Nestorius,",
-          "header": "PREFACE.",
-          "work_id": 809,
-          "work": "Five Tomes Against Nestorius",
+          "id": 287353,
+          "passage": "TOME IV. [Translated by P.E. P USEY ] Brazen serpent a type: how to be cured of the stings. In HOLY TRINITY Each Person exists yet each work is the work of the Whole TRINITY. Meaning of \"Made flesh.\" Christ gives the SPIRIT as His own, and works as God through His own SPIRIT. Nicene Fathers spake through the HOLY GHOST. \"Commended.\" The HOLY GHOST Spirit of the Truth, i. e., of CHRIST. All Divine Work work of Whole TRINITY. HOLY GHOST out of the FATHER and the Own of the…",
+          "header": "Book 4",
+          "work_id": 1108,
+          "work": "Five tomes against Nestorius",
           "author": "Cyril of Alexandria"
         },
         {
-          "id": 255707,
-          "passage": "Cyril made the extracts from the works of Nestorius, and possibly those from older writers 160, containing the true doctrine, he had |lxxv enough to do. There is no reason to think that S. Cyril preached at this time against Nestorius 161.",
-          "header": "PREFACE.",
-          "work_id": 809,
-          "work": "Five Tomes Against Nestorius",
+          "id": 287304,
+          "passage": "|350 CYRIL OF ALEXANDRIA FROM THE THIRD BOOK AGAINST THEODORE BISHOP OF MOPSUESTIA [Translated by P. E. Pusey] which begins For burdensome, I suppose, are our words. 1. Hear therefore from us too. Understand, O man, the depth of the Mystery, go along the straight way of the aim of the sacred Scriptures. For one thing and another is Godhead and flesh or manhood, as far as regards the plan of their properties. Since\n how has the Word being God been made as we, albeit abiding…",
+          "header": "Fragments of Book 3 - Against Theodore",
+          "work_id": 1103,
+          "work": "Against Diodore of Tarsus and Theodore of Mopsuestia",
           "author": "Cyril of Alexandria"
         },
         {
-          "id": 255682,
-          "passage": "Nestorius had however taken his line. He answers in apparent amazement;",
-          "header": "PREFACE.",
-          "work_id": 809,
-          "work": "Five Tomes Against Nestorius",
+          "id": 287298,
+          "passage": "|363 CYRIL OF ALEXANDRIA FROM HIS TREATISE AGAINST THE SYNOUSIASTS [Translated by P. E. Pusey] of which the beginning is A long discourse has already been made by us. |364 1. A long exposition has already been wrought out by us, who desire to strive for the doctrines of the truth. For it everywhere sets forth One Lord Jesus Christ, Who proceeded forth God the Word out of God the Father Divinely, out of a woman humanly and after the flesh. And let no one say, who has a mind…",
+          "header": "",
+          "work_id": 1099,
+          "work": "Against the synousiasts (fragments)",
           "author": "Cyril of Alexandria"
         }
       ]
@@ -221,66 +465,58 @@
       "intro": "Pope Leo I's Tome to Flavian was decisive at the Council of Chalcedon (451). These passages relate to Leo's Christology and the conciliar tradition.",
       "passages": [
         {
-          "id": 138005,
-          "passage": "The great and holy and universal Synod, which by the grace of God and the sanction of our most pious and Christ-loving Emperors has been gathered together in the metropolis of Chalcedon in the province of Bithynia, to the most holy and blessed archbishop of Rome, Leo.",
-          "header": "Letter 98",
-          "work_id": 822,
+          "id": 288052,
+          "passage": "Letter CLXII. To Leo Augustus. By the hand of Philoxenus agens in rebus. Leo the Bishop to Leo Augustus. I. The Decrees of Chalcedon and Nicaea are Identical and Final. With much joy my mind exults in the Lord, and great is my cause for thankfulness, now that I perceive your clemency's most excellent faith to be in all things enlarged by the gifts of heavenly grace, and I experience by increased diligence the devotion of a priestly mind in you. For in your Majesty's…",
+          "header": "Letter CLXII. To Leo Augustus.",
+          "work_id": 1296,
           "work": "Letters",
           "author": "Leo the Great"
         },
         {
-          "id": 138126,
-          "passage": "Although, therefore, I am very confident of the piety of your heart in all things, and perceive that through the Spirit of God dwelling in you, you are sufficiently instructed, nor can any error delude your faith, yet I will endeavour to follow your bidding so far as to send certain of my brothers to represent my person before you, and to set forth what the Apostolic rule of Faith is, although, as I have said, it is well known to you, in all things making it clear and…",
-          "header": "III. He promises to send envoys not to discuss with the Eutychians, but to explain the Faith to the Emperor.",
-          "work_id": 822,
+          "id": 288054,
+          "passage": "Letter CLXIV To Leo Augustus. Leo, the bishop, to Leo Augustus. I. He Sends Envoys But de Deprecates Any Fresh Discussion of the Faith. Rejoicing that it has been proved to me by many clear proofs with what earnestness you consult the interests of the universal Church, I have not delayed to obey your Majesty's commands on the first opportunity, by despatching Domitian and Geminian my brothers and fellow-bishops, who in furtherance of my earnest prayers, shall entreat you for…",
+          "header": "Letter CLXIV 1 To Leo Augustus.",
+          "work_id": 1296,
           "work": "Letters",
           "author": "Leo the Great"
         },
         {
-          "id": 138107,
-          "passage": "Since, therefore, the universal Church has become a rock (petra) through the building up of that original Rock, and the first of the Apostles, the most blessed Peter, heard the voice of the Lord saying, You are Peter, and upon this rock (petra) I will build My Church, who is there who dare assail such impregnable strength, unless he be either antichrist or the devil, who, abiding unconverted in his wickedness, is anxious to sow lies by the vessels of wrath which are suited…",
-          "header": "II. The proposal to reconsider the question proceeds from Antichrist or the Devil himself.",
-          "work_id": 822,
+          "id": 288046,
+          "passage": "Letter CLVI. To Leo Augustus. Leo, the bishop, to Leo Augustus. I. There is No Need to Open the Question of Doctrine Again Now. Your clemency's letter, which was full of vigorous faith and of the light of truth, I have respectfully received, which I wish I could obey, even in the matter of my personal attendance, which your Majesty thinks necessary; for then I should gain the greater advantage from the sight of your splendour. But I believe you will approve of my view when…",
+          "header": "Letter CLVI. To Leo Augustus.",
+          "work_id": 1296,
           "work": "Letters",
           "author": "Leo the Great"
         },
         {
-          "id": 138131,
-          "passage": "But nothing severs those who are deceived by their own inventions, from the light of the Gospel so much as their not thinking that the Lord's Incarnation appertains in a true sense to man's, that is, our, nature: as if it were unworthy of God's glory that the majesty of the impassible Word should have taken the reality of human flesh, whereas men's salvation could not otherwise have been restored had not He Who is in the form of God deigned also to take the form of a slave.…",
-          "header": "III. Eutyches' dogma is condemned by the testimony of Scripture and cannot further be entertained.",
-          "work_id": 822,
+          "id": 288048,
+          "passage": "Letter CLVIII. To the Catholic Bishops of Egypt Sojourning in Constantinople. Leo to the catholic Egyptian bishops sojourning in Constantinople.He encourages them in their sufferings for the Faith, and in their entreaties for redress to the Emperor. I have before now been so saddened by tidings of the crimes committed in Alexandria, and my spirit has been so wounded by the atrocity of the deed itself, that I know not what tears to show and what lamentation to utter over it,…",
+          "header": "Letter CLVIII 1 . To the Catholic Bishops of Egypt Sojourning in Constantinople.",
+          "work_id": 1296,
           "work": "Letters",
           "author": "Leo the Great"
         },
         {
-          "id": 138133,
-          "passage": "I entreat your clemency, listen to the suggestions of my brethren already mentioned, whom, as I some time ago have said in a former letter, I have sent not to wrangle with the condemned, but merely to intercede with you for the stability of the Catholic Faith. And in accordance with your faith in and regard for the Divine Majesty this especially you should grant, that completely setting aside the contentions of heretics you should deign to bestow a merciful attention on…",
-          "header": "V. Let him restore the refugee clergy and laity and utterly reject those who persist in heresy.",
-          "work_id": 822,
+          "id": 288146,
+          "passage": "Letter XCVIII. From the Synod of Chalcedon to Leo. The great and holy and universal Synod, which by the grace of God and the sanction of our most pious and Christ-loving Emperors has been gathered together in the metropolis of Chalcedon in the province of Bithynia, to the most holy and blessed archbishop of Rome, Leo. I. They Congratulate Leo on Taking the Foremost Part in Maintaining the Faith. \"Our mouth was filled with joy and our tongue with exultation.\" This prophecy…",
+          "header": "Letter XCVIII. From the Synod of Chalcedon to Leo.",
+          "work_id": 1296,
           "work": "Letters",
           "author": "Leo the Great"
         },
         {
-          "id": 138081,
-          "passage": "If then the aforesaid revere and love the name of Catholic, and wish to be numbered among the members of the Lord's body, let them reject the crooked errors which in their rashness they have committed, and let them show penitence for their wicked blasphemies and deeds of bloodshed. For the salvation of their souls let them yield to the synodal decrees which have been confirmed in the city of Chalcedon. And because nothing but true faith and quiet humility attains to the…",
-          "header": "II. They are to be told that the Catholic Faith rejects both the Eutychian and the Nestorian extremes. He wishes to be informed how far she succeeds.",
-          "work_id": 822,
+          "id": 288141,
+          "passage": "Letter XCIII. To the Synod of Chalcedon. Leo, the bishop of the city of Rome, to the holy Synod, assembled at Nicaea. I. He Excuses His Absence from the Synod, and Introduces His Representatives. I had indeed prayed, dearly beloved, on behalf of my dear colleagues that all the Lord's priests would persist in united devotion to the catholic Faith, and that no one would be misled by favour or fear of secular powers into departure from the way of Truth; but because many things…",
+          "header": "Letter XCIII. To the Synod of Chalcedon.",
+          "work_id": 1296,
           "work": "Letters",
           "author": "Leo the Great"
         },
         {
-          "id": 138124,
-          "passage": "With much joy my mind exults in the Lord, and great is my cause for thankfulness, now that I perceive your clemency's most excellent faith to be in all things enlarged by the gifts of heavenly grace, and I experience by increased diligence the devotion of a priestly mind in you. For in your Majesty's communications it is beyond doubt revealed what the Holy Spirit is working through you for the good of the whole Church, and how greatly it is to be desired by the prayers of…",
-          "header": "I. The decrees of Chalcedon and Nicæa are identical and final.",
-          "work_id": 822,
-          "work": "Letters",
-          "author": "Leo the Great"
-        },
-        {
-          "id": 138101,
-          "passage": "When I received your letter, beloved, which our sons Andrew the presbyter and Peter the deacon brought me, I rejoiced indeed that you had been allowed to return to the seat of your bishopric; but when all the reasons came to my remembrance, which brought you into such excessive troubles, I grieved to think you had been yourself the source of your adversities by failing in persistency of opposition to the heretics: for men can but think you were not bold enough to refute…",
-          "header": "I. He rejoices over Juvenal's return to orthodoxy, though chiding him for having gone astray.",
-          "work_id": 822,
+          "id": 288028,
+          "passage": "Letter CXXXIX. To Juvenal, Bishop of Jerusalem. Leo, bishop of the city of Rome, to Juvenal, bishop of Jerusalem. 1.he Rejoices Over Juvenal's Return to Orthodoxy, Though Chiding Him Far Having Gone Astray. When I received your letter, beloved, which our sons Andrew the presbyter and Peter the deacon brought me, I rejoiced indeed that you had been allowed to return to the seat of your bishopric; but when all the reasons came to my remembrance, which brought you into such…",
+          "header": "Letter CXXXIX. To Juvenal, Bishop of Jerusalem.",
+          "work_id": 1296,
           "work": "Letters",
           "author": "Leo the Great"
         }

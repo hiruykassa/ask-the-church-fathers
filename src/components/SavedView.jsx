@@ -1,7 +1,7 @@
 import AuthorCard from './AuthorCard'
 import EmptyState from './ui/EmptyState'
 
-export default function SavedView({ saved, onToggleSave, isSaved, navigate, query }) {
+export default function SavedView({ saved, onToggleSave, isSaved, navigate }) {
   if (saved.length === 0) {
     return (
       <EmptyState
@@ -28,7 +28,7 @@ export default function SavedView({ saved, onToggleSave, isSaved, navigate, quer
           isSaved={isSaved}
           onNavigate={(workId, passageId) =>
             navigate(`/read/${workId}`, {
-              state: { restoreQuery: query, scrollToPassage: passageId },
+              state: { fromSaved: true, scrollToPassage: passageId },
             })
           }
           defaultOpen

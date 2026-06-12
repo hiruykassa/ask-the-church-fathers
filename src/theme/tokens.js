@@ -1,149 +1,171 @@
 /**
- * Light: warm beige + brown header · black text.
- * Dark: true black surfaces · light text · dark brown chrome.
+ * Design system — New Advent benchmark (newadvent.org), light + dark.
+ *
+ * Light: warm off-white parchment, near-black serif body, deep-navy links,
+ *        dark-maroon accents, warm-grey borders. Flat & editorial — no
+ *        gradients, no glowing cards, minimal hairline shadows only.
+ * Dark:  very dark warm ground, warm-cream text, muted-gold links,
+ *        soft-maroon accents — same proportions as light.
  */
 export const COLOR_MODE_KEY = 'atcf-color-mode'
 
 export const themes = {
   light: {
     colorScheme: 'light',
-    chromeColor: '#4a3a2e',
+    chromeColor: '#f8f4ec',
 
-    gold: '#5c4636',
-    goldHi: '#6e5540',
-    goldSoft: 'rgba(92, 70, 54, 0.08)',
-    crossGold: '#9a7220',
-    crossGlow: 'rgba(154, 114, 32, 0.18)',
-    crossGoldSoft: 'rgba(154, 114, 32, 0.10)',
-    favorite: '#ff3040',
-    favoriteHi: '#ff5166',
-    favoriteSoft: 'rgba(255, 48, 64, 0.12)',
-    favoriteEmpty: '#a0a0a0',
+    /* Gold is reserved for the cross only (see --cross). Everything else uses a
+       neutral near-black accent so the palette reads scholarly, not gilded. */
+    cross: '#a87c1f',
+    gold: '#2a2724',
+    goldHi: '#000000',
+    goldSoft: 'rgba(0, 0, 0, 0.06)',
+    crossGold: '#4a463f',
+    crossGlow: 'transparent',
+    crossGoldSoft: 'rgba(0, 0, 0, 0.06)',
 
-    headerBg: '#4a3a2e',
-    headerBg2: '#3d3026',
-    headerLine: 'rgba(250, 248, 245, 0.14)',
-    headerText: '#faf8f5',
-    headerTextMuted: '#d8cfc4',
+    /* Links = deep navy. */
+    link: '#1a3a6b',
+    linkHover: '#0f2747',
 
-    /* Flat, unified canvas — pairs with dark mode structure */
-    heroBg: '#faf8f5',
-    bg: '#faf8f5',
-    catalogBg: '#faf8f5',
-    sectionBg: '#faf8f5',
-    footerBg: '#4a3a2e',
-    footerBg2: '#3d3026',
-    bgGradientEnd: '#faf8f5',
+    /* Save / like = Instagram-style red heart. */
+    favorite: '#ed4956',
+    favoriteHi: '#c62842',
+    favoriteSoft: 'rgba(237, 73, 86, 0.14)',
+    favoriteEmpty: '#b3a89a',
+
+    headerBg: '#f8f4ec',
+    headerBg2: '#f8f4ec',
+    headerLine: 'rgba(134, 99, 26, 0.30)',
+    headerText: '#1a1a18',
+    headerTextMuted: '#5c574e',
+
+    /* Flat near-white field; surfaces (leaves) sit pure white on top. */
+    heroBg: '#fdfcf8',
+    bg: '#fdfcf8',
+    catalogBg: '#fdfcf8',
+    sectionBg: '#fdfcf8',
+    footerBg: '#f8f4ec',
+    footerBg2: '#f8f4ec',
+    bgGradientEnd: '#fdfcf8',
 
     surface: '#ffffff',
-    surface2: '#f3f0ea',
+    surface2: '#f9f6f0',
 
-    parchment: '#f3f0ea',
-    parchment2: '#faf8f5',
+    parchment: '#ffffff',
+    parchment2: '#fdfcf8',
     parchment3: '#ffffff',
 
-    border: '#e4e0d8',
-    borderSoft: '#ece8e2',
-    sectionBorder: 'rgba(60, 46, 36, 0.10)',
+    border: '#d4cfc8',
+    borderSoft: '#e2ddd4',
+    sectionBorder: 'rgba(40, 38, 34, 0.12)',
 
-    text: '#1f1a14',
-    textHeading: '#14110d',
-    textMd: '#2a241c',
-    textDim: '#5c5248',
-    textFaint: '#8a8074',
-    textMeta: '#3d352c',
+    text: '#1a1a18',
+    textHeading: '#141210',
+    textMd: '#33302b',
+    textDim: '#5c574e',
+    textFaint: '#6e685d',
+    textMeta: '#4a463e',
 
     heroGlow: 'transparent',
     heroGlowGold: 'transparent',
 
-    focusRing: 'rgba(154, 114, 32, 0.22)',
-    shadowColor: '40, 32, 24',
-    btnOnGold: '#faf8f5',
+    focusRing: 'rgba(134, 99, 26, 0.40)',
+    shadowColor: '40, 30, 20',
+    btnOnGold: '#fffdf9',
 
-    scrollbarTrack: '#f0ece6',
-    scrollbarThumb: '#c8bfb0',
+    scrollbarTrack: '#f8f4ec',
+    scrollbarThumb: '#cfc7b8',
   },
 
   dark: {
     colorScheme: 'dark',
-    chromeColor: '#1c1c1a',
+    chromeColor: '#221e1a',
 
-    gold: '#c4b896',
-    goldHi: '#d4c8a6',
-    goldSoft: 'rgba(196, 184, 150, 0.14)',
-    crossGold: '#c9a84a',
-    crossGlow: 'rgba(201, 168, 74, 0.22)',
-    crossGoldSoft: 'rgba(201, 168, 74, 0.14)',
-    favorite: '#ff667a',
-    favoriteHi: '#ff8596',
-    favoriteSoft: 'rgba(255, 102, 122, 0.22)',
-    favoriteEmpty: '#8a8a8a',
+    /* Gold reserved for the cross only (--cross); other accents are neutral. */
+    cross: '#d4af37',
+    gold: '#e6e2da',
+    goldHi: '#ffffff',
+    goldSoft: 'rgba(255, 255, 255, 0.08)',
+    crossGold: '#b4b0a7',
+    crossGlow: 'transparent',
+    crossGoldSoft: 'rgba(255, 255, 255, 0.07)',
 
-    headerBg: '#1c1c1a',
-    headerBg2: '#161614',
-    headerLine: 'rgba(245, 245, 240, 0.12)',
-    headerText: '#f5f5f0',
-    headerTextMuted: '#a8a8a0',
+    /* Links = muted gold. */
+    link: '#c9a55e',
+    linkHover: '#dcbd7a',
 
-    /* Flat, unified canvas — readable like Substack dark */
-    heroBg: '#1c1c1a',
-    bg: '#1c1c1a',
-    sectionBg: '#1c1c1a',
-    catalogBg: '#1c1c1a',
-    footerBg: '#1c1c1a',
-    footerBg2: '#161614',
-    bgGradientEnd: '#1c1c1a',
+    favorite: '#ff5e6b',
+    favoriteHi: '#ff8590',
+    favoriteSoft: 'rgba(255, 94, 107, 0.20)',
+    favoriteEmpty: '#7a756c',
 
-    surface: '#262624',
-    surface2: '#2e2e2c',
+    headerBg: '#221e1a',
+    headerBg2: '#221e1a',
+    headerLine: 'rgba(201, 162, 78, 0.30)',
+    headerText: '#e8e2d9',
+    headerTextMuted: '#a39c90',
 
-    parchment: '#262624',
-    parchment2: '#1c1c1a',
-    parchment3: '#2e2e2c',
+    /* Flat dark ground — tuned to match the reader's neutral black (#1a1a1a). */
+    heroBg: '#1b1a18',
+    bg: '#1b1a18',
+    sectionBg: '#1b1a18',
+    catalogBg: '#1b1a18',
+    footerBg: '#211f1c',
+    footerBg2: '#211f1c',
+    bgGradientEnd: '#1b1a18',
 
-    border: 'rgba(255, 255, 255, 0.12)',
-    borderSoft: 'rgba(255, 255, 255, 0.07)',
-    sectionBorder: 'rgba(255, 255, 255, 0.10)',
+    surface: '#262422',
+    surface2: '#2d2b28',
 
-    text: '#f5f5f0',
-    textHeading: '#fafaf8',
-    textMd: '#e8e8e4',
-    textDim: '#a8a8a0',
-    textFaint: '#787872',
-    textMeta: '#c0c0b8',
+    parchment: '#262422',
+    parchment2: '#1b1a18',
+    parchment3: '#2d2b28',
+
+    border: 'rgba(232, 226, 217, 0.14)',
+    borderSoft: 'rgba(232, 226, 217, 0.08)',
+    sectionBorder: 'rgba(232, 226, 217, 0.10)',
+
+    text: '#e8e2d9',
+    textHeading: '#f2ede4',
+    textMd: '#d8d2c8',
+    textDim: '#a39c90',
+    textFaint: '#8f897e',
+    textMeta: '#bdb6aa',
 
     heroGlow: 'transparent',
     heroGlowGold: 'transparent',
 
-    focusRing: 'rgba(201, 168, 74, 0.35)',
+    focusRing: 'rgba(201, 165, 94, 0.40)',
     shadowColor: '0, 0, 0',
-    btnOnGold: '#1c1c1a',
+    btnOnGold: '#141210',
 
-    scrollbarTrack: '#1c1c1a',
-    scrollbarThumb: '#4a4a46',
+    scrollbarTrack: '#1c1916',
+    scrollbarThumb: '#3a352e',
   },
 }
 
 export const tokens = {
   fonts: {
-    display: "'Cinzel', Georgia, serif",
-    prose: "'Crimson Text', Georgia, serif",
+    /* Plain serif headings (weight 600, not 800) — New Advent, not decorative. */
+    display: "Georgia, 'Times New Roman', 'Times', serif",
+    prose: "'Crimson Text', Georgia, 'Times New Roman', serif",
     ui: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
-  radius: { sm: 6, md: 10, lg: 16, pill: 999 },
+  radius: { sm: 5, md: 8, lg: 12, pill: 999 },
   motion: {
     ease: 'cubic-bezier(0.4, 0, 0.2, 1)',
     easeOut: 'cubic-bezier(0.16, 1, 0.3, 1)',
   },
 }
 
-function shadow(level, shadowColor, mode = 'light') {
-  const darkBoost = mode === 'dark' ? 2.2 : 1
+/* Flat, editorial — hairline shadows only; rely on borders for separation. */
+function shadow(level, shadowColor) {
   const maps = {
-    xs: `0 1px 2px rgba(${shadowColor},${0.04 * darkBoost})`,
-    sm: `0 2px 6px rgba(${shadowColor},${0.09 * darkBoost}), 0 1px 2px rgba(${shadowColor},${0.05 * darkBoost})`,
-    md: `0 8px 24px rgba(${shadowColor},${0.14 * darkBoost}), 0 2px 6px rgba(${shadowColor},${0.07 * darkBoost})`,
-    lg: `0 18px 44px rgba(${shadowColor},${0.20 * darkBoost}), 0 4px 12px rgba(${shadowColor},${0.12 * darkBoost})`,
+    xs: `0 1px 1px rgba(${shadowColor},0.03)`,
+    sm: `0 1px 2px rgba(${shadowColor},0.05)`,
+    md: `0 1px 3px rgba(${shadowColor},0.06)`,
+    lg: `0 2px 6px rgba(${shadowColor},0.08)`,
   }
   return maps[level]
 }
@@ -153,10 +175,10 @@ export function getThemeTokens(mode = 'light') {
   return {
     colors: c,
     shadows: {
-      xs: shadow('xs', c.shadowColor, mode),
-      sm: shadow('sm', c.shadowColor, mode),
-      md: shadow('md', c.shadowColor, mode),
-      lg: shadow('lg', c.shadowColor, mode),
+      xs: shadow('xs', c.shadowColor),
+      sm: shadow('sm', c.shadowColor),
+      md: shadow('md', c.shadowColor),
+      lg: shadow('lg', c.shadowColor),
     },
     ...tokens,
   }

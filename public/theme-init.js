@@ -4,10 +4,10 @@ try {
   html.setAttribute('data-theme', mode);
   html.style.colorScheme = mode;
   if (mode === 'dark') {
-    html.style.backgroundColor = '#000000';
-    html.style.color = '#fafafa';
+    html.style.backgroundColor = '#1c1916';
+    html.style.color = '#e8e2d9';
   } else {
-    html.style.backgroundColor = '#f9f5ee';
-    html.style.color = '#211a12';
+    html.style.backgroundColor = '#fdfcf8';
+    html.style.color = '#1a1a18';
   }
 } catch (e) {}

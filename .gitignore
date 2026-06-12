@@ -12,7 +12,8 @@ backend/.env
 !backend/.env.example
 **/.secrets/
 
-# SQLite databases and backups
+# SQLite corpus + backups — the 663MB database.db lives in R2 (fetched on boot
+# by prestart.sh), never in git. *.db covers backend/database.db too.
 *.db
 *.db-shm
 *.db-wal

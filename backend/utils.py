@@ -12,15 +12,14 @@ Display/search plain-text pipeline:
     ``remove_scripture_refs`` (footnote markup + inline citations)
     → ``strip_html`` (BeautifulSoup to plain text)
 
-Vector helpers:
-    ``unpack_vector`` / ``cosine_similarity`` — ``embeddings`` BLOBs from
-    ``embed_passages.py`` (future semantic search in ``app.py``).
+Vector helper:
+    ``unpack_vector`` — decode ``embeddings`` BLOBs written by ``embed_passages.py``
+    for semantic search in ``app.py``.
 """
 
 import re
 from bs4 import BeautifulSoup
-import struct 
-import math
+import struct
 
 # Collapse runs of spaces (including non-breaking space U+00A0)
 _WS = r"[\s ]+"
@@ -97,12 +96,3 @@ def strip_html(html):
 def unpack_vector(blob):
     """Deserialize an embeddings.vector BLOB (float32[]) written by embed_passages."""
     return list(struct.unpack(f"{len(blob) // 4}f", blob))
-
-
-def cosine_similarity(a, b):
-    """Cosine similarity between two equal-length float vectors (e.g. query vs passage)."""
-    dot_prod = sum(x * y for x, y in zip(a, b))
-    len_a = math.sqrt(sum(x * x for x in a))
-    len_b = math.sqrt(sum(x * x for x in b))
-    # voyage-3 vectors are non-zero; no zero-norm guard needed for corpus use
-    return dot_prod / (len_a * len_b)

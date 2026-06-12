@@ -1,29 +1,45 @@
 # Corpus tools
 
-Scripts for building and maintaining `backend/database.db`. Run from the **project root**.
+Offline scripts for building and maintaining `backend/database.db`. None are
+imported by the running app — they are run by hand. Run from the **project root**
+unless noted. The corpus is sourced from the
+[HistoricalChristianFaith](https://github.com/HistoricalChristianFaith) GitHub
+databases, not scraped from websites.
+
+## Build pipeline (in order)
 
 | Script | Purpose |
 |--------|---------|
-| `etl.py` | Full corpus scrape from New Advent / CCEL (~106k passages) |
-| `repair_text.py` | Fix bad scrapes, complete multi-chapter works, rebuild FTS |
-| `add_cyril_letters.py` | Add or refresh Cyril christological letters |
-| `add_ephesus_449.py` | Add Council of Ephesus 2 (449) from Perry 1881 PDF |
-| `ephesus_449_perry.py` | PDF parser for the 449 synod acts |
-| `scrape_utils.py` | Shared HTML parser (imported by other scripts) |
-| `ccel_urls.py` | URL lists for multi-chapter CCEL works |
-| `cyril_letters_config.py` | Cyril letter sources and scrape rules |
-| `fts.py` | Rebuild the passages full-text search index |
-| `db_path.py` | Resolves path to `backend/database.db` |
+| `import_github_writings.py` | Import the Fathers' writings from the HCF Writings-Database (pre-Chalcedon authors) |
+| `import_github_commentaries.py` | Import the verse-by-verse patristic commentary (catena) |
+| `migrate_schema.py` | Idempotent: add author classification columns, build `scripture_index`, create indexes |
+| `remove_post_chalcedon.py` | Prune post-Chalcedon / medieval authors and reclassify non-personal works |
+| `repair_truncated.py` | Repair passages whose HCF source file was truncated upstream |
+| `apply_corrections.py` | Apply manual editorial fixes listed in `corrections.json` |
+| `reorder_passages.py` | Fix passage display order within multi-part works |
+| `backfill_commentary_sources.py` | Attach real per-quote citations to commentary passages |
+| `fts.py` | Rebuild the `passages_fts` full-text index |
 
-**Backend batch jobs** (run from `backend/`, see root `README.md`):
+**Shared modules** (imported by the above, not run directly):
+`scrape_utils.py` (HTML parsing/cleanup), `db_path.py` (resolves `backend/database.db`).
+
+## ⚠️ After ANY edit to `passages`
+
+There are **no DB triggers**. Whenever a script changes passage text, headers,
+or rows, the derived tables go stale and **must** be rebuilt:
+
+```bash
+python tools/corpus/fts.py            # rebuild full-text index
+python tools/corpus/migrate_schema.py # rebuild scripture_index (idempotent)
+python backend/embed_passages.py      # re-embed changed rows (Voyage; optional, paid)
+```
+
+## Backend batch jobs (run from `backend/`)
 
 | Script | Purpose |
 |--------|---------|
-| `../backend/clean_editorial_notes.py` | Strip anachronistic / modern editorial framing from `passages.text` (Claude Haiku); run `fts.py` after |
+| `../backend/database.py` | Create the core schema + FTS index on a fresh DB |
 | `../backend/embed_passages.py` | Voyage embeddings for passages missing from `embeddings` |
 
-Typical order after a full scrape: `etl.py` → `clean_editorial_notes.py` → `fts.py` → `embed_passages.py`.
-
-**Ephesus 449 PDF:** download [Perry (1881)](https://archive.org/details/secondsynodofeph00perruoft) and save as `tools/corpus/sources/ephesus_449_perry.pdf` (gitignored). Requires `pip install pypdf`.
-
-**To run the site:** `backend/app.py` + a populated `backend/database.db` (or `backend/seed.py` for a tiny dev dataset).
+**To run the site:** `backend/app.py` + a populated `backend/database.db`
+(fetched from R2 in production by `backend/prestart.sh`).

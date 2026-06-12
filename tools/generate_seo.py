@@ -39,15 +39,15 @@ SNIPPET_MAX = 480
 
 TOPICS = [
     {
-        "slug": "cyril-incarnation",
-        "title": "What Did Saint Cyril Teach on the Incarnation?",
-        "description": "Passages from Cyril of Alexandria on the Incarnation of Christ, from primary sources in the early Church.",
-        "query": "incarnation",
-        "author": "Cyril of Alexandria",
+        "slug": "tertullian-trinity",
+        "title": "What Did Tertullian Teach on the Trinity?",
+        "description": "Tertullian on the Trinity and the three Persons of the one God: primary sources from the early Church.",
+        "query": "Trinity",
+        "author": "Tertullian",
         "intro": (
-            "Cyril of Alexandria (d. 444) was a central patristic voice on Christology. "
-            "Below are excerpts from his works on the Incarnation, the Word made flesh, "
-            "drawn from the Ask the Early Church corpus."
+            "Tertullian (c. 155–220) was the first to write of the 'Trinity' (Trinitas) in Latin "
+            "and shaped how the Church speaks of three Persons in one substance. These passages are "
+            "drawn from his works in the Ask the Early Church corpus."
         ),
     },
     {
@@ -78,7 +78,7 @@ TOPICS = [
         "title": "What Did Irenaeus Teach About Heresy and Tradition?",
         "description": "Irenaeus of Lyons on heresy, apostolic tradition, and the rule of faith: patristic texts.",
         "query": "heresy tradition",
-        "author": "Irenaeus of Lyons",
+        "author": "Irenaeus",
         "intro": (
             "Irenaeus of Lyons (c. 130–202) confronted Gnostic teachings and argued for "
             "apostolic tradition. These passages address heresy and the faith handed down "

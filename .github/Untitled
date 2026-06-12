@@ -1,4 +1,0 @@
-rm /Users/GirmaKassa/ask-the-early-church/.git/index.lock
-git add -A
-git commit -m "Free-forever deploy: Gemini+Groq parser, HF Spaces target, netlify.toml"
-git push

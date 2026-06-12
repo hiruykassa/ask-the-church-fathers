@@ -4,7 +4,7 @@
 #
 #   docker build -t aetc-backend backend/
 #   docker run -p 5001:5001 \
-#       -e ANTHROPIC_API_KEY=... -e VOYAGE_API_KEY=... \
+#       -e VOYAGE_API_KEY=... -e GEMINI_API_KEY=... -e GROQ_API_KEY=... \
 #       -e PRODUCTION=1 -e ALLOWED_ORIGIN=http://localhost:5173 \
 #       -e DB_URL=https://... aetc-backend
 
@@ -38,5 +38,6 @@ USER aetc
 EXPOSE 5001
 
 # Render and ECS both inject $PORT; fall back to 5001 for local docker run.
-# -w 2 keeps memory bounded (each worker holds the full embedding matrix).
-CMD ["sh", "-c", "./prestart.sh && exec gunicorn -w 2 -b 0.0.0.0:${PORT:-5001} --timeout 60 app:app"]
+# -w 1 keeps memory bounded (each worker holds the full embedding matrix) and
+# makes the in-memory rate limiter exact. Scale workers only on a larger box.
+CMD ["sh", "-c", "./prestart.sh && exec gunicorn -w 1 -b 0.0.0.0:${PORT:-5001} --timeout 60 app:app"]

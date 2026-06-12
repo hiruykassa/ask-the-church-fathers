@@ -66,7 +66,7 @@ export default function AuthorCard({ group, isSaved, onToggleSave, onNavigate, d
                 {sec.passages.map(p => {
                   const plain = stripHtml(p.passage || '')
                   const snippet = plain.length > 320
-                    ? plain.slice(0, 320).replace(/\s\S*$/, '') + '…'
+                    ? plain.slice(0, 320).replace(/\s\S*$/, '') + '...'
                     : plain
 
                   return (

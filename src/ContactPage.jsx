@@ -7,8 +7,8 @@ import './AboutPage.css'
 
 export default function ContactPage() {
   usePageMeta({
-    title: 'Contact — Ask the Early Church',
-    description: 'Contact Ask the Early Church — report issues, suggest works, or get in touch.',
+    title: 'Contact | Ask the Early Church',
+    description: 'Contact Ask the Early Church to report issues, suggest works, or get in touch.',
     path: '/contact',
   })
   return (
@@ -26,10 +26,10 @@ export default function ContactPage() {
 
           <section className="about-section">
             <p className="about-text">
-              Reach out if you want to partner on this project, if you are
-              interested in hiring me, or if you noticed something on the site
-              that could be better. I read every message and usually reply
-              within a day or two.
+              Ask the Early Church is a free, independent project. Get in touch if
+              you have feedback, want to suggest a work or author to add, would like
+              to collaborate, or just have a question. I read every message and
+              usually reply within a day or two.
             </p>
 
             <div className="contact-methods">
@@ -64,9 +64,9 @@ export default function ContactPage() {
           <section className="about-section">
             <h2 className="about-heading">Corrections &amp; Feedback</h2>
             <p className="about-text">
-              If a passage looks wrong, a link is broken, or search is missing
-              something important, tell me. These are the words of the Fathers
-              and they should be presented as faithfully as the sources allow.
+            If a passage appears incorrect, a link is broken, or the search is missing
+            important content, please submit feedback. These are the words of the Fathers
+            and should be presented as faithfully as the sources allow.
             </p>
           </section>
         </article>

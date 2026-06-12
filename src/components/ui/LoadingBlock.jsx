@@ -1,4 +1,4 @@
-export default function LoadingBlock({ label = 'Loading…' }) {
+export default function LoadingBlock({ label = 'Loading...' }) {
   return (
     <div className="ui-loading" role="status" aria-live="polite">
       <span className="ui-loading__spinner" aria-hidden />
