@@ -140,41 +140,61 @@ def get_db_connection():
 def _load_embeddings():
     """Load passage embeddings into RAM as pre-normalized float32 vectors.
 
-    Cold-start fast path: every vector is the same float32 width, so we
-    concatenate the BLOBs once and let np.frombuffer decode the whole matrix
-    in one C-level pass — much faster than struct.unpack-per-row + np.array.
+    Memory-lean cold start: instead of holding the raw rows, a joined BLOB,
+    and a separate normalized copy all at once (~3x the matrix in RAM, which
+    overflows a 512MB instance), we preallocate one matrix, stream the vectors
+    into it in chunks, and normalize in place. Peak memory stays ~1x the final
+    matrix, so the full corpus fits within a small instance at cold start.
     """
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
+        n = cursor.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0]
+        if not n:
+            return [], np.empty((0, 0), dtype=np.float32), {}
+
+        # Vector width from the first row (float32 = 4 bytes per component).
+        first = cursor.execute(
+            "SELECT vector FROM embeddings ORDER BY passage_id LIMIT 1"
+        ).fetchone()
+        dim = len(first[0]) // 4
+        if dim == 0:
+            return [], np.empty((0, 0), dtype=np.float32), {}
+        expected = dim * 4
+
+        # Preallocate once and fill in place — never hold a second full copy.
+        vecs = np.empty((n, dim), dtype=np.float32)
+        ids = []
         cursor.execute("SELECT passage_id, vector FROM embeddings ORDER BY passage_id")
-        rows = cursor.fetchall()
-        if not rows:
-            return [], np.empty((0, 0), dtype=np.float32), {}
+        i = 0
+        while True:
+            chunk = cursor.fetchmany(2000)
+            if not chunk:
+                break
+            for pid, blob in chunk:
+                if len(blob) != expected:
+                    # Non-uniform width means a mixed-model corpus; zero the row
+                    # (cosine ~0, effectively excluded) rather than crash.
+                    log.warning("embeddings: passage %s has unexpected vector "
+                                "width %d (expected %d) — skipping", pid,
+                                len(blob), expected)
+                    vecs[i] = 0.0
+                else:
+                    vecs[i] = np.frombuffer(blob, dtype=np.float32)
+                ids.append(pid)
+                i += 1
 
-        ids = [row[0] for row in rows]
-        first_dim = len(rows[0][1]) // 4  # float32 = 4 bytes
-        if first_dim == 0:
-            return [], np.empty((0, 0), dtype=np.float32), {}
+        # Guard against a COUNT/row mismatch (shouldn't happen on a consistent DB).
+        if i != n:
+            vecs = vecs[:i]
 
-        # Assert uniform width — a mismatch means the corpus was embedded with
-        # different models, which would silently scramble cosine scores.
-        expected = first_dim * 4
-        if any(len(row[1]) != expected for row in rows):
-            log.warning("embeddings: non-uniform vector widths; falling back to per-row decode")
-            vecs = np.array([unpack_vector(row[1]) for row in rows], dtype=np.float32)
-        else:
-            # np.frombuffer returns a read-only view, but we only read `vecs`
-            # below (the normalization division allocates a fresh writable
-            # array), so no .copy() is needed.
-            blob = b"".join(row[1] for row in rows)
-            vecs = np.frombuffer(blob, dtype=np.float32).reshape(len(rows), first_dim)
-
+        # In-place normalization — no extra full-size allocation.
         norms = np.linalg.norm(vecs, axis=1, keepdims=True)
-        norms = np.maximum(norms, 1e-10)
-        vecs_norm = vecs / norms
+        np.maximum(norms, 1e-10, out=norms)
+        vecs /= norms
+
         id_to_idx = {pid: idx for idx, pid in enumerate(ids)}
-        return ids, vecs_norm, id_to_idx
+        return ids, vecs, id_to_idx
     finally:
         conn.close()
 
