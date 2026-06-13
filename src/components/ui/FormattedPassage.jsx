@@ -1,4 +1,4 @@
-import { enhanceStructuredHtml, hasPassageHtml, sanitizePassageHtml, stripHtml, stripInlineScriptureRefs } from '../../utils/passageText'
+import { enhanceStructuredHtml, hasPassageHtml, sanitizePassageHtml, stripInlineScriptureRefs } from '../../utils/passageText'
 
 /**
  * Renders passage text with italics, footnotes, and page marks when stored as HTML.
@@ -22,5 +22,3 @@ export default function FormattedPassage({ text, className, kind, ...props }) {
     />
   )
 }
-
-export { stripHtml }

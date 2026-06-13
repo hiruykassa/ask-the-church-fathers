@@ -28,6 +28,9 @@ export function ThemeProvider({ children }) {
   )
 }
 
+// Co-located with its provider by convention; this export is a hook, not a second
+// component, so fast-refresh's component-only rule doesn't apply here.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme() {
   const ctx = useContext(ThemeContext)
   if (!ctx) throw new Error('useTheme must be used within ThemeProvider')

@@ -10,7 +10,7 @@ import { usePageMeta } from './hooks/usePageMeta'
 import useScrollRestoration from './hooks/useScrollRestoration'
 import { CATEGORIES, CATEGORY_BY_SLUG, categoryCount } from './constants/categories'
 import { formatDates, eraIdOf, ERAS, ERA_LABELS } from './utils/authors'
-import { API_BASE } from './api/client'
+import { api, isAbortError } from './api/client'
 import './App.css'
 import './BrowsePage.css'
 
@@ -119,17 +119,18 @@ export default function BrowsePage() {
       setCatStatus('idle')
       return
     }
-    let cancelled = false
+    const controller = new AbortController()
     setCatStatus('loading')
-    fetch(`${API_BASE}/api/authors?category=${encodeURIComponent(category.categoryKey)}`)
-      .then(res => { if (!res.ok) throw new Error('fetch failed'); return res.json() })
+    api.authorsByCategory(category.categoryKey, { signal: controller.signal })
       .then(data => {
-        if (cancelled) return
         setCatAuthors(data.results || [])
         setCatStatus('ready')
       })
-      .catch(() => { if (cancelled) return; setCatStatus('error') })
-    return () => { cancelled = true }
+      .catch(err => { if (!isAbortError(err)) setCatStatus('error') })
+    return () => controller.abort()
+    // Keyed on the stable categoryKey, not the `category` object (recreated each
+    // render), to avoid a refetch loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category?.categoryKey])
 
   // Overview tiles.

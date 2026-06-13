@@ -5,16 +5,17 @@
       <stop offset="55%" stop-color="#ab8226"/>
       <stop offset="100%" stop-color="#74540f"/>
     </radialGradient>
-    <clipPath id="tile">
-      <rect width="120" height="120" rx="27"/>
-    </clipPath>
+    <clipPath id="tile"><rect width="120" height="120" rx="27"/></clipPath>
   </defs>
   <g clip-path="url(#tile)">
     <rect width="120" height="120" fill="url(#bg)"/>
-    <path d="M80 -2 H97 V32 L88.5 24 L80 32 Z" fill="#fdfcf8"/>
-    <path fill="none" stroke="#fdfcf8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" d="M39.3 59.6 L50.6 66.8 M69.4 78.9 L80.7 86.2"/>
-    <path fill="none" stroke="#fdfcf8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" d="M60 28.5 V61.7 M60 84.1 V99.5"/>
-    <path fill="none" stroke="#fdfcf8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" d="M60 28.5 C 74.5 28.5, 77.6 43.1, 69.4 49.4 M50.6 49.9 C 48.5 48.5, 46.9 46.4, 46.5 43.5"/>
-    <path fill="none" stroke="#fdfcf8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" d="M80.7 59.6 L39.3 86.2"/>
+    <!-- Bookmark / ribbon with swallowtail foot -->
+    <path d="M41 31 H79 V90 L60 76 L41 90 Z" fill="#fdfcf8" stroke="#fdfcf8" stroke-width="0.5" stroke-linejoin="round"/>
+    <!-- Text lines -->
+    <g stroke="#bd8f2e" stroke-width="5" stroke-linecap="round">
+      <line x1="49" y1="45" x2="71" y2="45"/>
+      <line x1="49" y1="55" x2="71" y2="55"/>
+      <line x1="49" y1="65" x2="65" y2="65"/>
+    </g>
   </g>
 </svg>

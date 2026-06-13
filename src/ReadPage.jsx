@@ -7,7 +7,7 @@ import FormattedPassage from './components/ui/FormattedPassage'
 import useSavedPassages from './hooks/useSavedPassages'
 import { stripHtml, hasPassageHtml } from './utils/passageText'
 import PassageSource from './components/ui/PassageSource'
-import { API_BASE } from './api/client'
+import { api, isAbortError } from './api/client'
 import { usePageMeta } from './hooks/usePageMeta'
 import './App.css'
 import './ReadPage.css'
@@ -99,29 +99,27 @@ export default function ReadPage() {
   }, [scrollTarget, workId])
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     setLoading(true)
     setError(null)
     setWork(null)
     if (scrollTarget == null) {
       window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' })
     }
-    fetch(`${API_BASE}/api/works/${workId}`)
-      .then(r => {
-        if (!r.ok) throw new Error('Work not found')
-        return r.json()
-      })
+    api.work(workId, { signal: controller.signal })
       .then(data => {
-        if (cancelled) return
         setWork(data)
         setLoading(false)
       })
       .catch(err => {
-        if (cancelled) return
-        setError(err.message)
+        if (isAbortError(err)) return
+        setError(err.message || 'Work not found')
         setLoading(false)
       })
-    return () => { cancelled = true }
+    return () => controller.abort()
+    // Refetch only when the work changes; scrollTarget is read once here to set
+    // the initial scroll and must not re-trigger the fetch when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workId])
 
   useEffect(() => {
@@ -215,15 +213,13 @@ export default function ReadPage() {
   // Other writings by the same author (council / father), for short pages especially.
   useEffect(() => {
     if (!work?.author_id) { setSiblings([]); return }
-    let cancelled = false
-    fetch(`${API_BASE}/api/authors/${work.author_id}/works`)
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error('no works'))))
+    const controller = new AbortController()
+    api.authorWorks(work.author_id, { signal: controller.signal })
       .then(data => {
-        if (cancelled) return
         setSiblings((data.works || []).filter(w => Number(w.id) !== Number(workId)))
       })
-      .catch(() => { if (!cancelled) setSiblings([]) })
-    return () => { cancelled = true }
+      .catch(err => { if (!isAbortError(err)) setSiblings([]) })
+    return () => controller.abort()
   }, [work?.author_id, workId])
 
   useEffect(() => {

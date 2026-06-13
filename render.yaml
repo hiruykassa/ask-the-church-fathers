@@ -35,6 +35,10 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      # Anthropic (Claude) — query-parse path is disabled in app.py today, but
+      # this slot is declared now so enabling it later is dashboard-only.
+      - key: ANTHROPIC_API_KEY
+        sync: false
       # Optional: a Redis URL so rate limits are shared across workers.
       - key: RATELIMIT_STORAGE_URI
         sync: false

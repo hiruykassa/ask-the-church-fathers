@@ -27,7 +27,7 @@ export default function useScrollRestoration(ready) {
       if (raf) return
       raf = requestAnimationFrame(() => {
         raf = 0
-        try { sessionStorage.setItem(key, String(window.scrollY)) } catch {}
+        try { sessionStorage.setItem(key, String(window.scrollY)) } catch { /* sessionStorage unavailable (e.g. private mode) */ }
       })
     }
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -48,7 +48,7 @@ export default function useScrollRestoration(ready) {
 
     // Back/forward: restore the saved position once the list is tall enough.
     let saved = 0
-    try { saved = Number(sessionStorage.getItem(key)) || 0 } catch {}
+    try { saved = Number(sessionStorage.getItem(key)) || 0 } catch { /* sessionStorage unavailable (e.g. private mode) */ }
     if (saved <= 0) return
 
     let tries = 0

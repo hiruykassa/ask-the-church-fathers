@@ -22,7 +22,7 @@ from bs4 import BeautifulSoup
 import struct
 
 # Collapse runs of spaces (including non-breaking space U+00A0)
-_WS = r"[\s ]+"
+_WS = r"[\s ]"
 
 # Book names that may be prefixed with 1/2/3 (e.g. "1 Corinthians")
 _NUMBERED_BOOKS = (

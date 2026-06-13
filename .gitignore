@@ -1,6 +1,9 @@
 # Build output
 dist/
 
+# Vite temp config artifacts
+vite.config.js.timestamp-*.mjs
+
 # Dependencies
 node_modules/
 backend/.venv/

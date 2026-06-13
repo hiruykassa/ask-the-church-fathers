@@ -1,4 +1,4 @@
-"""Cost + latency telemetry and a daily API budget cap.
+"""Cost + latency telemetry and a monthly API budget cap.
 
 Two responsibilities:
 
@@ -6,9 +6,9 @@ Two responsibilities:
    call so we can grep spend, latency, and error rate from Render logs (or
    CloudWatch on AWS).
 
-2. ``budget_remaining`` / ``record_spend`` — a Redis-backed daily counter
+2. ``budget_remaining`` / ``record_spend`` — a Redis-backed monthly counter
    that lets the search path fall back to FTS-only once we hit the budget
-   cap. Protects the Anthropic/Voyage credit card from runaway abuse.
+   cap. Protects the Gemini/Voyage credit card from runaway abuse.
 
 All Redis access goes through ``RATELIMIT_STORAGE_URI`` (the same URL used
 by flask-limiter), so a single env var configures both. If Redis is
@@ -23,15 +23,20 @@ import time
 
 log = logging.getLogger(__name__)
 
-DAILY_BUDGET_USD = float(os.getenv("DAILY_API_BUDGET_USD", "5"))
+# Hard MONTHLY ceiling: $10/month. Once this calendar month's spend crosses it,
+# search degrades to keyword-only (FTS) for the rest of the month, then resets on
+# the 1st. Override via env. NOTE: the cap only bites when RATELIMIT_STORAGE_URI
+# (Redis) is configured — without it the counter has nowhere to live and fails
+# open (so spend is unbounded; rely on heavy caching to keep it small).
+MONTHLY_BUDGET_USD = float(os.getenv("MONTHLY_API_BUDGET_USD", "10"))
 _REDIS_URL = os.getenv("RATELIMIT_STORAGE_URI", "").strip()
 
 # Approximate $/call — tune as model pricing changes. These are pessimistic
 # so the cap trips a little early rather than a little late.
 COST_PER_CALL_USD = {
-    "voyage_embed": 0.0001,   # voyage-3 — short query
+    "voyage_embed": 0.000002,   # voyage-3 ($0.06/1M) — query is ~15 tokens
     "anthropic_parse": 0.0005,  # Haiku — small prompt, cached system (disabled)
-    "gemini_parse": 0.0,        # Gemini 2.5 Flash free tier
+    "gemini_parse": 0.00015,    # Gemini 2.5 Flash-Lite + author roster (~1,350 in / 20 out)
     "groq_parse": 0.0,          # Groq Llama 3.3 70B free tier
 }
 
@@ -45,12 +50,13 @@ if _REDIS_URL and _REDIS_URL.startswith(("redis://", "rediss://")):
         _redis = None
 
 
-def _today_key() -> str:
-    return f"aetc:spend:{time.strftime('%Y-%m-%d')}"
+def _period_key() -> str:
+    # One counter per calendar month — resets automatically on the 1st.
+    return f"aetc:spend:{time.strftime('%Y-%m')}"
 
 
 def budget_remaining() -> bool:
-    """True if today's spend is still under DAILY_BUDGET_USD.
+    """True if this month's spend is still under MONTHLY_BUDGET_USD.
 
     Fails *open* on any Redis error — we don't want a flaky cache to break
     search. The flip side: a sustained Redis outage disables the cap.
@@ -58,25 +64,38 @@ def budget_remaining() -> bool:
     if _redis is None:
         return True
     try:
-        spent = float(_redis.get(_today_key()) or 0)
-        return spent < DAILY_BUDGET_USD
+        spent = float(_redis.get(_period_key()) or 0)
+        return spent < MONTHLY_BUDGET_USD
     except Exception as exc:
         log.warning("telemetry: budget read failed (%s); allowing call", exc)
         return True
 
 
+def budget_status() -> dict:
+    """Snapshot for the health endpoint: whether the monthly cap is actually
+    enforced (Redis reachable) and how much has been spent this month."""
+    enabled = _redis is not None
+    spent = None
+    if enabled:
+        try:
+            spent = round(float(_redis.get(_period_key()) or 0), 4)
+        except Exception:
+            spent = None
+    return {"enabled": enabled, "spent_usd": spent, "limit_usd": MONTHLY_BUDGET_USD}
+
+
 def record_spend(call_type: str) -> None:
-    """Increment today's spend counter by the cost-per-call for ``call_type``."""
+    """Increment this month's spend counter by the cost-per-call for ``call_type``."""
     if _redis is None:
         return
     cost = COST_PER_CALL_USD.get(call_type, 0.0)
     if cost == 0.0:
         return
     try:
-        key = _today_key()
+        key = _period_key()
         pipe = _redis.pipeline()
         pipe.incrbyfloat(key, cost)
-        pipe.expire(key, 172800)  # keep 2 days for debugging
+        pipe.expire(key, 3456000)  # keep ~40 days so the month's counter outlives the month
         pipe.execute()
     except Exception as exc:
         log.warning("telemetry: spend record failed (%s)", exc)

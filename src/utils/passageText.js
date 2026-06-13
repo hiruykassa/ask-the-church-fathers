@@ -84,9 +84,8 @@ export function linkifySourceDomains(text) {
 const INLINE_TAGS = new Set(['EM', 'I', 'STRONG', 'B', 'BR'])
 // Block tags: rendered as their tag with inner content
 const BLOCK_TAGS = new Set(['P', 'H2', 'H3', 'H4', 'H5', 'H6', 'HR', 'BLOCKQUOTE', 'UL', 'OL', 'LI'])
-// Tags to unwrap (keep children, drop the wrapper)
-const UNWRAP_TAGS = new Set(['DIV', 'SECTION', 'ARTICLE', 'SPAN', 'FONT', 'CENTER',
-                              'TABLE', 'TBODY', 'TR', 'TD', 'TH'])
+// Everything else (DIV, SECTION, FONT, TABLE, …) is unwrapped: see `walk()` below,
+// which keeps the children and drops the wrapper as its default branch.
 
 // Escape HTML special chars in text-node content before it is re-emitted into
 // the string handed to dangerouslySetInnerHTML. Without this, corpus text that

@@ -5,7 +5,7 @@ import SiteFooter from './components/layout/SiteFooter'
 import LoadingBlock from './components/ui/LoadingBlock'
 import PassageSource from './components/ui/PassageSource'
 import { usePageMeta } from './hooks/usePageMeta'
-import { API_BASE } from './api/client'
+import { api, isAbortError } from './api/client'
 import './App.css'
 import './BrowsePage.css'
 import './ScripturePage.css'
@@ -49,20 +49,20 @@ export default function ScripturePage() {
   })
 
   useEffect(() => {
-    let url
-    if (verse != null) url = `/api/scripture/${enc(book)}/${chapter}/${verse}`
-    else if (chapter != null) url = `/api/scripture/${enc(book)}/${chapter}`
-    else if (book != null) url = `/api/scripture/${enc(book)}`
-    else url = '/api/scripture/books'
+    const controller = new AbortController()
+    const opts = { signal: controller.signal }
+    const request =
+      verse != null    ? api.scriptureVerse(book, chapter, verse, opts)
+    : chapter != null  ? api.scriptureVerses(book, chapter, opts)
+    : book != null     ? api.scriptureChapters(book, opts)
+    :                    api.scriptureBooks(opts)
 
-    let cancelled = false
     setStatus('loading')
     setData(null)
-    fetch(API_BASE + url)
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error('fetch failed'))))
-      .then(d => { if (!cancelled) { setData(d); setStatus('ready') } })
-      .catch(() => { if (!cancelled) setStatus('error') })
-    return () => { cancelled = true }
+    request
+      .then(d => { setData(d); setStatus('ready') })
+      .catch(err => { if (!isAbortError(err)) setStatus('error') })
+    return () => controller.abort()
   }, [book, chapter, verse])
 
   function openPassage(r) {

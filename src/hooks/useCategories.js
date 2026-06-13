@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { API_BASE } from '../api/client'
+import { api, isAbortError } from '../api/client'
 
 /**
  * Fetches /api/categories (the five author categories with author/work/passage
@@ -14,24 +14,19 @@ export default function useCategories() {
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
 
     const load = (attempt = 0) => {
-      fetch(`${API_BASE}/api/categories`)
-        .then(res => {
-          if (!res.ok) throw new Error('Categories fetch failed')
-          return res.json()
-        })
+      api.categories({ signal: controller.signal })
         .then(data => {
-          if (cancelled) return
           const map = {}
           for (const c of data) map[c.category] = c
           setCounts(map)
           setError(false)
           setLoading(false)
         })
-        .catch(() => {
-          if (cancelled) return
+        .catch(err => {
+          if (isAbortError(err)) return
           if (attempt < 4) {
             setTimeout(() => load(attempt + 1), 2000)
             return
@@ -42,7 +37,7 @@ export default function useCategories() {
     }
 
     load()
-    return () => { cancelled = true }
+    return () => controller.abort()
   }, [])
 
   return { counts, loading, error }

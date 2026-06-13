@@ -59,7 +59,7 @@ function highlight(text, terms) {
  */
 export default function SearchResults({
   query, topicQuery, authorFilter, clearAuthorFilter, scriptureRef,
-  searching, results,
+  searching, results, error,
   isSaved, onToggleSave, onSearch, navigate,
 }) {
   const [tradition, setTradition] = useState(null)
@@ -136,7 +136,16 @@ export default function SearchResults({
         </div>
       )}
 
-      {!searching && results.length === 0 && (
+      {!searching && error && (
+        <div className="search-empty" role="alert">
+          <p className="search-empty-title">{error}</p>
+          <p className="search-empty-lead">
+            Try shortening your query — searches are capped at 500 characters.
+          </p>
+        </div>
+      )}
+
+      {!searching && !error && results.length === 0 && (
         <div className="search-empty">
           <p className="search-empty-title">No results for &ldquo;<em>{query}</em>&rdquo;</p>
           <p className="search-empty-lead">Try one of these instead:</p>

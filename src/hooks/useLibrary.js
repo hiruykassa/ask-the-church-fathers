@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { API_BASE } from '../api/client'
+import { api, isAbortError } from '../api/client'
 
 /**
  * Fetches /api/library once (with retry, since the backend may still be warming
@@ -14,22 +14,17 @@ export default function useLibrary() {
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
 
     const load = (attempt = 0) => {
-      fetch(`${API_BASE}/api/library`)
-        .then(res => {
-          if (!res.ok) throw new Error('Library fetch failed')
-          return res.json()
-        })
+      api.library({ signal: controller.signal })
         .then(data => {
-          if (cancelled) return
           setSections(data.sections || {})
           setError(false)
           setLoading(false)
         })
-        .catch(() => {
-          if (cancelled) return
+        .catch(err => {
+          if (isAbortError(err)) return
           if (attempt < 4) {
             setTimeout(() => load(attempt + 1), 2000)
             return
@@ -40,7 +35,7 @@ export default function useLibrary() {
     }
 
     load()
-    return () => { cancelled = true }
+    return () => controller.abort()
   }, [])
 
   return { sections, loading, error }

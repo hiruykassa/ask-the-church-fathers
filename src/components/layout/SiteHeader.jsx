@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { IoChevronBack, IoBookmarkOutline } from 'react-icons/io5'
+import { IoChevronBack } from 'react-icons/io5'
 import ThemeToggle from '../ui/ThemeToggle'
 import useSavedPassages from '../../hooks/useSavedPassages'
 
@@ -24,7 +24,9 @@ export default function SiteHeader() {
         </button>
       </div>
       <button className="site-title-btn" onClick={() => navigate('/')} title="Home">
-        <h1 className="site-title">Ask the Early Church</h1>
+        <div className="site-title-row">
+          <h1 className="site-title">Ask the Early Church</h1>
+        </div>
         <div className="site-title-ornament">
           <span>What did the early Church teach</span>
         </div>
@@ -32,13 +34,10 @@ export default function SiteHeader() {
       <nav className="site-nav">
         <button className="nav-tab" onClick={() => navigate('/')}>Search</button>
         <button
-          className="nav-tab nav-tab-icon"
+          className="nav-tab"
           onClick={() => navigate('/', { state: { openSaved: true } })}
-          title="Saved"
-          aria-label="Saved"
         >
-          <IoBookmarkOutline className="nav-tab-ic" />
-          {saved.length > 0 && (
+          Saved {saved.length > 0 && (
             <span className="tab-count tab-count-saved">{saved.length}</span>
           )}
         </button>

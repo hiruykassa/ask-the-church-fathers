@@ -16,20 +16,21 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 **After launch:** migrate to **AWS** — the R2/`DB_URL` pattern is already S3-compatible (`prestart.sh` and `upload_db_to_r2.sh` use the boto3 S3 client), so the move is mostly swapping the R2 endpoint for an S3 bucket and running the same `backend/Dockerfile` on EC2/ECS/App Runner. Add **GitHub Actions** CI/CD and **CloudWatch** monitoring when traffic or cost warrants it.
 
-> ⚠️ **Before deploy:** the rebuilt corpus has **no embeddings yet** (semantic search is off; the app falls back to FTS-only keyword search). Run `python backend/embed_passages.py` (Voyage `voyage-3`) to enable hybrid vector search, then re-upload the DB to R2. See [Getting Started](#getting-started).
+> ✅ **Launch-ready:** the corpus is fully embedded (~52,869 `voyage-3` vectors), so hybrid semantic + keyword search is live. The remaining work is operational: upload `database.db` to R2 and deploy. See [Getting Started](#getting-started).
 
 | Area | Status |
 |------|--------|
 | Keyword search (FTS5) | ✅ Working |
-| Hybrid search (vector + FTS) | ⏳ Needs `embed_passages.py` re-run on rebuilt corpus (0 embeddings today) |
-| Search result caching | ✅ In-memory TTL caches (embed, parse, FTS, hybrid) |
-| Graceful API fallback | ✅ Voyage/Gemini/Groq down → FTS-only; DB errors → 503 |
+| Hybrid search (vector + FTS) | ✅ Working — corpus fully embedded (`voyage-3`) |
+| Search result caching | ✅ In-memory TTL caches (embed, parse, FTS, hybrid), 30-day TTL |
+| Monthly API budget cap | ✅ `$10/mo` default; degrades to keyword-only when spent (needs Redis to enforce) |
+| Graceful API fallback | ✅ Gemini/Groq down → local author detect + raw keywords; Voyage down → FTS-only; DB errors → 503 |
 | Rate limiting | ✅ Per-endpoint limits via flask-limiter |
 | CORS / security headers | ✅ Configured; set `ALLOWED_ORIGIN` in prod |
+| Lint + CI | ✅ ESLint (flat config) + backend smoke tests gated in GitHub Actions |
 | AI synthesis | ⏸ Built, disabled until API budget allows |
 | SEO (sitemap, topic pages, meta) | ✅ Ready — regenerate with real domain before/at cutover |
 | Editorial / text cleanup | ✅ Full corpus pass applied (one-off scripts since removed) |
-| Re-embedding after corpus rebuild | ⏳ Pending — run `embed_passages.py` before launch |
 | Docker image (`backend/Dockerfile`) | ✅ In repo — host-agnostic (Render today, AWS later) |
 | Production (Netlify + Render) | ⏸ Ready — not yet deployed |
 | AWS migration | 🚧 Planned (S3 + EC2/ECS) |
@@ -44,9 +45,9 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 | Verse-keyed commentary passages (`scripture_index`) | ~49,800 across 76 books |
 | Church Fathers — `father` + verse-`commentary` authors | 213 (81 + 132) |
 | Councils · Liturgies · Apocrypha · Misc (authors) | 13 · 3 · 8 · 10 |
-| Embeddings (`voyage-3`) | **0 — not yet generated for this corpus** |
+| Embeddings (`voyage-3`) | **52,869 — corpus fully embedded** |
 
-Embeddings are produced offline by `embed_passages.py` (Voyage `voyage-3`) and loaded into RAM at startup; **re-run it after rebuilding the corpus** (the current `database.db` has none yet). Search degrades gracefully to FTS-only when embeddings are absent — which is the current state until the embed step is run.
+Embeddings are produced offline by `embed_passages.py` (Voyage `voyage-3`) and loaded into RAM at startup. The current corpus is fully embedded, so hybrid vector + FTS search is active. If the corpus is ever rebuilt, **re-run `embed_passages.py`** before redeploying; search degrades gracefully to FTS-only whenever embeddings are absent.
 
 Most of the corpus comes from [HistoricalChristianFaith's by-father collection](https://historicalchristian.faith/by_father.php) — the open [Writings-Database](https://github.com/HistoricalChristianFaith/Writings-Database) (~3,100 full-text passages) and [Commentaries-Database](https://github.com/HistoricalChristianFaith/Commentaries-Database) (~53k verse-level commentaries, headers like `John 3:16` / `Romans 8:1-4`) — with additional public-domain translations from [New Advent](https://www.newadvent.org/fathers/) and [CCEL](https://www.ccel.org/). The verse-level headers are what power the scripture browser.
 
@@ -59,16 +60,21 @@ Authors whose only contribution is verse commentary (no standalone text) are cat
 ### Search
 
 1. User types a natural-language query (e.g. "What did Chrysostom teach about the Eucharist?")
-2. **Gemini 2.5 Flash** parses the query into an optional author filter + topic keywords (Groq Llama 3.3 70B fallback; falls back to raw query if both are unavailable)
-3. **Hybrid ranking** merges two signals via reciprocal rank fusion:
-   - **Voyage AI** — embeds keywords and scores against pre-computed passage vectors (loaded into RAM at startup)
-   - **FTS5** — keyword match on passage text (BM25)
+2. **Gemini 2.5 Flash-Lite** parses the query into an optional author filter + topic keywords. The full author roster is sent so detection tolerates misspellings and partial names (Groq Llama 3.3 70B fallback). When the monthly budget is spent — or both LLMs fail — a **free local fallback** detects unambiguous author names and uses the raw query as keywords, so search keeps working.
+3. **Hybrid ranking** merges three signals via reciprocal rank fusion (RRF), then diversifies (caps per work/author so one treatise can't flood the page):
+   - **Voyage AI (vector)** — embeds the **full natural-language query** and scores against pre-computed passage vectors loaded into RAM at startup
+   - **FTS5 (BM25)** — keyword match on passage text, using the extracted topic keywords
+   - **Work-title match** — surfaces whole treatises whose title matches the topic
 4. If only an author is named (no topic), the frontend shows that Father's works list instead of passage results
 5. Top 100 passages returned with author, work, section header, and plain-text snippet
 
+Author detection is **LLM-first** (the roster lets it resolve fuzzy/partial names), with the local matcher as a zero-cost fallback. Topic keywords drive the keyword signals while the full query drives the semantic signal — embeddings read intent better from natural phrasing than from a few stripped words.
+
 Search queries are capped at **500 characters** to prevent API abuse.
 
-Repeated queries are served from in-memory TTL caches (default 1 hour): Voyage query embeddings, Gemini/Groq parse results, FTS hits, and fused hybrid rankings. Passage vectors are pre-normalized at startup; author passage indexes are preloaded (no per-search DB lookup). Tune via env vars: `SEARCH_CACHE_TTL_SEC`, `EMBED_CACHE_SIZE`, `PARSE_CACHE_SIZE`, `HYBRID_CACHE_SIZE`, `FTS_CACHE_SIZE`.
+Repeated queries are served from in-memory TTL caches (**default 30 days**, sized large so the monthly API budget stretches): Voyage query embeddings, Gemini/Groq parse results, FTS hits, and fused hybrid rankings. A query repeated within the month costs **nothing** (no Gemini, no Voyage). Passage vectors are pre-normalized at startup; author passage indexes are preloaded (no per-search DB lookup). Tune via env vars: `SEARCH_CACHE_TTL_SEC` (default `2592000`), `EMBED_CACHE_SIZE` (`10000`), `PARSE_CACHE_SIZE` (`50000`), `HYBRID_CACHE_SIZE` (`20000`), `FTS_CACHE_SIZE` (`20000`).
+
+**API cost guard.** Spend is tracked against a **monthly** ceiling (`MONTHLY_API_BUDGET_USD`, default `$10`). When the month's spend crosses it, search degrades to keyword-only (FTS) for the rest of the month and resets on the 1st. The roster parse runs on Gemini 2.5 Flash-Lite (~$0.00015/uncached search) and Voyage embedding is negligible, so with caching the budget covers heavy use. **The cap is only enforced when `RATELIMIT_STORAGE_URI` (Redis) is configured** — without it the counter has nowhere to live and fails open, leaving caching as the only limit.
 
 A query that looks like a scripture reference (e.g. `Romans 8` or `Matthew 5:3`) is detected and answered directly from the verse-keyed commentary index — a patristic catena for that verse — with no LLM or embedding call.
 
@@ -150,13 +156,18 @@ The API is a **public read-only** service (no authentication). Protections in pl
 
 | Control | Detail |
 |---------|--------|
-| **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages 30/min |
+| **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages/scripture 30/min |
 | **Query length cap** | 500 chars max on search |
 | **CORS** | Locked to `ALLOWED_ORIGIN`; in dev, both `localhost` and `127.0.0.1` variants are allowed |
-| **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, etc. |
-| **HTML sanitization** | Passage renderer strips all attributes except page-mark spans (`class="pg"`, `title`) |
+| **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; HSTS in production. Set on API responses (Flask `after_request`) **and** on the static frontend (Netlify `public/_headers`). |
+| **SQL injection** | Every query is parameterized; FTS5 `MATCH` input is tokenized and quoted (`prepare_fts_query`) so punctuation can't alter the query |
+| **HTML / XSS** | Stored corpus HTML is re-parsed and re-emitted through an allowlist sanitizer (`sanitizePassageHtml`) that escapes text nodes and drops every tag/attribute except page-mark spans; CSP `script-src 'self'` blocks inline execution as defense-in-depth |
+| **Path traversal** | Static file serving resolves the absolute path and confirms it stays inside the build dir before serving |
+| **Secret hygiene** | No keys in git (scanned); macOS Keychain locally, platform secret env in prod; all `render.yaml` keys are `sync: false`; `.dockerignore` keeps secrets/DB out of the image; container runs as a non-root user |
 | **Graceful degradation** | Voyage / Gemini / Groq failure never returns 500; falls back to FTS keyword search |
-| **DB safety** | All connections closed in `try/finally`; search DB errors return 503 |
+| **DB safety** | All connections closed in `try/finally`; search DB errors return 503; error handlers return generic JSON without leaking stack traces |
+
+> **Known advisory (dev-only):** `npm audit` flags `esbuild`/`vite` (GHSA-67mh-4wv8-2f99). It affects only the local Vite **dev server**, not the static production bundle Netlify serves, so it is not exploitable in the hosted app. The fix is a breaking major bump to Vite 8; deferred until a planned dependency upgrade.
 
 ### Production checklist
 
@@ -166,11 +177,12 @@ The API is a **public read-only** service (no authentication). Protections in pl
 PRODUCTION=1
 ALLOWED_ORIGIN=https://asktheearlychurch.com
 VOYAGE_API_KEY=...        # Voyage AI dashboard
-GEMINI_API_KEY=...        # Google AI Studio (free tier)
+GEMINI_API_KEY=...        # Google AI Studio (paid Tier 1; billed per use — see MONTHLY_API_BUDGET_USD)
 GROQ_API_KEY=...          # Groq console (free tier — fallback parser)
 DB_URL=...                # Cloudflare R2 (or S3) URL to database.db; fetched by prestart.sh on boot
 VOYAGE_MODEL=voyage-3
-# RATELIMIT_STORAGE_URI=redis://...   # optional: shared counters across gunicorn workers
+MONTHLY_API_BUDGET_USD=10            # monthly spend ceiling; on exhaustion → keyword-only until the 1st
+RATELIMIT_STORAGE_URI=redis://...   # REQUIRED to enforce the budget cap (and to share rate-limit counters)
 
 # render.yaml already wires this up. Equivalent manual run:
 cd backend
@@ -179,8 +191,12 @@ bash prestart.sh && gunicorn -w 1 -b 0.0.0.0:$PORT --timeout 60 app:app
 
 `PRODUCTION=1` makes missing `ALLOWED_ORIGIN` a startup error. Running `-w 1` keeps one
 copy of the embedding matrix in RAM **and** makes the in-memory rate limiter exact (no
-per-worker N× looseness), so `RATELIMIT_STORAGE_URI` is unnecessary at this scale. Add a
-Redis URL only if you scale to `-w 2+` on a larger instance.
+per-worker N× looseness).
+
+**Redis is required to enforce the `MONTHLY_API_BUDGET_USD` cap.** The spend counter lives
+in Redis (`RATELIMIT_STORAGE_URI`); without it `budget_remaining()` fails *open* — search
+still works but the cap does nothing, so spend is bounded only by caching. Confirm it's
+wired by hitting `/api/health` and checking `budget.enabled` is `true`.
 
 Monitor rate-limit 429s and Voyage/Gemini/Groq usage in their dashboards.
 
@@ -196,7 +212,7 @@ ask-the-early-church/
 ├── backend/
 │   ├── app.py                  # Flask API — search, library, security middleware
 │   ├── search_cache.py         # Thread-safe TTL LRU caches for search hot paths
-│   ├── telemetry.py            # AI-call logging + daily spend/budget guard
+│   ├── telemetry.py            # AI-call logging + monthly spend/budget guard (Redis)
 │   ├── utils.py                # Text cleaning, vector helpers
 │   ├── database.py             # Schema creation + FTS index (fresh DB)
 │   ├── embed_passages.py       # Batch: Voyage voyage-3 embeddings (RUN before launch)
@@ -238,13 +254,17 @@ ask-the-early-church/
 │   └── ...
 │
 ├── public/
+│   ├── favicon.svg             # App icon — Chi-Rho Christogram on the gold tile
+│   ├── apple-touch-icon.png    # iOS home-screen icon (180px raster of the mark)
+│   ├── _headers · _redirects   # Netlify security headers + SPA-routing fallback
 │   ├── robots.txt              # Crawler rules (regenerate with generate:seo)
 │   ├── sitemap.xml             # All work + topic URLs (regenerate with generate:seo)
-│   ├── seo/topics.json         # Topic page content from database
+│   ├── seo/topics.json         # Topic page content from database (+ seo/site.json)
 │   └── theme-init.js           # Theme flash prevention (external script for CSP)
 ├── netlify.toml                # Frontend build config for Netlify
 ├── index.html
 ├── package.json
+├── eslint.config.js            # ESLint flat config (run via `npm run lint`)
 └── vite.config.js
 ```
 
@@ -255,7 +275,7 @@ ask-the-early-church/
 | Method | Endpoint | Rate limit | Description |
 |--------|----------|------------|-------------|
 | GET | `/api/search?q=` | 10/min | Hybrid search (also routes scripture refs to a catena). Returns `{ results, author, keywords, author_only, scripture_ref }`. |
-| GET | `/api/health` | 60/min (default) | `{ status, embeddings_loaded }` |
+| GET | `/api/health` | 60/min (default) | `{ status, embeddings_loaded, providers{voyage,gemini,groq}, budget{enabled,spent_usd,limit_usd} }` — `providers.*` shows which API keys are loaded; `budget.enabled` shows whether the monthly cap is enforced (Redis) |
 | GET | `/api/library` | 60/min | Full catalog grouped by work section |
 | GET | `/api/categories` | 60/min | The author categories with author/work/passage counts |
 | GET | `/api/authors?category=&tradition=&era=` | 60/min | Authors, optionally filtered; includes `category`, `tradition`, `era`, dates, work count |
@@ -312,11 +332,12 @@ For local dev, `ALLOWED_ORIGIN=http://localhost:5173` is optional (defaults to t
 Optional cache tuning (defaults are fine for local dev):
 
 ```
-SEARCH_CACHE_TTL_SEC=3600
-EMBED_CACHE_SIZE=1024
-PARSE_CACHE_SIZE=512
-HYBRID_CACHE_SIZE=512
-FTS_CACHE_SIZE=512
+SEARCH_CACHE_TTL_SEC=2592000   # 30 days
+EMBED_CACHE_SIZE=10000
+PARSE_CACHE_SIZE=50000
+HYBRID_CACHE_SIZE=20000
+FTS_CACHE_SIZE=20000
+MONTHLY_API_BUDGET_USD=10      # cap only enforced if RATELIMIT_STORAGE_URI (Redis) is set
 ```
 
 ### Populate the database
@@ -338,6 +359,8 @@ the **"rebuild derived tables after any edit"** rule live in
 ```bash
 npm install
 npm run dev                   # http://localhost:5173
+npm run lint                  # ESLint (same check CI runs)
+npm run build                 # production bundle → dist/
 ```
 
 In development, the app calls `/api/...` on the same origin; **Vite proxies** those requests to Flask on port 5001 (`vite.config.js`), so you do not need `VITE_API_URL` locally.
@@ -408,20 +431,21 @@ Ranking for competitive queries (e.g. “what did Cyril teach on the incarnation
 - [x] Search hot-path caching + preloaded author/work passage indexes
 - [x] Gemini query parsing with Groq fallback
 - [x] Author-only search → works list
-- [x] Security hardening (rate limits, CSP, CORS, query cap, HTML sanitization, Netlify `_headers`)
+- [x] Security hardening (rate limits, CSP, CORS, query cap, HTML sanitization, parameterized SQL + FTS-injection guard, path-traversal guard, non-root container, Netlify `_headers`)
+- [x] ESLint (flat config) + `npm run lint`, wired into CI alongside backend smoke tests
 - [x] Book reader, dark mode, saved passages (localStorage)
 - [x] Dev Vite `/api` proxy + library fetch retry
 - [x] AI synthesis (disabled for launch)
 - [x] SEO: sitemap, robots.txt, topic landing pages, dynamic meta tags, SearchAction JSON-LD
 - [x] Author classification migration (`migrate_schema.py`): `category` / `tradition` / `era` + `scripture_index`
-- [ ] **Re-embed the corpus (`embed_passages.py`)** — outstanding; 0 embeddings today
+- [x] **Embed the corpus (`embed_passages.py`)** — ~52,869 `voyage-3` vectors; hybrid semantic search live
 - [x] Browse by category with live counts (`/api/categories`) + author filters (category / tradition / era)
 - [x] Verse-first scripture browser (books → chapters → verses → catena) and scripture-ref routing in search
 - [x] Curated topic landing pages regenerated; reading page restyled (New Advent / Wikipedia layout, neutral high-contrast theme)
 
 ### Next (now → launch)
 
-- [ ] **Generate embeddings** — `cd backend && python embed_passages.py` (Voyage `voyage-3`); the rebuilt corpus has 0 embeddings, so semantic search is off until this runs
+- [x] **Generate embeddings** — corpus fully embedded with Voyage `voyage-3` (~52,869 vectors); semantic search is on
 - [ ] **Upload `database.db` to Cloudflare R2** — `cd backend && bash upload_db_to_r2.sh` (credentials in Keychain); note the object URL for `DB_URL`
 - [ ] **Deploy backend to Render** — import `render.yaml` as a Blueprint; set the `sync:false` secrets (`VOYAGE_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `ALLOWED_ORIGIN`, `DB_URL`)
 - [ ] **Deploy frontend to Netlify** — set `VITE_API_URL=https://<service>.onrender.com`; `netlify.toml` handles build config
@@ -460,13 +484,14 @@ portable. When ready:
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React 18, Vite 5, react-router-dom v7 |
-| Styling | CSS custom properties |
+| Frontend | React 18, Vite 5, react-router-dom v7, react-icons |
+| Styling | CSS custom properties + Tailwind CSS v4 (utilities/theme layers only — preflight skipped so `App.css` stays authoritative) |
 | Backend | Python 3, Flask, Flask-CORS, Flask-Limiter, gunicorn |
 | Database | SQLite + FTS5 |
-| Search parsing | Gemini 2.5 Flash (Groq Llama 3.3 70B fallback) |
-| Search ranking | Voyage `voyage-3` + FTS5 hybrid |
+| Search parsing | Gemini 2.5 Flash-Lite + author roster (Groq Llama 3.3 70B fallback; local author-detect fallback) |
+| Search ranking | Voyage `voyage-3` (vector) + FTS5 BM25 + work-title, fused via reciprocal rank fusion |
 | Scraping | requests + BeautifulSoup4 |
+| Quality | ESLint (flat config) + pytest smoke tests, both gated in GitHub Actions CI |
 
 ---
 

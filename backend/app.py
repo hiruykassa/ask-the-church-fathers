@@ -42,75 +42,30 @@ import numpy as np
 
 from utils import strip_html, remove_scripture_refs, unpack_vector
 from search_cache import embed_cache, parse_cache, hybrid_cache, fts_cache
-from telemetry import budget_remaining, record_spend, log_ai_call
+from telemetry import budget_remaining, record_spend, log_ai_call, budget_status
+from scripture_parse import (
+    parse_scripture_ref,
+    effective_section,
+    book_sort_key,
+)
+from query_parsing import (
+    MAX_QUERY_LENGTH,
+    prepare_fts_query,
+    detect_author_local as _detect_author_local,
+    _build_author_token_index,
+    strip_author_tokens,
+    resolve_author_name,
+)
+from ranking import (
+    rrf_accumulate,
+    diversify,
+    RRF_WEIGHT_VECTOR,
+    RRF_WEIGHT_FTS,
+    RRF_WEIGHT_TITLE,
+)
 import time as _time
 
 log = logging.getLogger(__name__)
-
-MAX_QUERY_LENGTH = 500
-
-
-def prepare_fts_query(q):
-    """Turn user input into a safe FTS5 MATCH expression (one quoted token per word)."""
-    q = (q or "").strip()
-    if not q:
-        return None
-    # Quote each token so FTS5 treats apostrophes and punctuation as literals
-    tokens = re.findall(r"[\w']+", q, flags=re.UNICODE)
-    if not tokens:
-        return None
-    return " ".join('"' + t.replace('"', '""') + '"' for t in tokens)
-
-
-def effective_section(section, title):
-    """Display section for a work.
-
-    Most works carry an explicit ``works.section`` ('Father'). The large body of
-    untagged works are verse-by-verse biblical commentaries (title begins
-    'Commentary on …') and are surfaced as their own 'Commentary' collection;
-    anything else untagged falls back to 'Miscellaneous'.
-    """
-    if section:
-        return section
-    if title and title.strip().lower().startswith("commentary on"):
-        return "Commentary"
-    return "Miscellaneous"
-
-
-# Scripture reference: "Romans 8", "Matthew 5:3", "1 Corinthians 13:4",
-# "Song of Solomon 2". Book may carry a leading 1-3 and multi-word names.
-SCRIPTURE_RE = re.compile(
-    r"^\s*([1-3]?\s?[A-Za-z][A-Za-z]+(?:\s+(?:of\s+)?[A-Za-z]+)*?)"
-    r"\s+(\d{1,3})(?::(\d{1,3}))?\s*$"
-)
-
-
-def _titlecase_book(book):
-    """Normalize a book name to the header spelling ('1 corinthians' -> '1 Corinthians')."""
-    out = []
-    for part in book.split():
-        if part.isdigit():
-            out.append(part)
-        elif part.lower() == "of":
-            out.append("of")
-        else:
-            out.append(part[:1].upper() + part[1:].lower())
-    return " ".join(out)
-
-
-def parse_scripture_ref(q):
-    """Parse a bare scripture reference, or return None if the query isn't one."""
-    m = SCRIPTURE_RE.match(q or "")
-    if not m:
-        return None
-    book = _titlecase_book(re.sub(r"\s+", " ", m.group(1)).strip())
-    chapter, verse = m.group(2), m.group(3)
-    return {
-        "book": book,
-        "chapter": chapter,
-        "verse": verse,
-        "ref": f"{book} {chapter}" + (f":{verse}" if verse else ""),
-    }
 
 
 def scripture_commentary_search(ref, limit=200):
@@ -183,7 +138,12 @@ def get_db_connection():
 
 
 def _load_embeddings():
-    """Load passage embeddings into RAM as pre-normalized float32 vectors."""
+    """Load passage embeddings into RAM as pre-normalized float32 vectors.
+
+    Cold-start fast path: every vector is the same float32 width, so we
+    concatenate the BLOBs once and let np.frombuffer decode the whole matrix
+    in one C-level pass — much faster than struct.unpack-per-row + np.array.
+    """
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -191,8 +151,25 @@ def _load_embeddings():
         rows = cursor.fetchall()
         if not rows:
             return [], np.empty((0, 0), dtype=np.float32), {}
+
         ids = [row[0] for row in rows]
-        vecs = np.array([unpack_vector(row[1]) for row in rows], dtype=np.float32)
+        first_dim = len(rows[0][1]) // 4  # float32 = 4 bytes
+        if first_dim == 0:
+            return [], np.empty((0, 0), dtype=np.float32), {}
+
+        # Assert uniform width — a mismatch means the corpus was embedded with
+        # different models, which would silently scramble cosine scores.
+        expected = first_dim * 4
+        if any(len(row[1]) != expected for row in rows):
+            log.warning("embeddings: non-uniform vector widths; falling back to per-row decode")
+            vecs = np.array([unpack_vector(row[1]) for row in rows], dtype=np.float32)
+        else:
+            # np.frombuffer returns a read-only view, but we only read `vecs`
+            # below (the normalization division allocates a fresh writable
+            # array), so no .copy() is needed.
+            blob = b"".join(row[1] for row in rows)
+            vecs = np.frombuffer(blob, dtype=np.float32).reshape(len(rows), first_dim)
+
         norms = np.linalg.norm(vecs, axis=1, keepdims=True)
         norms = np.maximum(norms, 1e-10)
         vecs_norm = vecs / norms
@@ -248,13 +225,6 @@ PASSAGE_IDS, PASSAGE_VECS, PASSAGE_ID_TO_IDX = _load_embeddings()
 AUTHOR_PASSAGE_INDEX = _load_author_passage_index()
 PASSAGE_WORK_INDEX, PASSAGE_AUTHOR_INDEX = _load_passage_indexes()
 
-# A topic search across the whole corpus reads better with variety than with ten
-# near-identical snippets from one commentary (or one prolific author), so cap how
-# many passages any single work / author may contribute to a result set. The
-# author cap is looser — one Father can legitimately own several relevant works.
-DIVERSITY_CAP_PER_WORK = 3
-DIVERSITY_CAP_PER_AUTHOR = 6
-
 
 def _cache_key(*parts):
     return "|".join((part or "").strip().lower() for part in parts)
@@ -280,7 +250,7 @@ def _embed_query_vector(query):
         return cached
 
     if not budget_remaining():
-        log.warning("Voyage embed skipped: daily API budget exhausted")
+        log.warning("Voyage embed skipped: monthly API budget exhausted")
         return None
 
     _t0 = _time.perf_counter()
@@ -430,37 +400,15 @@ def _author_passage_ids(author):
     return AUTHOR_PASSAGE_INDEX.get(author, set())
 
 
-def _rrf_accumulate(fused, hits, weight=1.0, k=60):
-    """Add one ranked hit list to the fused scores via reciprocal rank fusion.
+def hybrid_search(lexical_text, semantic_text=None, author=None, limit=100):
+    """Fuse vector + FTS + work-title rankings (RRF), then diversify by work.
 
-    RRF is scale-free (uses rank, not raw score), so vector cosine, FTS bm25 and
-    title-match scores fuse without normalization. `weight` tunes a signal's pull.
+    ``lexical_text``  — cleaned topic keywords; best for exact-term BM25/title.
+    ``semantic_text`` — fuller natural-language query; best for embeddings.
+    If ``semantic_text`` is omitted, both signals fall back to ``lexical_text``.
     """
-    for rank, (pid, _score) in enumerate(hits):
-        fused[pid] = fused.get(pid, 0.0) + weight / (k + rank + 1)
-
-
-def _diversify(passage_ids, limit,
-               work_cap=DIVERSITY_CAP_PER_WORK, author_cap=DIVERSITY_CAP_PER_AUTHOR):
-    """Cap how many passages any single work / author contributes, preserving rank
-    order, so one commentary or one prolific Father can't flood the page."""
-    out, per_work, per_author = [], {}, {}
-    for pid in passage_ids:
-        wid = PASSAGE_WORK_INDEX.get(pid)
-        aid = PASSAGE_AUTHOR_INDEX.get(pid)
-        if per_work.get(wid, 0) >= work_cap or per_author.get(aid, 0) >= author_cap:
-            continue
-        per_work[wid] = per_work.get(wid, 0) + 1
-        per_author[aid] = per_author.get(aid, 0) + 1
-        out.append(pid)
-        if len(out) >= limit:
-            break
-    return out
-
-
-def hybrid_search(search_text, author=None, limit=100):
-    """Fuse vector + FTS + work-title rankings (RRF), then diversify by work."""
-    cache_key = _cache_key("hybrid", search_text, author)
+    semantic_text = (semantic_text or lexical_text or "").strip()
+    cache_key = _cache_key("hybrid", lexical_text, semantic_text, author)
     cached = hybrid_cache.get(cache_key)
     if cached is not None:
         return cached
@@ -469,21 +417,21 @@ def hybrid_search(search_text, author=None, limit=100):
     # Pull a deeper candidate pool than `limit` so the per-work cap has room to
     # promote variety without starving the final result count.
     pool = limit * 3
-    vector_hits = vector_search(search_text, limit=pool, allowed_ids=allowed_ids)
-    fts_hits = fts_search(search_text, limit=pool, author=author)
-    title_hits = title_match_search(search_text, limit=50, author=author)
+    vector_hits = vector_search(semantic_text, limit=pool, allowed_ids=allowed_ids)
+    fts_hits = fts_search(lexical_text, limit=pool, author=author)
+    title_hits = title_match_search(lexical_text, limit=50, author=author)
 
     if not vector_hits and not fts_hits and not title_hits:
         return []
 
     fused = {}
-    _rrf_accumulate(fused, vector_hits, weight=1.0)
-    _rrf_accumulate(fused, fts_hits, weight=1.0)
+    rrf_accumulate(fused, vector_hits, weight=RRF_WEIGHT_VECTOR)
+    rrf_accumulate(fused, fts_hits, weight=RRF_WEIGHT_FTS)
     # Title matches nudge treatises up without letting them dominate the page.
-    _rrf_accumulate(fused, title_hits, weight=0.5)
+    rrf_accumulate(fused, title_hits, weight=RRF_WEIGHT_TITLE)
 
     ranked = [pid for pid, _ in sorted(fused.items(), key=lambda item: item[1], reverse=True)]
-    passage_ids = _diversify(ranked, limit=limit)
+    passage_ids = diversify(ranked, PASSAGE_WORK_INDEX, PASSAGE_AUTHOR_INDEX, limit=limit)
     hybrid_cache.set(cache_key, passage_ids)
     return passage_ids
 
@@ -517,35 +465,33 @@ def get_author_id_by_name(name):
         conn.close()
 
 
-def resolve_author_name(candidate, author_names):
-    """Map Claude's author string to a canonical DB name (case-insensitive)."""
-    if not candidate or candidate.strip().lower() in ("none", "n/a", ""):
-        return None
-    c = candidate.strip()
-    c_lower = c.lower()
-    for name in author_names:
-        if name.lower() == c_lower:
-            return name
-    # Fallback: substring match when Haiku returns a shortened or partial name
-    for name in author_names:
-        nl = name.lower()
-        if c_lower in nl or nl in c_lower:
-            return name
-    return None
+# Cached at import: token -> sole real author. The pure helpers live in
+# query_parsing; we just build the index once with the loaded author roster.
+AUTHOR_TOKEN_INDEX = _build_author_token_index(AUTHOR_NAMES)
 
 
+def detect_author_local(query, author_names):
+    """Cached-index wrapper around query_parsing.detect_author_local."""
+    return _detect_author_local(query, author_names, token_index=AUTHOR_TOKEN_INDEX)
+
+
+# ── Query parsing: LLM author + topic extraction ─────────────────────────────
+# The LLM gets the full author roster so it can resolve a Father robustly —
+# including misspellings, partial names, and ambiguous first names that local
+# detection deliberately skips. detect_author_local() above is the free fallback
+# used once the monthly budget is spent.
 def _build_parse_system_prompt(author_names):
-    """Static instruction + author roster sent on every parse (cacheable)."""
+    """Static instruction + author roster sent on every parse."""
     names_list = "\n".join(f"- {n}" for n in author_names)
     return (
         "You parse natural-language search queries for a library of the early "
         "Church Fathers.\n\n"
-        "Authors in the database (if a Father is mentioned, you MUST use the "
-        "exact spelling from this list; otherwise use none):\n"
+        "Authors in the database (if a Father is named — even misspelled or "
+        "partial — use the EXACT spelling from this list; otherwise use none):\n"
         f"{names_list}\n\n"
         "Extract two things:\n"
-        "1. author: — exact name from the list above, or none if no specific Father "
-        "is named.\n"
+        "1. author: — exact name from the list above, or none if no specific "
+        "Father is named.\n"
         "2. keywords: — only the theological topic words (strip filler like "
         "\"what did\", \"teach about\", \"the early church\"). If there is no "
         "topic, use none.\n\n"
@@ -555,21 +501,19 @@ def _build_parse_system_prompt(author_names):
     )
 
 
-# Built once: the instruction block + author roster never change at runtime.
 PARSE_SYSTEM_PROMPT = _build_parse_system_prompt(AUTHOR_NAMES)
 
 
-def parse_user_query(raw_query, author_names):
-    """Use Gemini 2.5 Flash (Groq Llama 3.3 70B fallback) to split natural language
-    into author filter + topic keywords.
+def parse_user_query(raw_query):
+    """LLM parse → {author, keywords} via Gemini 2.5 Flash-Lite (Groq fallback).
 
-    Falls back to Groq on any Gemini error (including 429). If both fail, raises
-    so parse_user_query_safe falls back to raw query as keywords.
+    Ships the author roster so detection tolerates misspellings/partial names.
+    Raises if both providers fail, so the caller can fall back to local parsing.
     """
     if gemini_client is None and groq_client is None:
         raise RuntimeError("Neither GEMINI_API_KEY nor GROQ_API_KEY is set")
 
-    _gemini_model = "gemini-2.5-flash"
+    _gemini_model = "gemini-2.5-flash-lite"
     _t0 = _time.perf_counter()
     try:
         if gemini_client is None:
@@ -579,13 +523,18 @@ def parse_user_query(raw_query, author_names):
             contents=f"User search query: {raw_query}",
             config=genai.types.GenerateContentConfig(
                 system_instruction=PARSE_SYSTEM_PROMPT,
-                max_output_tokens=150,
+                max_output_tokens=60,
+                # Thinking off: pure extraction, and stops reasoning tokens from
+                # eating the output budget (which would return empty text).
+                thinking_config=genai.types.ThinkingConfig(thinking_budget=0),
             ),
         )
+        res = response.text
+        if not res or not res.strip():
+            raise RuntimeError("Gemini returned an empty response")
         log_ai_call("gemini", _gemini_model,
                     (_time.perf_counter() - _t0) * 1000, ok=True)
         record_spend("gemini_parse")
-        res = response.text
     except Exception as exc:
         log_ai_call("gemini", _gemini_model,
                     (_time.perf_counter() - _t0) * 1000, ok=False, error=str(exc))
@@ -601,7 +550,7 @@ def parse_user_query(raw_query, author_names):
                     {"role": "system", "content": PARSE_SYSTEM_PROMPT},
                     {"role": "user", "content": f"User search query: {raw_query}"},
                 ],
-                max_tokens=150,
+                max_tokens=60,
             )
             log_ai_call("groq", _groq_model,
                         (_time.perf_counter() - _t1) * 1000, ok=True)
@@ -611,37 +560,6 @@ def parse_user_query(raw_query, author_names):
             log_ai_call("groq", _groq_model,
                         (_time.perf_counter() - _t1) * 1000, ok=False, error=str(exc2))
             raise
-
-    # ---- Anthropic Haiku path (disabled — kept for future use) ----
-    # _model = "claude-haiku-4-5-20251001"
-    # _t0 = _time.perf_counter()
-    # try:
-    #     response = anthropic_client.messages.create(
-    #         model=_model,
-    #         max_tokens=150,
-    #         system=[{
-    #             "type": "text",
-    #             "text": PARSE_SYSTEM_PROMPT,
-    #             "cache_control": {"type": "ephemeral"},
-    #         }],
-    #         messages=[{
-    #             "role": "user",
-    #             "content": f"User search query: {raw_query}",
-    #         }],
-    #     )
-    # except Exception as exc:
-    #     log_ai_call("anthropic", _model,
-    #                 (_time.perf_counter() - _t0) * 1000, ok=False, error=str(exc))
-    #     raise
-    # log_ai_call(
-    #     "anthropic", _model,
-    #     (_time.perf_counter() - _t0) * 1000, ok=True,
-    #     tokens_in=getattr(response.usage, "input_tokens", None),
-    #     tokens_out=getattr(response.usage, "output_tokens", None),
-    # )
-    # record_spend("anthropic_parse")
-    # res = response.content[0].text
-    # ---- End Anthropic path ----
 
     seen = {"author": "none", "keywords": ""}
     for line in res.split("\n"):
@@ -654,32 +572,34 @@ def parse_user_query(raw_query, author_names):
 
 
 def parse_user_query_safe(raw_query, author_names):
-    """Parse query via Gemini/Groq; on failure use raw query as keywords with no author filter."""
+    """Parse a query into {author, keywords}.
+
+    LLM-first (robust author detection, incl. misspellings) while the monthly
+    budget holds; the successful parse is cached so repeats are free. Once the
+    budget is spent — or both LLM providers fail — degrade to local author
+    detection + the raw query as keywords (still free, and clean author names
+    still route to their works list). The degraded result is NOT cached, so a
+    query re-run after the budget resets gets a fresh LLM parse.
+    """
     cache_key = _cache_key("parse", raw_query)
     cached = parse_cache.get(cache_key)
     if cached is not None:
         return cached
 
-    if not budget_remaining():
-        log.warning("Gemini/Groq parse skipped: daily API budget exhausted")
-        parsed = {"author": "none", "keywords": raw_query}
-        parse_cache.set(cache_key, parsed)
-        return parsed
+    if budget_remaining():
+        try:
+            parsed = parse_user_query(raw_query)
+            parse_cache.set(cache_key, parsed)
+            return parsed
+        except Exception as exc:
+            log.warning("LLM parse failed (%s) — using local fallback", exc)
+    else:
+        log.warning("LLM parse skipped: monthly API budget exhausted — local fallback")
 
-    try:
-        parsed = parse_user_query(raw_query, author_names)
-    except Exception as exc:
-        log.warning("Query parse failed: %s", exc)
-        # Fallback: check if the whole query is just an author name
-        # so "Augustine" still routes to AuthorWorksView without the LLM.
-        fallback_author = resolve_author_name(raw_query.strip(), author_names)
-        if fallback_author:
-            parsed = {"author": fallback_author, "keywords": ""}
-        else:
-            parsed = {"author": "none", "keywords": raw_query}
-
-    parse_cache.set(cache_key, parsed)
-    return parsed
+    author = detect_author_local(raw_query, author_names)
+    topic = strip_author_tokens(raw_query, author) if author else raw_query
+    keywords = "" if (author and not topic) else topic
+    return {"author": author or "none", "keywords": keywords}
 
 
 def _fetch_search_results(passage_ids, author=None):
@@ -819,10 +739,24 @@ def set_security_headers(response):
 @app.route("/api/health")
 @limiter.limit("30 per minute", override_defaults=True)
 def health():
-    """Liveness check for deploy and local dev."""
+    """Liveness check for deploy and local dev.
+
+    ``providers`` reports which API keys are *configured* (booleans only, never
+    the keys). If ``voyage`` is false, query embedding can't run and search
+    silently degrades to keyword-only (FTS) — which makes a natural-language
+    query and its bare keyword return identical results.
+    """
     return jsonify({
         "status": "ok",
         "embeddings_loaded": PASSAGE_VECS.shape[0],
+        "providers": {
+            "voyage": bool(os.getenv("VOYAGE_API_KEY")),
+            "gemini": gemini_client is not None,
+            "groq": groq_client is not None,
+        },
+        # budget.enabled=false means the $10 cap is NOT enforced (no Redis) —
+        # spend is then limited only by caching.
+        "budget": budget_status(),
     })
 
 
@@ -893,7 +827,10 @@ def search():
             })
 
         search_text = keywords or q
-        passage_ids = hybrid_search(search_text, author=author)
+        # Keywords drive exact-term (FTS) matching; the full natural query drives
+        # semantic (vector) matching — embeddings read intent better from the
+        # original phrasing than from a handful of stripped keywords.
+        passage_ids = hybrid_search(search_text, semantic_text=q, author=author)
 
         if not passage_ids:
             return jsonify({
@@ -1131,28 +1068,6 @@ def scripture(book, chapter, verse):
     })
 
 
-# Canonical order for the scripture browser (books not listed sort to the end).
-BIBLE_BOOK_ORDER = [
-    "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges",
-    "Ruth", "1 Samuel", "2 Samuel", "1 Kings", "2 Kings", "1 Chronicles",
-    "2 Chronicles", "Ezra", "Nehemiah", "Tobit", "Judith", "Esther", "1 Maccabees",
-    "2 Maccabees", "Job", "Psalms", "Psalm", "Proverbs", "Ecclesiastes",
-    "Song of Solomon", "Wisdom", "Sirach", "Isaiah", "Jeremiah", "Lamentations",
-    "Baruch", "Ezekiel", "Daniel", "Prayer of Azariah", "Hosea", "Joel", "Amos",
-    "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai",
-    "Zechariah", "Malachi", "Matthew", "Mark", "Luke", "John", "Acts", "Romans",
-    "1 Corinthians", "2 Corinthians", "Galatians", "Ephesians", "Philippians",
-    "Colossians", "1 Thessalonians", "2 Thessalonians", "1 Timothy", "2 Timothy",
-    "Titus", "Philemon", "Hebrews", "James", "1 Peter", "1 Pet", "2 Peter", "2 Pet",
-    "1 John", "2 John", "3 John", "Jude", "Revelation",
-]
-_BOOK_RANK = {b.lower(): i for i, b in enumerate(BIBLE_BOOK_ORDER)}
-
-
-def _book_sort_key(book):
-    return (_BOOK_RANK.get(book.lower(), len(BIBLE_BOOK_ORDER)), book.lower())
-
-
 @app.route("/api/scripture/books")
 def scripture_books():
     """Every book that has indexed commentary, in canonical order, with counts."""
@@ -1172,7 +1087,7 @@ def scripture_books():
 
     books = sorted(
         ({"book": r[0], "passages": r[1], "chapters": r[2]} for r in rows),
-        key=lambda b: _book_sort_key(b["book"]),
+        key=lambda b: book_sort_key(b["book"]),
     )
     return jsonify({"books": books})
 
@@ -1359,16 +1274,6 @@ def library():
         })
 
     return jsonify({"sections": sections})
-
-
-# --- AI Synthesis (disabled to reduce API costs) ---
-# The /api/synthesize endpoint is commented out. To re-enable, uncomment the
-# block below and restore the SynthesisPanel in the frontend.
-#
-# @app.route("/api/synthesize", methods=["POST"])
-# def synthesize():
-#     """Stream a patristic summary from selected passages."""
-#     ...  # See git history for the full implementation
 
 
 @app.route("/api/authors/<int:author_id>/works")

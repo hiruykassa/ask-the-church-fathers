@@ -6,7 +6,7 @@ import LoadingBlock from './components/ui/LoadingBlock'
 import { usePageMeta } from './hooks/usePageMeta'
 import useScrollRestoration from './hooks/useScrollRestoration'
 import { formatDates } from './utils/authors'
-import { API_BASE } from './api/client'
+import { api, ApiError, isAbortError } from './api/client'
 import './App.css'
 import './BrowsePage.css'
 
@@ -41,24 +41,18 @@ export default function AuthorPage() {
   const [status, setStatus] = useState('loading')
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     setStatus('loading')
-    fetch(`${API_BASE}/api/authors/${id}/works`)
-      .then(res => {
-        if (res.status === 404) { const e = new Error('notfound'); e.notfound = true; throw e }
-        if (!res.ok) throw new Error('fetch failed')
-        return res.json()
-      })
+    api.authorWorks(id, { signal: controller.signal })
       .then(data => {
-        if (cancelled) return
         setAuthor(data)
         setStatus('ready')
       })
       .catch(err => {
-        if (cancelled) return
-        setStatus(err.notfound ? 'notfound' : 'error')
+        if (isAbortError(err)) return
+        setStatus(err instanceof ApiError && err.status === 404 ? 'notfound' : 'error')
       })
-    return () => { cancelled = true }
+    return () => controller.abort()
   }, [id])
 
   // Return Back to the work the user tapped, not the bottom of the list.

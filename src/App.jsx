@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { IoSearch, IoChevronBack, IoBookmark, IoBookmarkOutline } from 'react-icons/io5'
+import { IoSearch, IoChevronBack } from 'react-icons/io5'
 import { useScrollReveal } from './hooks/useScrollReveal'
 import useSavedPassages from './hooks/useSavedPassages'
 import useLibrary from './hooks/useLibrary'
@@ -20,10 +20,11 @@ import { CATEGORIES, categoryCount } from './constants/categories'
 import BrowseTiles from './components/home/BrowseTiles'
 import SiteFooter from './components/layout/SiteFooter'
 import ThemeToggle from './components/ui/ThemeToggle'
+import Cross from './components/ui/Cross'
 import SearchResults from './components/SearchResults'
 import AuthorWorksView from './components/AuthorWorksView'
 import SavedView from './components/SavedView'
-import { API_BASE } from './api/client'
+import { api, ApiError, isAbortError } from './api/client'
 import './App.css'
 
 export default function App() {
@@ -40,11 +41,14 @@ export default function App() {
   const [topicQuery,   setTopicQuery]   = useState('')
   const [authorWorks,  setAuthorWorks]  = useState(null)
   const [scriptureRef, setScriptureRef] = useState(null)
+  const [searchError,  setSearchError]  = useState(null)
 
   const { sections, loading: libraryLoading, error: libraryError } = useLibrary()
   const { counts: categoryCounts, loading: categoriesLoading, error: categoriesError } = useCategories()
 
-  const searchGen = useRef(0)
+  // Each new search aborts the previous one. We keep the controller in a ref so
+  // the latest cleanup can cancel a fetch started by an earlier call.
+  const searchController = useRef(null)
   const pendingResultScroll = useRef(null)
 
   useScrollReveal()
@@ -79,8 +83,7 @@ export default function App() {
         setSearched(true)
         setView('search')
         setSearching(true)
-        fetch(`${API_BASE}/api/authors/${authorId}/works`)
-          .then(r => r.json())
+        api.authorWorks(authorId)
           .then(data => {
             setAuthorWorks({ id: authorId, name: data.name, works: data.works || [] })
             setResults([])
@@ -95,6 +98,9 @@ export default function App() {
       }
       window.history.replaceState({}, '')
     }
+    // Fire only when a fresh restore navigation arrives; the other location.state
+    // fields are read once at trigger time and intentionally not tracked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.restoreQuery])
 
   /** Open the Saved view when arriving from another page's "Saved" nav link. */
@@ -140,29 +146,29 @@ export default function App() {
    */
   async function doSearch(q, searchOverride = undefined) {
     if (!q || !q.trim()) return
-    const gen = ++searchGen.current
     const apiQuery = (searchOverride ?? q).trim()
+
+    // Cancel any in-flight search (and its possible nested author-works fetch).
+    searchController.current?.abort()
+    const controller = new AbortController()
+    searchController.current = controller
+    const opts = { signal: controller.signal }
 
     setQuery(q)
     setSearching(true)
     setSearched(true)
     setView('search')
     setAuthorWorks(null)
+    setSearchError(null)
 
     try {
-      const res = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(apiQuery)}`)
-      if (gen !== searchGen.current) return
-      if (!res.ok) throw new Error('Search failed')
-      const data = await res.json()
+      const data = await api.search(apiQuery, opts)
 
       if (data.author_only && data.author_id) {
         setAuthorFilter(null)
         setTopicQuery('')
         setScriptureRef(null)
-        const worksRes = await fetch(`${API_BASE}/api/authors/${data.author_id}/works`)
-        if (gen !== searchGen.current) return
-        if (!worksRes.ok) throw new Error('Author not found')
-        const worksData = await worksRes.json()
+        const worksData = await api.authorWorks(data.author_id, opts)
         setAuthorWorks({
           id: data.author_id,
           name: worksData.name,
@@ -176,13 +182,21 @@ export default function App() {
       setTopicQuery(data.keywords || q)
       setScriptureRef(data.scripture_ref || null)
       setResults(data.results || [])
-    } catch {
-      if (gen !== searchGen.current) return
+    } catch (err) {
+      if (isAbortError(err)) return
+      // Server-side validation (e.g. query too long) carries a user-facing
+      // message — show it instead of a silent empty state.
+      if (err instanceof ApiError && err.body?.error) {
+        setSearchError(err.body.error)
+      }
       setResults([])
       setAuthorFilter(null)
       setScriptureRef(null)
     } finally {
-      if (gen === searchGen.current) setSearching(false)
+      if (searchController.current === controller) {
+        setSearching(false)
+        searchController.current = null
+      }
     }
   }
 
@@ -207,6 +221,7 @@ export default function App() {
     setTopicQuery('')
     setAuthorWorks(null)
     setScriptureRef(null)
+    setSearchError(null)
     setView('search')
   }
 
@@ -219,7 +234,9 @@ export default function App() {
       <header className="site-header">
         <div className="site-header-spacer" />
         <button className="site-title-btn" onClick={goHome} title="Home">
-          <h1 className="site-title">Ask the Early Church</h1>
+          <div className="site-title-row">
+            <h1 className="site-title">Ask the Early Church</h1>
+          </div>
           <div className="site-title-ornament">
             <span>What did the early Church teach</span>
           </div>
@@ -232,15 +249,10 @@ export default function App() {
             Search
           </button>
           <button
-            className={`nav-tab nav-tab-icon ${view === 'saved' ? 'is-active nav-tab-saved' : ''}`}
+            className={`nav-tab ${view === 'saved' ? 'is-active nav-tab-saved' : ''}`}
             onClick={() => setView('saved')}
-            title="Saved"
-            aria-label="Saved"
           >
-            {view === 'saved'
-              ? <IoBookmark className="nav-tab-ic" />
-              : <IoBookmarkOutline className="nav-tab-ic" />}
-            {saved.length > 0 && (
+            Saved {saved.length > 0 && (
               <span className="tab-count tab-count-saved">{saved.length}</span>
             )}
           </button>
@@ -256,7 +268,7 @@ export default function App() {
         <div className="search-section-inner">
           {!searched && view === 'search' && (
             <div className="hero-intro">
-              <span className="hero-cross" aria-hidden="true">&#9841;</span>
+              <Cross className="hero-cross" />
               <h2 className="hero-title">What did the early Church teach?</h2>
               <blockquote className="hero-verse">
                 <p className="hero-verse-text">
@@ -338,6 +350,7 @@ export default function App() {
               scriptureRef={scriptureRef}
               searching={searching}
               results={results}
+              error={searchError}
               isSaved={isSaved}
               onToggleSave={toggleSave}
               onSearch={doSearch}

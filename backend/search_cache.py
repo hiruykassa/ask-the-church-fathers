@@ -15,11 +15,16 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
-CACHE_TTL_SEC = _int_env("SEARCH_CACHE_TTL_SEC", 3600)
-EMBED_CACHE_SIZE = _int_env("EMBED_CACHE_SIZE", 1024)
-PARSE_CACHE_SIZE = _int_env("PARSE_CACHE_SIZE", 512)
-HYBRID_CACHE_SIZE = _int_env("HYBRID_CACHE_SIZE", 512)
-FTS_CACHE_SIZE = _int_env("FTS_CACHE_SIZE", 512)
+# Cache aggressively: a repeated query within the month should never re-hit the
+# paid APIs (Gemini parse, Voyage embed), so the $10/month budget stretches far.
+# TTL is 30 days; parse/embed caches gate the paid calls so they're the largest.
+# embed_cache holds full query vectors (~4KB each at 1024 dims), so it's capped
+# more tightly than the string/list caches to bound RAM (~40MB at 10k entries).
+CACHE_TTL_SEC = _int_env("SEARCH_CACHE_TTL_SEC", 2592000)   # 30 days
+EMBED_CACHE_SIZE = _int_env("EMBED_CACHE_SIZE", 10000)      # query vectors (RAM-heavy)
+PARSE_CACHE_SIZE = _int_env("PARSE_CACHE_SIZE", 50000)      # tiny dicts — gates Gemini
+HYBRID_CACHE_SIZE = _int_env("HYBRID_CACHE_SIZE", 20000)    # ranked id lists (local)
+FTS_CACHE_SIZE = _int_env("FTS_CACHE_SIZE", 20000)          # ranked id lists (local)
 
 
 class TTLCache:
