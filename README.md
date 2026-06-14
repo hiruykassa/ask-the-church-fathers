@@ -71,6 +71,8 @@ Authors whose only contribution is verse commentary (no standalone text) are cat
 
 Author detection is **LLM-first** (the roster lets it resolve fuzzy/partial names), with the local matcher as a zero-cost fallback. Topic keywords drive the keyword signals while the full query drives the semantic signal — embeddings read intent better from natural phrasing than from a few stripped words.
 
+**Latency:** the Voyage query embedding depends only on the raw query, not on the parse result, so it is warmed in a worker thread **in parallel** with the Gemini parse (step 2). The two external API round-trips overlap rather than running back-to-back, cutting search latency to roughly the slower of the two; the vector signal in step 3 then reads its vector from the now-warm embed cache.
+
 Search queries are capped at **500 characters** to prevent API abuse.
 
 Repeated queries are served from in-memory TTL caches (**default 30 days**, sized large so the monthly API budget stretches): Voyage query embeddings, Gemini/Groq parse results, FTS hits, and fused hybrid rankings. A query repeated within the month costs **nothing** (no Gemini, no Voyage). Passage vectors are pre-normalized at startup; author passage indexes are preloaded (no per-search DB lookup). Tune via env vars: `SEARCH_CACHE_TTL_SEC` (default `2592000`), `EMBED_CACHE_SIZE` (`10000`), `PARSE_CACHE_SIZE` (`50000`), `HYBRID_CACHE_SIZE` (`20000`), `FTS_CACHE_SIZE` (`20000`).
