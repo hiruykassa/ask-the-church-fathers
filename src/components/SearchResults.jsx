@@ -190,7 +190,7 @@ export default function SearchResults({
                 key={p.id}
                 className="result-card"
                 data-result-index={i}
-                style={{ animationDelay: `${Math.min(i * 30, 500)}ms` }}
+                style={{ animationDelay: `${Math.min(i * 55, 900)}ms` }}
                 onClick={() => openPassage(p, i)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' || e.key === ' ') {
