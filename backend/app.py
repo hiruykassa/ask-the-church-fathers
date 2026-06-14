@@ -114,6 +114,28 @@ def _is_truthy_env(name: str) -> bool:
 
 IS_PRODUCTION = _is_truthy_env("PRODUCTION")
 
+# Optional error monitoring (Sentry). Active only when SENTRY_DSN is set, so
+# local dev and CI run untouched. Initialized before the Flask app is created so
+# the integration can hook request handling. Errors only — traces are off and
+# PII (client IPs, query text) is never sent — to respect user privacy and stay
+# within the free tier. Guarded so a missing dependency can't break boot.
+_sentry_dsn = os.getenv("SENTRY_DSN", "").strip()
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            integrations=[FlaskIntegration()],
+            environment="production" if IS_PRODUCTION else "development",
+            traces_sample_rate=0.0,   # capture errors, not performance transactions
+            send_default_pii=False,   # never attach IPs or request bodies
+        )
+        log.info("Sentry error monitoring enabled")
+    except Exception as exc:  # pragma: no cover - optional dependency
+        log.warning("Sentry init skipped (%s)", exc)
+
 voyage_client = voyageai.Client(api_key=os.getenv("VOYAGE_API_KEY"))
 # Pin the embedding model. Changing this requires re-embedding the corpus
 # (see embed_passages.py) — vectors in the DB are model-specific.

@@ -46,3 +46,6 @@ services:
       # Optional: a Redis URL so rate limits are shared across workers.
       - key: RATELIMIT_STORAGE_URI
         sync: false
+      # Optional: Sentry DSN for error monitoring. Leave unset to disable.
+      - key: SENTRY_DSN
+        sync: false

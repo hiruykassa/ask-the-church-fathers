@@ -4,6 +4,7 @@ flask-limiter==4.1.1
 flask-compress==1.17
 redis>=5.0.0,<6.0
 gunicorn==23.0.0
+sentry-sdk[flask]>=2.0,<3.0  # optional error monitoring; active only when SENTRY_DSN is set
 # anthropic>=0.52.0,<1.0  # kept for future re-enable of Haiku parse path
 google-genai>=1.0,<2.0
 groq>=0.11.0,<1.0

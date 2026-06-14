@@ -167,6 +167,7 @@ The API is a **public read-only** service (no authentication). Protections in pl
 | **Secret hygiene** | No keys in git (scanned); macOS Keychain locally, platform secret env in prod; all `render.yaml` keys are `sync: false`; `.dockerignore` keeps secrets/DB out of the image; container runs as a non-root user |
 | **Graceful degradation** | Voyage / Gemini / Groq failure never returns 500; falls back to FTS keyword search |
 | **DB safety** | All connections closed in `try/finally`; search DB errors return 503; error handlers return generic JSON without leaking stack traces |
+| **Monitoring** | Optional Sentry error tracking (`SENTRY_DSN`) — errors only, `send_default_pii=False` so client IPs / query text are never sent; disabled when the DSN is unset. Uptime/availability via an external pinger (e.g. UptimeRobot) on `/api/health` |
 
 > **Known advisory (dev-only):** `npm audit` flags `esbuild`/`vite` (GHSA-67mh-4wv8-2f99). It affects only the local Vite **dev server**, not the static production bundle Netlify serves, so it is not exploitable in the hosted app. The fix is a breaking major bump to Vite 8; deferred until a planned dependency upgrade.
 
@@ -184,15 +185,17 @@ DB_URL=...                # Cloudflare R2 (or S3) URL to database.db; fetched by
 VOYAGE_MODEL=voyage-3
 MONTHLY_API_BUDGET_USD=10            # monthly spend ceiling; on exhaustion → keyword-only until the 1st
 RATELIMIT_STORAGE_URI=redis://...   # REQUIRED to enforce the budget cap (and to share rate-limit counters)
+SENTRY_DSN=...                       # OPTIONAL error monitoring; unset = disabled (errors only, no PII)
 
 # render.yaml already wires this up. Equivalent manual run:
 cd backend
-bash prestart.sh && gunicorn -w 1 -b 0.0.0.0:$PORT --timeout 60 app:app
+bash prestart.sh && gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT --timeout 60 app:app
 ```
 
-`PRODUCTION=1` makes missing `ALLOWED_ORIGIN` a startup error. Running `-w 1` keeps one
-copy of the embedding matrix in RAM **and** makes the in-memory rate limiter exact (no
-per-worker N× looseness).
+`PRODUCTION=1` makes missing `ALLOWED_ORIGIN` a startup error. Running `-w 1 --threads 8`
+keeps one shared copy of the embedding matrix in RAM and an exact in-memory rate
+limiter, while the threads add concurrency for this I/O-bound workload (each search waits
+on the Gemini/Voyage APIs) without the per-worker N× memory or looseness more workers cost.
 
 **Redis is required to enforce the `MONTHLY_API_BUDGET_USD` cap.** The spend counter lives
 in Redis (`RATELIMIT_STORAGE_URI`); without it `budget_remaining()` fails *open* — search
