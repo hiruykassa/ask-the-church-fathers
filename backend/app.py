@@ -38,6 +38,7 @@ from load_secrets import load_secrets
 import re
 import logging
 from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor
 import voyageai
 import numpy as np
 
@@ -897,7 +898,19 @@ def search():
                     "results": results,
                 })
 
-        parsed = parse_user_query_safe(q, AUTHOR_NAMES)
+        # The Voyage embed only needs the raw query — it does NOT depend on the
+        # Gemini parse (vector search runs on `q`, not the parsed keywords). So
+        # warm the embed cache in a worker thread while Gemini parses, turning
+        # two sequential API round-trips into roughly max(parse, embed). When
+        # hybrid_search later calls vector_search -> _embed_query_vector(q), it
+        # hits the now-warm embed_cache instead of making a second call.
+        # Clients are thread-safe and embed_cache is keyed on the query string.
+        # Trade-off: an author-only query (no topic) doesn't need the embed, so
+        # this spends one speculative Voyage call in that case (result cached).
+        with ThreadPoolExecutor(max_workers=1) as _ex:
+            _embed_future = _ex.submit(_embed_query_vector, q)
+            parsed = parse_user_query_safe(q, AUTHOR_NAMES)
+            _embed_future.result()  # block until the embed cache is warm
         author = resolve_author_name(parsed.get("author", "none"), AUTHOR_NAMES)
 
         keywords_raw = (parsed.get("keywords") or "").strip()

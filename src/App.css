@@ -969,6 +969,18 @@ html[data-theme='dark'] .closing-block {
   transition: transform 0.22s var(--ease-out), box-shadow 0.22s var(--ease-out), border-color 0.2s var(--ease);
   position: relative;
   cursor: pointer;
+  /* Staggered fade-in so results cascade in one by one (perceived speed).
+     The per-card delay is set inline in SearchResults.jsx, capped at 500ms so
+     later cards don't lag. Opacity-only — animating transform here would fight
+     the hover lift below once the fill state persists. */
+  animation: result-in 0.3s var(--ease-out) both;
+}
+@keyframes result-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .result-card { animation: none; }
 }
 .result-card:hover {
   box-shadow: var(--shadow-md);
