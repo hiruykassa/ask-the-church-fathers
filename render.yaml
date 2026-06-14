@@ -9,12 +9,16 @@ services:
     runtime: python
     rootDir: backend
     plan: starter
-    # -w 1: each gunicorn worker holds the full embedding matrix in RAM, so a
-    # single worker keeps memory bounded on the starter plan. It also makes the
-    # in-memory rate limiter exact (no per-worker N× looseness). Scale to -w 2+
-    # only with a larger instance and a shared RATELIMIT_STORAGE_URI.
+    # -w 1 --threads 8: one worker keeps the embedding matrix in RAM exactly once
+    # (memory bounded for the 512MB starter plan) and keeps the in-memory rate
+    # limiter/budget exact (no per-worker N× looseness). The 8 threads add
+    # concurrency for free — this workload is I/O-bound (each search waits on the
+    # Gemini/Voyage APIs, and numpy releases the GIL during scoring), so threads
+    # let one request run while another waits, sharing the read-only matrix.
+    # Scale to multiple workers only on a larger instance with a shared
+    # RATELIMIT_STORAGE_URI (Redis).
     buildCommand: pip install -r requirements.txt
-    startCommand: bash prestart.sh && gunicorn -w 1 -b 0.0.0.0:$PORT --timeout 60 app:app
+    startCommand: bash prestart.sh && gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT --timeout 60 app:app
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
