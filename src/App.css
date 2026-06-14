@@ -958,6 +958,60 @@ html[data-theme='dark'] .closing-block {
   gap: 14px;
 }
 
+/* Search loading skeletons — placeholder cards shown while a search is in
+   flight, so the results area never blanks out (perceived speed). */
+.result-skeleton {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  animation: sk-fade-in 0.3s var(--ease-out) forwards;
+}
+.result-skeleton-rank {
+  min-width: 48px;
+  background: var(--cross-gold-soft);
+}
+.result-skeleton-body {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sk-line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text-faint) 14%, transparent) 25%,
+    color-mix(in srgb, var(--text-faint) 30%, transparent) 50%,
+    color-mix(in srgb, var(--text-faint) 14%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+.sk-line-author { width: 38%; height: 16px; }
+.sk-line-title  { width: 58%; height: 12px; margin-bottom: 4px; }
+.sk-line-text   { width: 100%; }
+.sk-line-text.short { width: 68%; }
+
+@keyframes sk-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes sk-fade-in {
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-line { animation: none; }
+  .result-skeleton { animation: none; opacity: 1; }
+}
+
 .result-card {
   display: flex;
   align-items: stretch;

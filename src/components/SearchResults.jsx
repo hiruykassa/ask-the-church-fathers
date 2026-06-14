@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+
+const PAGE_SIZE = 15
 import { IoBookOutline, IoChevronForward, IoClose, IoHeart, IoHeartOutline } from 'react-icons/io5'
 
 const SNIPPET_MAX = 720
@@ -63,6 +65,11 @@ export default function SearchResults({
   isSaved, onToggleSave, onSearch, navigate,
 }) {
   const [tradition, setTradition] = useState(null)
+  // Render the first page immediately, reveal the rest on demand. The whole
+  // result set is already in memory, so "Show more" is instant (no new request)
+  // — it just keeps the initial paint light and the page less overwhelming.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [results, tradition])
 
   // Highlight terms: the parsed keywords (or the raw query), words of 3+ chars.
   const terms = useMemo(() => {
@@ -81,6 +88,7 @@ export default function SearchResults({
     ? results.filter(r => r.tradition === tradition)
     : results
   const total = shown.length
+  const visible = shown.slice(0, visibleCount)
 
   function openPassage(p, resultIndex) {
     if (!p?.work_id) return
@@ -114,6 +122,23 @@ export default function SearchResults({
           </span>
         )}
       </div>
+
+      {searching && (
+        <div className="results-list" aria-hidden="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="result-skeleton" style={{ animationDelay: `${i * 70}ms` }}>
+              <div className="result-skeleton-rank" />
+              <div className="result-skeleton-body">
+                <div className="sk-line sk-line-author" />
+                <div className="sk-line sk-line-title" />
+                <div className="sk-line sk-line-text" />
+                <div className="sk-line sk-line-text" />
+                <div className="sk-line sk-line-text short" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Tradition filter */}
       {!searching && traditions.length > 1 && (
@@ -179,9 +204,10 @@ export default function SearchResults({
         </div>
       )}
 
-      {total > 0 && (
+      {!searching && total > 0 && (
+        <>
         <div className="results-list">
-          {shown.map((p, i) => {
+          {visible.map((p, i) => {
             const title = cardTitle(p)
             const snippet = passageSnippet(p.passage)
 
@@ -190,7 +216,7 @@ export default function SearchResults({
                 key={p.id}
                 className="result-card"
                 data-result-index={i}
-                style={{ animationDelay: `${Math.min(i * 55, 900)}ms` }}
+                style={{ animationDelay: `${Math.min(i * 35, 420)}ms` }}
                 onClick={() => openPassage(p, i)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -236,6 +262,18 @@ export default function SearchResults({
             )
           })}
         </div>
+        {visibleCount < total && (
+          <div style={{ textAlign: 'center', marginTop: '1.75rem' }}>
+            <button
+              type="button"
+              className="suggest-chip"
+              onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
+            >
+              Show {Math.min(PAGE_SIZE, total - visibleCount)} more · {total - visibleCount} remaining
+            </button>
+          </div>
+        )}
+        </>
       )}
     </div>
   )
