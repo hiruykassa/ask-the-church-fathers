@@ -28,6 +28,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.errors import RateLimitExceeded
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3
 # import anthropic  # kept for future re-enable of Haiku parse path
 import google.genai as genai
@@ -689,6 +690,16 @@ def _fetch_search_results(passage_ids, author=None):
 
 app = Flask(__name__)
 
+# Behind Render's (or any single) reverse proxy, the WSGI peer is the proxy, not
+# the visitor — so request.remote_addr would be the proxy IP and every client
+# would share one rate-limit bucket (a single abuser could lock everyone out,
+# and per-IP limits would be meaningless). Trust exactly ONE proxy hop's
+# X-Forwarded-For so remote_addr is the real client IP. x_for=1 means we read
+# only the value our trusted proxy appended, so clients can't spoof it by
+# sending their own X-Forwarded-For header.
+if IS_PRODUCTION:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 allowed_origin = os.getenv("ALLOWED_ORIGIN", "").strip()
 if IS_PRODUCTION and not allowed_origin:
     raise RuntimeError(
@@ -769,6 +780,13 @@ def set_security_headers(response):
     response.headers["X-XSS-Protection"] = "0"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # Force HTTPS for a year on the API origin too (the frontend already sets
+    # this via Netlify _headers). Production only — never send HSTS over the
+    # plain-HTTP dev server, which would pin localhost to HTTPS in the browser.
+    if IS_PRODUCTION:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self'; "

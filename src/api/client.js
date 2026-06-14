@@ -31,8 +31,25 @@ export class ApiError extends Error {
   }
 }
 
-/** Lightweight JSON GET. Returns parsed JSON or throws ApiError. */
+/**
+ * Session response cache. The corpus is static between deploys, so once a path
+ * has been fetched there is no reason to hit the network again this session —
+ * revisiting an author, work, scripture chapter, or repeating a search returns
+ * instantly with no spinner. The cache lives only in memory and is empty again
+ * on a full page reload (and a new deploy ships a new bundle), so it never
+ * serves stale content across releases. Only successful responses are cached,
+ * so a cold-start failure still retries on the next call.
+ */
+const _cache = new Map()
+
+/** Clear the in-memory response cache (e.g. after a known data change). */
+export function clearApiCache() {
+  _cache.clear()
+}
+
+/** Lightweight JSON GET with a session cache. Returns parsed JSON or throws ApiError. */
 async function getJson(path, { signal } = {}) {
+  if (_cache.has(path)) return _cache.get(path)
   const res = await fetch(`${API_BASE}${path}`, { signal })
   let body = null
   try {
@@ -41,6 +58,7 @@ async function getJson(path, { signal } = {}) {
     /* non-JSON response — leave body null */
   }
   if (!res.ok) throw new ApiError(res.status, body)
+  _cache.set(path, body)
   return body
 }
 

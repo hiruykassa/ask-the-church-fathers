@@ -12,11 +12,11 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 **Local development: fully functional.** Start the Flask backend and Vite frontend, search the corpus, and read full works in the book reader.
 
-**Production target:** frontend on **Netlify** (free), backend on **Render** (Docker, `render.yaml` blueprint). Domain: **[asktheearlychurch.com](https://asktheearlychurch.com)**. The `database.db` lives in **Cloudflare R2** (S3-compatible object storage) and is fetched on container boot by `prestart.sh` via `DB_URL`.
+**Production: live.** Frontend on **Netlify** (free), backend on **Render** (native Python, `render.yaml` blueprint, Starter instance). Domain: **[asktheearlychurch.com](https://asktheearlychurch.com)** (Cloudflare Registrar + DNS, records DNS-only so Netlify manages TLS). The `database.db` lives in **Cloudflare R2** (S3-compatible object storage) and is fetched on process boot by `prestart.sh` via `DB_URL`.
 
 **After launch:** migrate to **AWS** — the R2/`DB_URL` pattern is already S3-compatible (`prestart.sh` and `upload_db_to_r2.sh` use the boto3 S3 client), so the move is mostly swapping the R2 endpoint for an S3 bucket and running the same `backend/Dockerfile` on EC2/ECS/App Runner. Add **GitHub Actions** CI/CD and **CloudWatch** monitoring when traffic or cost warrants it.
 
-> ✅ **Launch-ready:** the corpus is fully embedded (~52,869 `voyage-3` vectors), so hybrid semantic + keyword search is live. The remaining work is operational: upload `database.db` to R2 and deploy. See [Getting Started](#getting-started).
+> ✅ **Deployed:** corpus fully embedded (~52,869 `voyage-3` vectors); hybrid semantic + keyword search is live at [asktheearlychurch.com](https://asktheearlychurch.com). Embeddings load into RAM as **float16** via a streaming, in-place loader so the full corpus fits the 512MB Render Starter instance. See [Getting Started](#getting-started).
 
 | Area | Status |
 |------|--------|
@@ -25,14 +25,15 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 | Search result caching | ✅ In-memory TTL caches (embed, parse, FTS, hybrid), 30-day TTL |
 | Monthly API budget cap | ✅ `$10/mo` default; degrades to keyword-only when spent (needs Redis to enforce) |
 | Graceful API fallback | ✅ Gemini/Groq down → local author detect + raw keywords; Voyage down → FTS-only; DB errors → 503 |
-| Rate limiting | ✅ Per-endpoint limits via flask-limiter |
-| CORS / security headers | ✅ Configured; set `ALLOWED_ORIGIN` in prod |
+| Rate limiting | ✅ Per-endpoint limits via flask-limiter, keyed on the real client IP (`ProxyFix`, trusts one proxy hop) so limits are per-visitor, not per-proxy |
+| CORS / security headers | ✅ Configured; `ALLOWED_ORIGIN` required in prod; CSP, `X-Frame-Options`, `nosniff`, HSTS (prod) on API responses |
+| Frontend response cache | ✅ Session cache in `api/client.js` + delayed spinner (`LoadingBlock`) — repeat navigation is instant, fast loads never flash a loader |
 | Lint + CI | ✅ ESLint (flat config) + backend smoke tests gated in GitHub Actions |
 | AI synthesis | ⏸ Built, disabled until API budget allows |
 | SEO (sitemap, topic pages, meta) | ✅ Ready — regenerate with real domain before/at cutover |
 | Editorial / text cleanup | ✅ Full corpus pass applied (one-off scripts since removed) |
 | Docker image (`backend/Dockerfile`) | ✅ In repo — host-agnostic (Render today, AWS later) |
-| Production (Netlify + Render) | ⏸ Ready — not yet deployed |
+| Production (Netlify + Render) | ✅ Deployed — live at asktheearlychurch.com |
 | AWS migration | 🚧 Planned (S3 + EC2/ECS) |
 
 ### Corpus snapshot (local `database.db`)
@@ -47,7 +48,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 | Councils · Liturgies · Apocrypha · Misc (authors) | 13 · 3 · 8 · 10 |
 | Embeddings (`voyage-3`) | **52,869 — corpus fully embedded** |
 
-Embeddings are produced offline by `embed_passages.py` (Voyage `voyage-3`) and loaded into RAM at startup. The current corpus is fully embedded, so hybrid vector + FTS search is active. If the corpus is ever rebuilt, **re-run `embed_passages.py`** before redeploying; search degrades gracefully to FTS-only whenever embeddings are absent.
+Embeddings are produced offline by `embed_passages.py` (Voyage `voyage-3`) and loaded into RAM at startup. `_load_embeddings()` streams the vectors into a single preallocated **float16** matrix and normalizes each chunk in place, so peak cold-start memory stays ~1× the matrix (~108MB) instead of the ~3× a naive load would use — that's what keeps the full corpus inside the 512MB Render Starter instance. Scoring upcasts small row-chunks back to float32 on the fly (`_cosine_scores`), so the float16 store is never inflated to a full float32 copy per query, and top-k ranking is unaffected by the precision change. The current corpus is fully embedded, so hybrid vector + FTS search is active. If the corpus is ever rebuilt, **re-run `embed_passages.py`** before redeploying; search degrades gracefully to FTS-only whenever embeddings are absent.
 
 Most of the corpus comes from [HistoricalChristianFaith's by-father collection](https://historicalchristian.faith/by_father.php) — the open [Writings-Database](https://github.com/HistoricalChristianFaith/Writings-Database) (~3,100 full-text passages) and [Commentaries-Database](https://github.com/HistoricalChristianFaith/Commentaries-Database) (~53k verse-level commentaries, headers like `John 3:16` / `Romans 8:1-4`) — with additional public-domain translations from [New Advent](https://www.newadvent.org/fathers/) and [CCEL](https://www.ccel.org/). The verse-level headers are what power the scripture browser.
 
@@ -156,7 +157,7 @@ The API is a **public read-only** service (no authentication). Protections in pl
 
 | Control | Detail |
 |---------|--------|
-| **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages/scripture 30/min |
+| **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages/scripture 30/min. Behind Render, `ProxyFix(x_for=1)` makes limits key on the real client IP (one trusted proxy hop, so `X-Forwarded-For` can't be spoofed) instead of the shared proxy IP |
 | **Query length cap** | 500 chars max on search |
 | **CORS** | Locked to `ALLOWED_ORIGIN`; in dev, both `localhost` and `127.0.0.1` variants are allowed |
 | **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; HSTS in production. Set on API responses (Flask `after_request`) **and** on the static frontend (Netlify `public/_headers`). |
