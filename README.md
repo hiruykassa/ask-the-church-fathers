@@ -30,7 +30,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 | Frontend response cache | ✅ Session cache in `api/client.js` + delayed spinner (`LoadingBlock`) — repeat navigation is instant, fast loads never flash a loader |
 | Lint + CI | ✅ ESLint (flat config) + backend smoke tests gated in GitHub Actions |
 | AI synthesis | ⏸ Built, disabled until API budget allows |
-| SEO (sitemap, topic pages, meta) | ✅ Ready — regenerate with real domain before/at cutover |
+| SEO (sitemap, topic pages, meta) | ✅ Live on `asktheearlychurch.com`; sitemap (2,997 URLs) submitted to Google Search Console |
 | Editorial / text cleanup | ✅ Full corpus pass applied (one-off scripts since removed) |
 | Docker image (`backend/Dockerfile`) | ✅ In repo — host-agnostic (Render today, AWS later) |
 | Production (Netlify + Render) | ✅ Deployed — live at asktheearlychurch.com |
@@ -111,21 +111,24 @@ Flask API (localhost:5001)
 SQLite (database.db) + embeddings in RAM
 ```
 
-### Target (production — pending deploy)
+### Production (live)
 
 ```
-Browser → Netlify (static dist/)
+Browser → asktheearlychurch.com → Netlify (static dist/)
     │
-    │  VITE_API_URL → Render (Docker, gunicorn -w 1)
+    │  VITE_API_URL → Render (native Python, gunicorn -w 1 --threads 8)
     ▼
-Flask API
+Flask API  (ask-the-early-church-api.onrender.com)
     │  prestart.sh fetches database.db from Cloudflare R2 (DB_URL) on boot
     ▼
-SQLite on the container's disk + embeddings in RAM
+SQLite on the instance disk + embeddings in RAM (float16)
 ```
 
-R2 is S3-compatible, so this same shape runs on AWS by pointing `DB_URL` at an S3
-bucket (or using the S3 client in `prestart.sh`/`upload_db_to_r2.sh` unchanged).
+Domain is registered and DNS-hosted at **Cloudflare** (records DNS-only so Netlify
+manages TLS); the API stays on its `onrender.com` origin (the frontend CSP already
+allows `*.onrender.com`). R2 is S3-compatible, so this same shape runs on AWS by
+pointing `DB_URL` at an S3 bucket (or using the S3 client in
+`prestart.sh`/`upload_db_to_r2.sh` unchanged).
 
 ### Target (~2–3 months): AWS EC2
 
@@ -447,14 +450,23 @@ Ranking for competitive queries (e.g. “what did Cyril teach on the incarnation
 - [x] Verse-first scripture browser (books → chapters → verses → catena) and scripture-ref routing in search
 - [x] Curated topic landing pages regenerated; reading page restyled (New Advent / Wikipedia layout, neutral high-contrast theme)
 
-### Next (now → launch)
+### Launched ✅
 
 - [x] **Generate embeddings** — corpus fully embedded with Voyage `voyage-3` (~52,869 vectors); semantic search is on
-- [ ] **Upload `database.db` to Cloudflare R2** — `cd backend && bash upload_db_to_r2.sh` (credentials in Keychain); note the object URL for `DB_URL`
-- [ ] **Deploy backend to Render** — import `render.yaml` as a Blueprint; set the `sync:false` secrets (`VOYAGE_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `ALLOWED_ORIGIN`, `DB_URL`)
-- [ ] **Deploy frontend to Netlify** — set `VITE_API_URL=https://<service>.onrender.com`; `netlify.toml` handles build config
-- [ ] **Cut DNS** — point `asktheearlychurch.com` to Netlify; cert auto-issued
-- [ ] **Regenerate SEO** with `SITE_URL=https://asktheearlychurch.com` and submit sitemap in Search Console
+- [x] **Upload `database.db` to Cloudflare R2** — fetched on boot by `prestart.sh` via `DB_URL`
+- [x] **Deploy backend to Render** — `render.yaml` Blueprint, Starter instance, `sync:false` secrets set in dashboard
+- [x] **Fit 512MB** — float16 streaming embedding loader + chunked `_cosine_scores` (peak ~108MB instead of ~3× the matrix)
+- [x] **Deploy frontend to Netlify** — `VITE_API_URL` → Render origin, `VITE_SITE_URL` → custom domain
+- [x] **Domain + DNS** — `asktheearlychurch.com` via Cloudflare Registrar; DNS-only CNAMEs to Netlify; Let's Encrypt cert issued
+- [x] **SEO live + submitted** — sitemap (2,997 URLs) submitted to Google Search Console
+- [x] **Post-launch hardening** — `ProxyFix` real-client rate limiting, API HSTS, `gunicorn --threads 8` for free concurrency
+- [x] **Smooth UX** — session response cache + delayed spinner so navigation is instant
+- [x] **Monitoring** — UptimeRobot live on `/api/health`; Sentry error tracking wired in code, ready to enable by setting a valid `SENTRY_DSN`
+
+### Next (post-launch polish)
+
+- [ ] Watch Google Search Console **Pages**/**Performance** as indexing rolls in (days → ~2 weeks)
+- [ ] Add **Redis** (`RATELIMIT_STORAGE_URI`) if/when scaling past one worker — enforces the budget cap and shares rate-limit counters
 
 ### AWS migration (future)
 
