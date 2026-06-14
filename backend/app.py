@@ -138,20 +138,28 @@ def get_db_connection():
 
 
 def _load_embeddings():
-    """Load passage embeddings into RAM as pre-normalized float32 vectors.
+    """Load passage embeddings into RAM as pre-normalized float16 vectors.
 
-    Memory-lean cold start: instead of holding the raw rows, a joined BLOB,
-    and a separate normalized copy all at once (~3x the matrix in RAM, which
-    overflows a 512MB instance), we preallocate one matrix, stream the vectors
-    into it in chunks, and normalize in place. Peak memory stays ~1x the final
-    matrix, so the full corpus fits within a small instance at cold start.
+    Memory-lean cold start. Two things keep the full corpus inside a 512MB
+    instance:
+
+      1. float16 storage halves the matrix (~217MB float32 -> ~108MB). The
+         precision loss is immaterial for top-k cosine ranking.
+      2. Streaming: we preallocate the float16 matrix once and fill it chunk by
+         chunk, normalizing each chunk in float32 before casting down. We never
+         hold the raw rows, a joined BLOB, and a second full copy at the same
+         time (the old path peaked at ~3x the matrix and overflowed RAM).
+
+    Scoring upcasts small row-chunks back to float32 on the fly (see
+    ``_cosine_scores``), so the float16 store is never inflated to a full
+    float32 copy at query time.
     """
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         n = cursor.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0]
         if not n:
-            return [], np.empty((0, 0), dtype=np.float32), {}
+            return [], np.empty((0, 0), dtype=np.float16), {}
 
         # Vector width from the first row (float32 = 4 bytes per component).
         first = cursor.execute(
@@ -159,44 +167,67 @@ def _load_embeddings():
         ).fetchone()
         dim = len(first[0]) // 4
         if dim == 0:
-            return [], np.empty((0, 0), dtype=np.float32), {}
+            return [], np.empty((0, 0), dtype=np.float16), {}
         expected = dim * 4
 
-        # Preallocate once and fill in place — never hold a second full copy.
-        vecs = np.empty((n, dim), dtype=np.float32)
+        # Preallocate the float16 matrix once and fill it in place.
+        vecs = np.empty((n, dim), dtype=np.float16)
         ids = []
         cursor.execute("SELECT passage_id, vector FROM embeddings ORDER BY passage_id")
         i = 0
         while True:
-            chunk = cursor.fetchmany(2000)
+            chunk = cursor.fetchmany(4096)
             if not chunk:
                 break
+            blobs = []
             for pid, blob in chunk:
                 if len(blob) != expected:
-                    # Non-uniform width means a mixed-model corpus; zero the row
-                    # (cosine ~0, effectively excluded) rather than crash.
+                    # Non-uniform width means a mixed-model corpus; substitute a
+                    # zero vector (cosine ~0, effectively excluded) over crashing.
                     log.warning("embeddings: passage %s has unexpected vector "
-                                "width %d (expected %d) — skipping", pid,
+                                "width %d (expected %d) — zeroing", pid,
                                 len(blob), expected)
-                    vecs[i] = 0.0
-                else:
-                    vecs[i] = np.frombuffer(blob, dtype=np.float32)
+                    blob = b"\x00" * expected
+                blobs.append(blob)
                 ids.append(pid)
-                i += 1
+            # Decode + normalize this chunk in float32, then cast down to float16.
+            arr = np.frombuffer(b"".join(blobs), dtype=np.float32).reshape(
+                len(blobs), dim).copy()
+            norms = np.linalg.norm(arr, axis=1, keepdims=True)
+            np.maximum(norms, 1e-10, out=norms)
+            arr /= norms
+            vecs[i:i + len(blobs)] = arr  # float32 -> float16 on assignment
+            i += len(blobs)
 
         # Guard against a COUNT/row mismatch (shouldn't happen on a consistent DB).
         if i != n:
             vecs = vecs[:i]
 
-        # In-place normalization — no extra full-size allocation.
-        norms = np.linalg.norm(vecs, axis=1, keepdims=True)
-        np.maximum(norms, 1e-10, out=norms)
-        vecs /= norms
-
         id_to_idx = {pid: idx for idx, pid in enumerate(ids)}
         return ids, vecs, id_to_idx
     finally:
         conn.close()
+
+
+def _cosine_scores(vecs, query_vec):
+    """Cosine scores of a (possibly float16) matrix against the query vector.
+
+    Both inputs are unit-normalized, so the dot product is the cosine. When the
+    store is float16 we score in float32 row-chunks: a plain ``vecs @ query_vec``
+    would upcast the whole matrix to a full float32 copy (~217MB) per query.
+    """
+    if vecs.shape[0] == 0:
+        return np.empty(0, dtype=np.float32)
+    if vecs.dtype == np.float32:
+        return vecs @ query_vec
+    qf = query_vec.astype(np.float32, copy=False)
+    n = vecs.shape[0]
+    out = np.empty(n, dtype=np.float32)
+    step = 8192
+    for s in range(0, n, step):
+        e = s + step
+        out[s:e] = vecs[s:e].astype(np.float32) @ qf
+    return out
 
 
 def _load_author_passage_index():
@@ -312,11 +343,11 @@ def vector_search(query, limit=100, allowed_ids=None):
         )
         if indices.size == 0:
             return []
-        scores = PASSAGE_VECS[indices] @ query_vec
+        scores = _cosine_scores(PASSAGE_VECS[indices], query_vec)
         top_local = _top_k_indices(scores, limit)
         return [(PASSAGE_IDS[indices[i]], float(scores[i])) for i in top_local]
 
-    scores = PASSAGE_VECS @ query_vec
+    scores = _cosine_scores(PASSAGE_VECS, query_vec)
     top_idx = _top_k_indices(scores, limit)
     return [(PASSAGE_IDS[i], float(scores[i])) for i in top_idx]
 
