@@ -4,9 +4,11 @@
 # Netlify reads this file from the publish dir; Vite copies public/ into dist/.
 #
 # CSP notes:
-#   script-src 'self'        — index.html loads only external scripts (no inline)
+#   script-src 'self' + static.cloudflareinsights.com — app bundle + the
+#     Cloudflare Web Analytics beacon (privacy-first, cookieless page views)
 #   style-src  'unsafe-inline' + fonts.googleapis.com — Vite injects styles; Google Fonts CSS
 #   connect-src *.onrender.com — the API runs on Render (cross-origin fetch).
+#     cloudflareinsights.com — the analytics beacon POSTs its page-view ping there.
 #     Add your custom API domain here if you move off onrender.com.
 /*
   X-Frame-Options: DENY
@@ -15,4 +17,4 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Cross-Origin-Opener-Policy: same-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.onrender.com; form-action 'self'
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.onrender.com https://cloudflareinsights.com; form-action 'self'

@@ -47,9 +47,19 @@ export function clearApiCache() {
   _cache.clear()
 }
 
+// Only cache static reference data (library, authors, works, scripture, topics).
+// Search is deliberately NOT cached: its result can legitimately degrade (a
+// transient Gemini/Voyage hiccup returns fewer/zero results with a 200), and we
+// must never pin a degraded answer for the rest of the session — every search
+// should hit the backend fresh.
+function _isCacheable(path) {
+  return !path.startsWith('/api/search')
+}
+
 /** Lightweight JSON GET with a session cache. Returns parsed JSON or throws ApiError. */
 async function getJson(path, { signal } = {}) {
-  if (_cache.has(path)) return _cache.get(path)
+  const cacheable = _isCacheable(path)
+  if (cacheable && _cache.has(path)) return _cache.get(path)
   const res = await fetch(`${API_BASE}${path}`, { signal })
   let body = null
   try {
@@ -58,7 +68,7 @@ async function getJson(path, { signal } = {}) {
     /* non-JSON response — leave body null */
   }
   if (!res.ok) throw new ApiError(res.status, body)
-  _cache.set(path, body)
+  if (cacheable) _cache.set(path, body)
   return body
 }
 
