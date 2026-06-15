@@ -6,7 +6,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 **Live:** [asktheearlychurch.com](https://asktheearlychurch.com)
 
-**Positioning:** free core, forever — with optional donations and a future paid AI tier to sustain it (ministry-first, not commercial).
+**Positioning:** the website is free and ad-free, supported by donations. A planned mobile app adds accounts and a corpus-trained AI assistant (one free query, then a subscription) plus in-app ads.
 
 > *"Stand firm and hold to the traditions that you were taught by us."* — 2 Thessalonians 2:15
 
@@ -182,7 +182,7 @@ Browser → asktheearlychurch.com
 
 ## Security
 
-The API is a **public read-only** service (no authentication today). A future paid AI tier will add authentication and billing as a deliberate, separate surface (see [Roadmap](#roadmap)); the controls below describe the current read-only API.
+The API is a **public read-only** service (no authentication today). The controls below describe the current state. The planned mobile app (see [Roadmap](#roadmap)) will add an authenticated, user-scoped API — accounts, subscriptions, and the AI assistant — as a deliberate, separate surface alongside this one. The website itself stays read-only and ad-free.
 
 | Control | Detail |
 |---------|--------|
@@ -391,30 +391,32 @@ VITE_SITE_URL=https://your-domain.com npm run build
 - [x] AI synthesis (built; disabled for launch)
 - [x] Docker image in repo (`backend/Dockerfile`, host-agnostic)
 
-### Next milestone — AWS migration + faster, smoother, more professional
+### Next milestone — performance, polish, and the move to AWS
 
-The goal is a faster, cleaner, more professional app. AWS itself does not make the app faster — the real speed wins are app-level — but it removes Render's spin-down/cold-start ceiling and lets us right-size RAM and own the stack.
+**Objective:** make the app feel instant and look professional, then own the stack end-to-end. Performance and infrastructure are distinct tracks: latency is won in the application layer, while AWS removes the platform ceilings (Render's cold-start spin-down and fixed RAM) and gives full control over deploys, monitoring, and scaling.
 
-- [ ] **App-level performance** — reduce cold-start embedding load, tighten search latency, and improve perceived speed (skeletons, prefetch, smarter caching)
-- [ ] **Professional UI/UX polish** — visual and interaction refinement across pages
-- [ ] **AWS migration** — `docker-compose.yml` (nginx + api + redis); move object storage R2 → S3 (point `DB_URL` / `upload_db_to_r2.sh` at an S3 bucket, same API); provision EC2 (**≥ 2 GB RAM**) + EBS volume for `/data/database.db`; cut DNS over; Let's Encrypt TLS; GitHub Actions deploy on push to `main`; CloudWatch logs + disk/memory alarms + synthetic `/api/health`; EBS snapshot backup playbook
-- [ ] **Corpus expansion (optional)** — grow the corpus where it adds value; demand-driven, no open-ended scraping
+- [ ] **Performance** — attack actual and perceived latency: trim the cold-start embedding load, cut search round-trips, and mask the remainder with skeletons, prefetch, and warmer caches. Targets: no visible spin-up on first hit, sub-second warm search.
+- [ ] **UI/UX polish** — a deliberate visual and interaction pass for a cohesive, professional feel across every view.
+- [ ] **AWS migration** — `docker-compose.yml` (nginx + api + redis); R2 → S3 (repoint `DB_URL` / `upload_db_to_r2.sh`, same S3 client); EC2 (**≥ 2 GB RAM**) with an EBS-backed `/data/database.db`; DNS cutover with Let's Encrypt TLS; GitHub Actions deploy on push to `main`; CloudWatch logs, resource alarms, and synthetic `/api/health`; documented EBS-snapshot backups.
+- [ ] **Corpus expansion (optional)** — extend coverage where it adds real value; demand-driven, not open-ended scraping.
 
-### Then — sustain & monetize (free core stays free)
+### Then — sustain & monetize
 
-- [ ] **Donation link** — Ko-fi / Stripe / PayPal; cheap, mission-fit, no UX cost. Do this early
-- [ ] **Feedback signal** — lightweight "was this helpful?" + privacy-respecting query insight, so later decisions are evidence-based
-- [ ] **Re-enable AI synthesis safely** — requires Redis (to actually enforce `MONTHLY_API_BUDGET_USD`) plus a per-user/day synthesis cap so one user can't burn the month. Free preview tier
-- [ ] **Paid synthesis tier** — once demand is validated: user accounts (auth) + Stripe entitlements, introduced as a deliberate, separate write/auth surface on top of the read-only API
+Monetization is split by surface. The **website stays free and ad-free**; the **mobile app** carries accounts, the AI assistant, and revenue.
 
-### Later
+**Website — free, ad-free, donation-supported**
 
-- [ ] **PWA** — installable, offline reading of saved passages (already have `apple-touch-icon.png`); preferred over a native app until a paying audience asks for one
-- [ ] **Ads (only if traffic justifies)** — and even then prefer a single tasteful sponsor over an ad network, to protect speed, privacy, and the clean CSP
-- [ ] **Fine-tuned RAG model** — the corpus + retrieval is the moat, not the model. The right "our own AI" is better RAG and/or a fine-tuned small open model served via a hosted API — not training or self-hosting a base LLM (GPU cost is not worth it at this scale)
-- [ ] **User accounts beyond billing** — cloud-saved bookmarks across devices, only on real demand
+- [ ] **Stripe donations** — a single donation link, the only ask on the web. No ads on the website.
 
-**Free core, forever** — donations and an optional paid AI tier exist to sustain the project, not to gate the library.
+**Mobile app — accounts, AI, and revenue**
+
+- [ ] **Accounts** — sign-up / sign-in with cloud-synced bookmarks and reading history.
+- [ ] **Corpus-trained AI assistant** — an LLM grounded on the patristic corpus that answers with citations back to the sources. Starts from the existing RAG synthesis (Claude) and evolves toward a fine-tuned small open model served via a hosted API as usage justifies it — the corpus plus retrieval is the moat, so self-hosting a base LLM (GPU cost) is not on the table at this scale.
+- [ ] **Freemium subscription** — one free query, then a Stripe subscription for unlimited use; per-user/day caps and a Redis-enforced budget keep AI spend bounded.
+- [ ] **In-app ads** — ads run in the app only, implemented cleanly (lazy-loaded, fixed slots, no layout shift, kept off the reading view).
+- [ ] **Delivery** — ship as a PWA first (installable, offline reading; `apple-touch-icon.png` already ships), then native iOS/Android.
+
+**The website is free and ad-free, forever.** Donations support it; the mobile app's subscription and in-app ads fund the AI assistant. Reading the library is never gated.
 
 ---
 
