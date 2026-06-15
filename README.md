@@ -1,40 +1,31 @@
 # Ask the Early Church
 
-A free web library for reading and searching the early Church Fathers. Search the patristic corpus by topic, author, keyword, or scripture reference; browse by collection (Church Fathers, biblical commentaries, councils, liturgies, apocrypha); and open the commentaries **verse by verse** to see what each Father wrote on a given passage. An AI synthesis feature is built but disabled due to cost.
+A free web library for reading and searching the early Church Fathers. Search the patristic corpus by topic, author, keyword, or scripture reference; browse by collection (Church Fathers, biblical commentaries, councils, liturgies, apocrypha); and open the commentaries **verse by verse** to see what each Father wrote on a given passage.
 
 Built for Christians of every tradition — Protestant, Catholic, Eastern Orthodox, Oriental Orthodox, and Assyrian Church of the East — to read the primary sources and come to their own conclusions.
+
+**Live:** [asktheearlychurch.com](https://asktheearlychurch.com)
+
+**Positioning:** free core, forever — with optional donations and a future paid AI tier to sustain it (ministry-first, not commercial).
 
 > *"Stand firm and hold to the traditions that you were taught by us."* — 2 Thessalonians 2:15
 
 ---
 
-## Project Status
+## Status at a glance
 
-**Local development: fully functional.** Start the Flask backend and Vite frontend, search the corpus, and read full works in the book reader.
-
-**Production: live.** Frontend on **Netlify** (free), backend on **Render** (native Python, `render.yaml` blueprint, Starter instance). Domain: **[asktheearlychurch.com](https://asktheearlychurch.com)** (Cloudflare Registrar + DNS, records DNS-only so Netlify manages TLS). The `database.db` lives in **Cloudflare R2** (S3-compatible object storage) and is fetched on process boot by `prestart.sh` via `DB_URL`.
-
-**After launch:** migrate to **AWS** — the R2/`DB_URL` pattern is already S3-compatible (`prestart.sh` and `upload_db_to_r2.sh` use the boto3 S3 client), so the move is mostly swapping the R2 endpoint for an S3 bucket and running the same `backend/Dockerfile` on EC2/ECS/App Runner. Add **GitHub Actions** CI/CD and **CloudWatch** monitoring when traffic or cost warrants it.
-
-> ✅ **Deployed:** corpus fully embedded (~52,869 `voyage-3` vectors); hybrid semantic + keyword search is live at [asktheearlychurch.com](https://asktheearlychurch.com). Embeddings load into RAM as **float16** via a streaming, in-place loader so the full corpus fits the 512MB Render Starter instance. See [Getting Started](#getting-started).
+Production is live: frontend on **Netlify**, backend on **Render** (native Python), and `database.db` in **Cloudflare R2**, fetched on boot. The corpus is fully embedded (52,869 `voyage-3` vectors), so hybrid semantic + keyword search is on.
 
 | Area | Status |
 |------|--------|
-| Keyword search (FTS5) | ✅ Working |
-| Hybrid search (vector + FTS) | ✅ Working — corpus fully embedded (`voyage-3`) |
-| Search result caching | ✅ In-memory TTL caches (embed, parse, FTS, hybrid), 30-day TTL |
-| Monthly API budget cap | ✅ `$10/mo` default; degrades to keyword-only when spent (needs Redis to enforce) |
-| Graceful API fallback | ✅ Gemini/Groq down → local author detect + raw keywords; Voyage down → FTS-only; DB errors → 503 |
-| Rate limiting | ✅ Per-endpoint limits via flask-limiter, keyed on the real client IP (`ProxyFix`, trusts one proxy hop) so limits are per-visitor, not per-proxy |
-| CORS / security headers | ✅ Configured; `ALLOWED_ORIGIN` required in prod; CSP, `X-Frame-Options`, `nosniff`, HSTS (prod) on API responses |
-| Frontend response cache | ✅ Session cache in `api/client.js` + delayed spinner (`LoadingBlock`) — repeat navigation is instant, fast loads never flash a loader |
-| Lint + CI | ✅ ESLint (flat config) + backend smoke tests gated in GitHub Actions |
-| AI synthesis | ⏸ Built, disabled until API budget allows |
-| SEO (sitemap, topic pages, meta) | ✅ Live on `asktheearlychurch.com`; sitemap (2,997 URLs) submitted to Google Search Console |
-| Editorial / text cleanup | ✅ Full corpus pass applied (one-off scripts since removed) |
-| Docker image (`backend/Dockerfile`) | ✅ In repo — host-agnostic (Render today, AWS later) |
-| Production (Netlify + Render) | ✅ Deployed — live at asktheearlychurch.com |
-| AWS migration | 🚧 Planned (S3 + EC2/ECS) |
+| Hybrid search (vector + FTS5) | Live — corpus fully embedded |
+| Scripture browser (verse-level catena) | Live |
+| Security hardening (rate limits, CSP, CORS, sanitization) | Live |
+| SEO (sitemap, topic pages, meta) | Live — 2,997-URL sitemap in Search Console |
+| AI synthesis | Built, disabled until API budget allows |
+| AWS migration | Planned (next milestone) |
+
+Full detail is in the deep-dive sections below: [How It Works](#how-it-works), [Architecture](#architecture), [Security](#security), [Roadmap](#roadmap).
 
 ### Corpus snapshot (local `database.db`)
 
@@ -44,15 +35,54 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 | Works | 2,858 |
 | Passages | 52,869 |
 | Verse-keyed commentary passages (`scripture_index`) | ~49,800 across 76 books |
-| Church Fathers — `father` + verse-`commentary` authors | 213 (81 + 132) |
+| Church Fathers (`father` + verse-`commentary` authors) | 213 (81 + 132) |
 | Councils · Liturgies · Apocrypha · Misc (authors) | 13 · 3 · 8 · 10 |
-| Embeddings (`voyage-3`) | **52,869 — corpus fully embedded** |
+| Embeddings (`voyage-3`) | 52,869 — fully embedded |
 
-Embeddings are produced offline by `embed_passages.py` (Voyage `voyage-3`) and loaded into RAM at startup. `_load_embeddings()` streams the vectors into a single preallocated **float16** matrix and normalizes each chunk in place, so peak cold-start memory stays ~1× the matrix (~108MB) instead of the ~3× a naive load would use — that's what keeps the full corpus inside the 512MB Render Starter instance. Scoring upcasts small row-chunks back to float32 on the fly (`_cosine_scores`), so the float16 store is never inflated to a full float32 copy per query, and top-k ranking is unaffected by the precision change. The current corpus is fully embedded, so hybrid vector + FTS search is active. If the corpus is ever rebuilt, **re-run `embed_passages.py`** before redeploying; search degrades gracefully to FTS-only whenever embeddings are absent.
+---
 
-Most of the corpus comes from [HistoricalChristianFaith's by-father collection](https://historicalchristian.faith/by_father.php) — the open [Writings-Database](https://github.com/HistoricalChristianFaith/Writings-Database) (~3,100 full-text passages) and [Commentaries-Database](https://github.com/HistoricalChristianFaith/Commentaries-Database) (~53k verse-level commentaries, headers like `John 3:16` / `Romans 8:1-4`) — with additional public-domain translations from [New Advent](https://www.newadvent.org/fathers/) and [CCEL](https://www.ccel.org/). The verse-level headers are what power the scripture browser.
+## Quick Start
 
-Authors whose only contribution is verse commentary (no standalone text) are categorized `commentary` and surfaced through the verse browser rather than the named writings collections.
+Run **both** the backend and frontend. The backend loads passage embeddings into RAM on startup (~10-15s); wait for `Running on http://127.0.0.1:5001` before expecting search or the full catalog.
+
+### Backend
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python database.py          # creates schema (first time)
+python app.py               # dev — http://127.0.0.1:5001
+```
+
+API keys live in the **macOS Keychain** (no plain-text file):
+
+```bash
+cd backend
+bash store_keys_in_keychain.sh   # prompts in Terminal; run it yourself, not via AI
+```
+
+Non-sensitive config (optional) goes in `~/.secrets/ask-the-early-church.env` (copy from `backend/.env.example`) — `ALLOWED_ORIGIN` and cache tuning only, **never API keys**. `ALLOWED_ORIGIN` defaults to `http://localhost:5173`; do **not** set `PRODUCTION=1` locally, and do **not** keep a `backend/.env` in the project folder.
+
+### Frontend
+
+```bash
+npm install
+npm run dev                   # http://localhost:5173
+npm run lint                  # ESLint (same check CI runs)
+npm run build                 # production bundle → dist/
+```
+
+In dev, the app calls `/api/...` on the same origin and **Vite proxies** to Flask on port 5001 (`vite.config.js`), so you don't need `VITE_API_URL` locally. For production builds, set `VITE_API_URL` to your deployed API origin. The home page retries `/api/library` while the backend is starting, then falls back to a shortened static catalog.
+
+To build the corpus from scratch, see [Corpus & maintenance](#corpus--maintenance) and [`tools/corpus/README.md`](tools/corpus/README.md).
+
+---
+
+## Deep dive
+
+Everything below is reference detail for contributors and reviewers.
 
 ---
 
@@ -60,30 +90,28 @@ Authors whose only contribution is verse commentary (no standalone text) are cat
 
 ### Search
 
-1. User types a natural-language query (e.g. "What did Chrysostom teach about the Eucharist?")
-2. **Gemini 2.5 Flash-Lite** parses the query into an optional author filter + topic keywords. The full author roster is sent so detection tolerates misspellings and partial names (Groq Llama 3.3 70B fallback). When the monthly budget is spent — or both LLMs fail — a **free local fallback** detects unambiguous author names and uses the raw query as keywords, so search keeps working.
+1. User types a natural-language query (e.g. "What did Chrysostom teach about the Eucharist?").
+2. **Gemini 2.5 Flash-Lite** parses it into an optional author filter + topic keywords. The full author roster is sent so detection tolerates misspellings and partial names (Groq Llama 3.3 70B fallback). When the budget is spent — or both LLMs fail — a **free local fallback** detects unambiguous author names and uses the raw query as keywords, so search keeps working.
 3. **Hybrid ranking** merges three signals via reciprocal rank fusion (RRF), then diversifies (caps per work/author so one treatise can't flood the page):
-   - **Voyage AI (vector)** — embeds the **full natural-language query** and scores against pre-computed passage vectors loaded into RAM at startup
-   - **FTS5 (BM25)** — keyword match on passage text, using the extracted topic keywords
-   - **Work-title match** — surfaces whole treatises whose title matches the topic
-4. If only an author is named (no topic), the frontend shows that Father's works list instead of passage results
-5. Top 100 passages returned with author, work, section header, and plain-text snippet
+   - **Voyage AI (vector)** — embeds the full natural-language query and scores against pre-computed passage vectors held in RAM.
+   - **FTS5 (BM25)** — keyword match on passage text using the extracted topic keywords.
+   - **Work-title match** — surfaces whole treatises whose title matches the topic.
+4. If only an author is named (no topic), the frontend shows that Father's works list instead of passage results.
+5. Top 100 passages returned with author, work, section header, and plain-text snippet.
 
-Author detection is **LLM-first** (the roster lets it resolve fuzzy/partial names), with the local matcher as a zero-cost fallback. Topic keywords drive the keyword signals while the full query drives the semantic signal — embeddings read intent better from natural phrasing than from a few stripped words.
+Author detection is LLM-first (the roster resolves fuzzy/partial names), with the local matcher as a zero-cost fallback. Topic keywords drive the keyword signals while the full query drives the semantic signal — embeddings read intent better from natural phrasing than from a few stripped words.
 
-**Latency:** the Voyage query embedding depends only on the raw query, not on the parse result, so it is warmed in a worker thread **in parallel** with the Gemini parse (step 2). The two external API round-trips overlap rather than running back-to-back, cutting search latency to roughly the slower of the two; the vector signal in step 3 then reads its vector from the now-warm embed cache.
+**Latency.** The Voyage query embedding depends only on the raw query, not on the parse result, so it is warmed in a worker thread **in parallel** with the Gemini parse (step 2). The two external round-trips overlap rather than running back-to-back, cutting search latency to roughly the slower of the two.
 
-Search queries are capped at **500 characters** to prevent API abuse.
+**Caching.** Queries are capped at **500 characters**. Repeated queries are served from in-memory TTL caches (default 30 days): Voyage embeddings, Gemini/Groq parse results, FTS hits, and fused rankings — so a query repeated within the month makes no API calls. Tune via `SEARCH_CACHE_TTL_SEC` (default `2592000`), `EMBED_CACHE_SIZE` (`10000`), `PARSE_CACHE_SIZE` (`50000`), `HYBRID_CACHE_SIZE` (`20000`), `FTS_CACHE_SIZE` (`20000`).
 
-Repeated queries are served from in-memory TTL caches (**default 30 days**, sized large so the monthly API budget stretches): Voyage query embeddings, Gemini/Groq parse results, FTS hits, and fused hybrid rankings. A query repeated within the month costs **nothing** (no Gemini, no Voyage). Passage vectors are pre-normalized at startup; author passage indexes are preloaded (no per-search DB lookup). Tune via env vars: `SEARCH_CACHE_TTL_SEC` (default `2592000`), `EMBED_CACHE_SIZE` (`10000`), `PARSE_CACHE_SIZE` (`50000`), `HYBRID_CACHE_SIZE` (`20000`), `FTS_CACHE_SIZE` (`20000`).
+**API cost guard.** Spend is tracked against a monthly ceiling (`MONTHLY_API_BUDGET_USD`, default `$10`). When the month's spend crosses it, search degrades to keyword-only (FTS) for the rest of the month and resets on the 1st. The roster parse runs on Gemini 2.5 Flash-Lite (~$0.00015/uncached search) and Voyage embedding is negligible, so with caching the budget covers heavy use. **The cap is only enforced when `RATELIMIT_STORAGE_URI` (Redis) is configured** — without it the spend counter has nowhere to live and fails *open*, leaving caching as the only limit. (This is the authoritative statement of that caveat; other sections point back here.) Confirm it is wired by checking `budget.enabled` on `/api/health`.
 
-**API cost guard.** Spend is tracked against a **monthly** ceiling (`MONTHLY_API_BUDGET_USD`, default `$10`). When the month's spend crosses it, search degrades to keyword-only (FTS) for the rest of the month and resets on the 1st. The roster parse runs on Gemini 2.5 Flash-Lite (~$0.00015/uncached search) and Voyage embedding is negligible, so with caching the budget covers heavy use. **The cap is only enforced when `RATELIMIT_STORAGE_URI` (Redis) is configured** — without it the counter has nowhere to live and fails open, leaving caching as the only limit.
-
-A query that looks like a scripture reference (e.g. `Romans 8` or `Matthew 5:3`) is detected and answered directly from the verse-keyed commentary index — a patristic catena for that verse — with no LLM or embedding call.
+A query that looks like a scripture reference (`Romans 8`, `Matthew 5:3`) is detected and answered directly from the verse-keyed commentary index — a patristic catena for that verse — with no LLM or embedding call.
 
 ### Browse & Scripture
 
-The library is organized by **author category** (`authors.category`: father, liturgy, council, apocrypha, misc) and surfaced as browse tiles with live counts (`/api/categories`). Authors can be listed and filtered by **category, tradition, and era** (`/api/authors?category=&tradition=&era=`).
+The library is organized by **author category** (`authors.category`: father, liturgy, council, apocrypha, misc) and surfaced as browse tiles with live counts (`/api/categories`). Authors can be filtered by **category, tradition, and era** (`/api/authors?category=&tradition=&era=`).
 
 **Biblical commentaries are browsed verse-first.** The `scripture_index` table maps each commentary passage to `(book, chapter, verse_start, verse_end)`, parsed from headers like `John 3:16` or `Romans 8:1-4`. The scripture browser walks **books → chapters → verses → catena**: pick a verse and read every Father's explanation of it, side by side. Single verses match exactly; ranged references match inclusively (verse 2 matches a `Romans 8:1-4` row).
 
@@ -91,7 +119,7 @@ Curated **topic pages** (`/topics`) are pre-built SEO landing pages with real pa
 
 ### AI Synthesis (disabled)
 
-AI synthesis streams a historian-style summary via Claude Sonnet. It is implemented but disabled for launch to control API costs.
+AI synthesis streams a historian-style summary via Claude Sonnet. It is implemented but disabled for launch to control API costs; re-enabling it safely is on the [Roadmap](#roadmap).
 
 ### Book Reader
 
@@ -123,16 +151,12 @@ Browser → asktheearlychurch.com → Netlify (static dist/)
 Flask API  (ask-the-early-church-api.onrender.com)
     │  prestart.sh fetches database.db from Cloudflare R2 (DB_URL) on boot
     ▼
-SQLite on the instance disk + embeddings in RAM (float16)
+SQLite on the instance disk + embeddings in RAM (float16 — see Corpus)
 ```
 
-Domain is registered and DNS-hosted at **Cloudflare** (records DNS-only so Netlify
-manages TLS); the API stays on its `onrender.com` origin (the frontend CSP already
-allows `*.onrender.com`). R2 is S3-compatible, so this same shape runs on AWS by
-pointing `DB_URL` at an S3 bucket (or using the S3 client in
-`prestart.sh`/`upload_db_to_r2.sh` unchanged).
+Domain is registered and DNS-hosted at **Cloudflare** (records DNS-only so Netlify manages TLS); the API stays on its `onrender.com` origin (the frontend CSP already allows `*.onrender.com`). R2 is S3-compatible, so this same shape runs on AWS by pointing `DB_URL` at an S3 bucket (the S3 client in `prestart.sh` / `upload_db_to_r2.sh` is unchanged).
 
-### Target (~2–3 months): AWS EC2
+### Target (next milestone): AWS EC2
 
 ```
 Browser → asktheearlychurch.com
@@ -141,38 +165,38 @@ Browser → asktheearlychurch.com
 │  EC2 + docker-compose                      │
 │    nginx   — static frontend + /api proxy   │
 │    api     — gunicorn + Flask               │
-│    redis   — shared rate-limit counters     │
+│    redis   — shared rate-limit + budget     │
 │  EBS volume — /data/database.db (SQLite)    │
 └─────────────────────────────────────────────┘
     │
     ├── GitHub Actions — build & deploy on push to main
     ├── CloudWatch — logs, CPU/RAM/disk, /api/health alarms
-    └── Secrets — API keys in Keychain (local) / AWS SSM or Secrets Manager (prod)
+    └── Secrets — Keychain (local) / AWS SSM or Secrets Manager (prod)
 ```
 
-**Why this shape:** keep SQLite on a persistent EBS volume (simplest migration from Render), run Redis in Compose (fixes multi-worker rate limits without ElastiCache cost), and serve the frontend from the same box behind nginx (one domain, simpler CORS/CSP). Corpus stays **~630 MB**; embeddings load into RAM at startup — plan for **≥ 8 GB RAM** on the instance.
+**Why this shape:** keep SQLite on a persistent EBS volume (simplest migration from Render), run Redis in Compose (fixes multi-worker rate limits *and* enforces the budget cap without ElastiCache cost), and serve the frontend from the same box behind nginx (one domain, simpler CORS/CSP).
 
-**Budget note:** the project is **free forever** (ministry, not commercial). Current Netlify + Render is the low-cost interim stack. Full AWS EC2 at the recommended size is typically **~$60–80/mo** before transfer; migration timing should match when that fits the budget (or use a smaller instance with reduced gunicorn workers until traffic justifies scaling).
+**Sizing & budget.** The full corpus fits inside Render's 512 MB Starter today thanks to the float16 loader ([Corpus](#corpus--maintenance)), so AWS needs only modest headroom: size for **≥ 2 GB RAM** (the 1 GB free-tier `t2.micro` is too small once embeddings load). A 2 GB instance (e.g. `t4g.small`) runs roughly **$15-25/mo** before transfer; scale up only when traffic justifies it. The project is ministry-first, so migration timing should match the budget.
 
 ---
 
 ## Security
 
-The API is a **public read-only** service (no authentication). Protections in place:
+The API is a **public read-only** service (no authentication today). A future paid AI tier will add authentication and billing as a deliberate, separate surface (see [Roadmap](#roadmap)); the controls below describe the current read-only API.
 
 | Control | Detail |
 |---------|--------|
-| **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages/scripture 30/min. Behind Render, `ProxyFix(x_for=1)` makes limits key on the real client IP (one trusted proxy hop, so `X-Forwarded-For` can't be spoofed) instead of the shared proxy IP |
+| **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages/scripture 30/min. Behind Render, `ProxyFix(x_for=1)` keys limits on the real client IP (one trusted proxy hop, so `X-Forwarded-For` can't be spoofed) instead of the shared proxy IP |
 | **Query length cap** | 500 chars max on search |
 | **CORS** | Locked to `ALLOWED_ORIGIN`; in dev, both `localhost` and `127.0.0.1` variants are allowed |
-| **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; HSTS in production. Set on API responses (Flask `after_request`) **and** on the static frontend (Netlify `public/_headers`). |
+| **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; HSTS in production. Set on API responses (Flask `after_request`) **and** on the static frontend (Netlify `public/_headers`) |
 | **SQL injection** | Every query is parameterized; FTS5 `MATCH` input is tokenized and quoted (`prepare_fts_query`) so punctuation can't alter the query |
 | **HTML / XSS** | Stored corpus HTML is re-parsed and re-emitted through an allowlist sanitizer (`sanitizePassageHtml`) that escapes text nodes and drops every tag/attribute except page-mark spans; CSP `script-src 'self'` blocks inline execution as defense-in-depth |
 | **Path traversal** | Static file serving resolves the absolute path and confirms it stays inside the build dir before serving |
 | **Secret hygiene** | No keys in git (scanned); macOS Keychain locally, platform secret env in prod; all `render.yaml` keys are `sync: false`; `.dockerignore` keeps secrets/DB out of the image; container runs as a non-root user |
 | **Graceful degradation** | Voyage / Gemini / Groq failure never returns 500; falls back to FTS keyword search |
 | **DB safety** | All connections closed in `try/finally`; search DB errors return 503; error handlers return generic JSON without leaking stack traces |
-| **Monitoring** | Optional Sentry error tracking (`SENTRY_DSN`) — errors only, `send_default_pii=False` so client IPs / query text are never sent; disabled when the DSN is unset. Uptime/availability via an external pinger (e.g. UptimeRobot) on `/api/health` |
+| **Monitoring** | Optional Sentry error tracking (`SENTRY_DSN`), errors only, `send_default_pii=False` so client IPs / query text are never sent; disabled when the DSN is unset. Uptime via an external pinger (e.g. UptimeRobot) on `/api/health` |
 
 > **Known advisory (dev-only):** `npm audit` flags `esbuild`/`vite` (GHSA-67mh-4wv8-2f99). It affects only the local Vite **dev server**, not the static production bundle Netlify serves, so it is not exploitable in the hosted app. The fix is a breaking major bump to Vite 8; deferred until a planned dependency upgrade.
 
@@ -184,30 +208,20 @@ The API is a **public read-only** service (no authentication). Protections in pl
 PRODUCTION=1
 ALLOWED_ORIGIN=https://asktheearlychurch.com
 VOYAGE_API_KEY=...        # Voyage AI dashboard
-GEMINI_API_KEY=...        # Google AI Studio (paid Tier 1; billed per use — see MONTHLY_API_BUDGET_USD)
+GEMINI_API_KEY=...        # Google AI Studio (paid Tier 1; billed per use)
 GROQ_API_KEY=...          # Groq console (free tier — fallback parser)
 DB_URL=...                # Cloudflare R2 (or S3) URL to database.db; fetched by prestart.sh on boot
 VOYAGE_MODEL=voyage-3
 MONTHLY_API_BUDGET_USD=10            # monthly spend ceiling; on exhaustion → keyword-only until the 1st
-RATELIMIT_STORAGE_URI=redis://...   # REQUIRED to enforce the budget cap (and to share rate-limit counters)
-SENTRY_DSN=...                       # OPTIONAL error monitoring; unset = disabled (errors only, no PII)
+RATELIMIT_STORAGE_URI=redis://...   # required to enforce the budget cap (see "API cost guard" above)
+SENTRY_DSN=...                       # optional error monitoring; unset = disabled
 
 # render.yaml already wires this up. Equivalent manual run:
 cd backend
 bash prestart.sh && gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT --timeout 60 app:app
 ```
 
-`PRODUCTION=1` makes missing `ALLOWED_ORIGIN` a startup error. Running `-w 1 --threads 8`
-keeps one shared copy of the embedding matrix in RAM and an exact in-memory rate
-limiter, while the threads add concurrency for this I/O-bound workload (each search waits
-on the Gemini/Voyage APIs) without the per-worker N× memory or looseness more workers cost.
-
-**Redis is required to enforce the `MONTHLY_API_BUDGET_USD` cap.** The spend counter lives
-in Redis (`RATELIMIT_STORAGE_URI`); without it `budget_remaining()` fails *open* — search
-still works but the cap does nothing, so spend is bounded only by caching. Confirm it's
-wired by hitting `/api/health` and checking `budget.enabled` is `true`.
-
-Monitor rate-limit 429s and Voyage/Gemini/Groq usage in their dashboards.
+`PRODUCTION=1` makes a missing `ALLOWED_ORIGIN` a startup error. `-w 1 --threads 8` keeps one shared copy of the embedding matrix in RAM while threads add concurrency for this I/O-bound workload (each search waits on the Gemini/Voyage APIs) without the per-worker N× memory more workers cost. Redis is required to enforce `MONTHLY_API_BUDGET_USD` (see [API cost guard](#search)). Monitor rate-limit 429s and Voyage/Gemini/Groq usage in their dashboards.
 
 ---
 
@@ -224,7 +238,7 @@ ask-the-early-church/
 │   ├── telemetry.py            # AI-call logging + monthly spend/budget guard (Redis)
 │   ├── utils.py                # Text cleaning, vector helpers
 │   ├── database.py             # Schema creation + FTS index (fresh DB)
-│   ├── embed_passages.py       # Batch: Voyage voyage-3 embeddings (RUN before launch)
+│   ├── embed_passages.py       # Batch: Voyage voyage-3 embeddings (run before launch)
 │   ├── requirements.txt        # Pinned deps incl. flask-limiter, gunicorn, redis
 │   ├── load_secrets.py         # Keychain (local) + optional non-secret config file
 │   ├── store_keys_in_keychain.sh  # Run yourself — stores API keys in macOS Keychain
@@ -284,9 +298,9 @@ ask-the-early-church/
 | Method | Endpoint | Rate limit | Description |
 |--------|----------|------------|-------------|
 | GET | `/api/search?q=` | 10/min | Hybrid search (also routes scripture refs to a catena). Returns `{ results, author, keywords, author_only, scripture_ref }`. |
-| GET | `/api/health` | 60/min (default) | `{ status, embeddings_loaded, providers{voyage,gemini,groq}, budget{enabled,spent_usd,limit_usd} }` — `providers.*` shows which API keys are loaded; `budget.enabled` shows whether the monthly cap is enforced (Redis) |
+| GET | `/api/health` | 60/min | `{ status, embeddings_loaded, providers{voyage,gemini,groq}, budget{enabled,spent_usd,limit_usd} }` — `providers.*` shows which API keys are loaded; `budget.enabled` shows whether the monthly cap is enforced (Redis) |
 | GET | `/api/library` | 60/min | Full catalog grouped by work section |
-| GET | `/api/categories` | 60/min | The author categories with author/work/passage counts |
+| GET | `/api/categories` | 60/min | Author categories with author/work/passage counts |
 | GET | `/api/authors?category=&tradition=&era=` | 60/min | Authors, optionally filtered; includes `category`, `tradition`, `era`, dates, work count |
 | GET | `/api/authors/:id/works` | 30/min | Works + bio for one author |
 | GET | `/api/works/:id` | 30/min | Full work text (+ `author_id`) |
@@ -303,88 +317,25 @@ Errors: `400` query too long · `404`/`405` JSON · `429` rate limited · `503` 
 
 ---
 
-## Getting Started
+## Corpus & maintenance
 
-Run **both** the backend and frontend. The backend loads passage embeddings into RAM on startup (often 10–15 seconds); wait until you see `Running on http://127.0.0.1:5001` before expecting search or the full library catalog.
+### Sources
 
-### Backend
+Most of the corpus comes from [HistoricalChristianFaith's by-father collection](https://historicalchristian.faith/by_father.php) — the open [Writings-Database](https://github.com/HistoricalChristianFaith/Writings-Database) (~3,100 full-text passages) and [Commentaries-Database](https://github.com/HistoricalChristianFaith/Commentaries-Database) (~53k verse-level commentaries, headers like `John 3:16` / `Romans 8:1-4`) — with additional public-domain translations from [New Advent](https://www.newadvent.org/fathers/) and [CCEL](https://www.ccel.org/). The verse-level headers power the scripture browser. Authors whose only contribution is verse commentary (no standalone text) are categorized `commentary` and surfaced through the verse browser rather than the named writings collections.
 
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python database.py          # creates schema (first time)
-python app.py               # dev — http://127.0.0.1:5001
-```
+### Embeddings and the float16 loader
 
-**API keys — macOS Keychain (recommended, no plain-text file):**
+Embeddings are produced offline by `embed_passages.py` (Voyage `voyage-3`) and loaded into RAM at startup. `_load_embeddings()` streams the vectors into a single preallocated **float16** matrix and normalizes each chunk in place, so peak cold-start memory stays ~1× the matrix (~108 MB) instead of the ~3× a naive load would use — that is what keeps the full corpus inside Render's 512 MB Starter instance. Scoring upcasts small row-chunks back to float32 on the fly (`_cosine_scores`), so the float16 store is never inflated to a full float32 copy per query, and top-k ranking is unaffected by the precision change. Search degrades gracefully to FTS-only whenever embeddings are absent.
 
-```bash
-cd backend
-bash store_keys_in_keychain.sh   # prompts in Terminal; do not run via AI
-# If you previously stored API keys in ~/.secrets/ask-the-early-church.env, delete it:
-# rm -f ~/.secrets/ask-the-early-church.env
-# That file is now for non-sensitive config only (ALLOWED_ORIGIN, cache tuning).
-```
+### Building the database from scratch
 
-**Non-sensitive config (optional):**
+The corpus (~53k passages) is imported from the [HistoricalChristianFaith](https://github.com/HistoricalChristianFaith) GitHub databases, then classified, indexed, and repaired. The exact ordered commands and the **"rebuild derived tables after any edit"** rule live in [`tools/corpus/README.md`](tools/corpus/README.md). In short:
 
-```bash
-mkdir -p ~/.secrets
-cp backend/.env.example ~/.secrets/ask-the-early-church.env
-# Edit only ALLOWED_ORIGIN / cache vars — never put API keys here
-```
+`import_github_writings.py` + `import_github_commentaries.py` → `migrate_schema.py` (adds `category`/`tradition`/`era`, builds `scripture_index`) → `remove_post_chalcedon.py` → repairs (`repair_truncated.py`, `apply_corrections.py`, `reorder_passages.py`, `backfill_commentary_sources.py`) → `fts.py` → `backend/embed_passages.py`.
 
-For local dev, `ALLOWED_ORIGIN=http://localhost:5173` is optional (defaults to that). Do **not** set `PRODUCTION=1` locally. Do **not** keep a `backend/.env` in the project folder.
+### Rebuilding derived tables
 
-Optional cache tuning (defaults are fine for local dev):
-
-```
-SEARCH_CACHE_TTL_SEC=2592000   # 30 days
-EMBED_CACHE_SIZE=10000
-PARSE_CACHE_SIZE=50000
-HYBRID_CACHE_SIZE=20000
-FTS_CACHE_SIZE=20000
-MONTHLY_API_BUDGET_USD=10      # cap only enforced if RATELIMIT_STORAGE_URI (Redis) is set
-```
-
-### Populate the database
-
-The corpus (~53k passages) is imported from the
-[HistoricalChristianFaith](https://github.com/HistoricalChristianFaith) GitHub
-databases, then classified, indexed, and repaired. The exact ordered commands and
-the **"rebuild derived tables after any edit"** rule live in
-[`tools/corpus/README.md`](tools/corpus/README.md). In short:
-
-`import_github_writings.py` + `import_github_commentaries.py` → `migrate_schema.py`
-(adds `category`/`tradition`/`era`, builds `scripture_index`) →
-`remove_post_chalcedon.py` → repairs (`repair_truncated.py`, `apply_corrections.py`,
-`reorder_passages.py`, `backfill_commentary_sources.py`) → `fts.py` →
-`backend/embed_passages.py`.
-
-### Frontend
-
-```bash
-npm install
-npm run dev                   # http://localhost:5173
-npm run lint                  # ESLint (same check CI runs)
-npm run build                 # production bundle → dist/
-```
-
-In development, the app calls `/api/...` on the same origin; **Vite proxies** those requests to Flask on port 5001 (`vite.config.js`), so you do not need `VITE_API_URL` locally.
-
-For production builds, set `VITE_API_URL` to your deployed API origin (e.g. `https://api.example.com`).
-
-The home page **retries** `/api/library` a few times if the backend is still starting, then falls back to a shortened static catalog with a notice.
-
----
-
-## Corpus maintenance
-
-The build/repair pipeline lives in [`tools/corpus/`](tools/corpus/README.md). The
-one rule to remember: there are **no DB triggers**, so after any script edits
-`passages`, the derived tables go stale and must be rebuilt —
+There are **no DB triggers**, so after any script edits the `passages` table, the derived tables go stale and must be rebuilt:
 
 ```bash
 python tools/corpus/fts.py             # full-text index
@@ -400,17 +351,14 @@ The search box alone is not indexable. This repo ships crawlable assets generate
 
 | Asset | Purpose |
 |-------|---------|
-| `public/sitemap.xml` | All `/read/:workId` URLs + topic pages (~2,985 works, 8 topics) |
+| `public/sitemap.xml` | 2,997 URLs — 2,985 `/read/:workId` works + 8 topic pages + static pages |
 | `public/robots.txt` | Points crawlers at the sitemap |
 | `public/seo/topics.json` | Content for `/topics/:slug` landing pages |
 | Per-route `<title>` / meta | Home, read, browse, author, scripture, about, contact, topics |
 
-**Topic pages** (examples):
+**Topic pages** (examples): `/topics/tertullian-trinity`, `/topics/athanasius-incarnation`, `/topics/augustine-grace`, … (see `/topics`).
 
-- `/topics/tertullian-trinity` — “What Did Tertullian Teach on the Trinity?”
-- `/topics/athanasius-incarnation`, `/topics/augustine-grace`, … (see `/topics`)
-
-**Regenerate** after corpus changes or when your domain is known:
+**Regenerate** after corpus changes or when the domain changes:
 
 ```bash
 # Default site URL is https://asktheearlychurch.com — override at deploy:
@@ -420,81 +368,53 @@ SITE_URL=https://your-domain.com npm run generate:seo
 VITE_SITE_URL=https://your-domain.com npm run build
 ```
 
-**After deploy:**
-
-1. Register the site in [Google Search Console](https://search.google.com/search-console)
-2. Submit `https://your-domain.com/sitemap.xml`
-3. Request indexing for `/topics/cyril-incarnation` and other priority URLs
-
-Ranking for competitive queries (e.g. “what did Cyril teach on the incarnation”) takes time and backlinks; topic pages give Google real text from your corpus instead of an empty SPA shell.
+**After deploy:** register the site in [Google Search Console](https://search.google.com/search-console), submit `https://your-domain.com/sitemap.xml`, and request indexing for priority topic URLs. Ranking for competitive queries takes time and backlinks; topic pages give Google real text from the corpus instead of an empty SPA shell.
 
 ---
 
 ## Roadmap
 
-### Done
+### Shipped
 
-- [x] Pre-Chalcedon corpus (~53k passages, 247 authors, 2.9k works) from the HistoricalChristianFaith Writings + Commentaries databases
-- [x] Corpus text repair (upstream-truncated passages) + curated corrections
-- [x] Hybrid search (Voyage embeddings + FTS5 reciprocal rank fusion) with per-work/author result diversification
-- [x] Search hot-path caching + preloaded author/work passage indexes
-- [x] Gemini query parsing with Groq fallback
-- [x] Author-only search → works list
-- [x] Security hardening (rate limits, CSP, CORS, query cap, HTML sanitization, parameterized SQL + FTS-injection guard, path-traversal guard, non-root container, Netlify `_headers`)
-- [x] ESLint (flat config) + `npm run lint`, wired into CI alongside backend smoke tests
-- [x] Book reader, dark mode, saved passages (localStorage)
-- [x] Dev Vite `/api` proxy + library fetch retry
-- [x] AI synthesis (disabled for launch)
-- [x] SEO: sitemap, robots.txt, topic landing pages, dynamic meta tags, SearchAction JSON-LD
-- [x] Author classification migration (`migrate_schema.py`): `category` / `tradition` / `era` + `scripture_index`
-- [x] **Embed the corpus (`embed_passages.py`)** — ~52,869 `voyage-3` vectors; hybrid semantic search live
+- [x] Pre-Chalcedon corpus (~53k passages, 247 authors, 2.9k works) from the HistoricalChristianFaith Writings + Commentaries databases, with text repair + curated corrections
+- [x] Hybrid search (Voyage embeddings + FTS5 reciprocal rank fusion) with per-work/author diversification, hot-path caching, and preloaded author/work indexes
+- [x] Gemini query parsing with Groq + local-detect fallback; author-only search → works list
+- [x] Corpus fully embedded (~52,869 `voyage-3` vectors) — semantic search is on
+- [x] Verse-first scripture browser (books → chapters → verses → catena) + scripture-ref routing in search
 - [x] Browse by category with live counts (`/api/categories`) + author filters (category / tradition / era)
-- [x] Verse-first scripture browser (books → chapters → verses → catena) and scripture-ref routing in search
-- [x] Curated topic landing pages regenerated; reading page restyled (New Advent / Wikipedia layout, neutral high-contrast theme)
+- [x] Book reader, dark mode, saved passages (localStorage)
+- [x] Security hardening (rate limits, CSP, CORS, query cap, HTML sanitization, parameterized SQL + FTS-injection guard, path-traversal guard, non-root container, Netlify `_headers`)
+- [x] ESLint (flat config) + backend smoke tests, gated in GitHub Actions CI
+- [x] SEO: sitemap (2,997 URLs, submitted to Search Console), robots.txt, topic landing pages, dynamic meta, SearchAction JSON-LD
+- [x] **Production launch** — `database.db` in Cloudflare R2 (fetched on boot via `DB_URL`), backend on Render (`render.yaml`, `sync:false` secrets, float16 loader fits 512 MB), frontend on Netlify, `asktheearlychurch.com` via Cloudflare DNS with Let's Encrypt TLS
+- [x] **Post-launch hardening + UX** — `ProxyFix` real-client rate limiting, API HSTS, `gunicorn --threads 8` concurrency, session response cache + delayed spinner, UptimeRobot on `/api/health`, Sentry wired (enable via `SENTRY_DSN`)
+- [x] AI synthesis (built; disabled for launch)
+- [x] Docker image in repo (`backend/Dockerfile`, host-agnostic)
 
-### Launched ✅
+### Next milestone — AWS migration + faster, smoother, more professional
 
-- [x] **Generate embeddings** — corpus fully embedded with Voyage `voyage-3` (~52,869 vectors); semantic search is on
-- [x] **Upload `database.db` to Cloudflare R2** — fetched on boot by `prestart.sh` via `DB_URL`
-- [x] **Deploy backend to Render** — `render.yaml` Blueprint, Starter instance, `sync:false` secrets set in dashboard
-- [x] **Fit 512MB** — float16 streaming embedding loader + chunked `_cosine_scores` (peak ~108MB instead of ~3× the matrix)
-- [x] **Deploy frontend to Netlify** — `VITE_API_URL` → Render origin, `VITE_SITE_URL` → custom domain
-- [x] **Domain + DNS** — `asktheearlychurch.com` via Cloudflare Registrar; DNS-only CNAMEs to Netlify; Let's Encrypt cert issued
-- [x] **SEO live + submitted** — sitemap (2,997 URLs) submitted to Google Search Console
-- [x] **Post-launch hardening** — `ProxyFix` real-client rate limiting, API HSTS, `gunicorn --threads 8` for free concurrency
-- [x] **Smooth UX** — session response cache + delayed spinner so navigation is instant
-- [x] **Monitoring** — UptimeRobot live on `/api/health`; Sentry error tracking wired in code, ready to enable by setting a valid `SENTRY_DSN`
+The goal is a faster, cleaner, more professional app. AWS itself does not make the app faster — the real speed wins are app-level — but it removes Render's spin-down/cold-start ceiling and lets us right-size RAM and own the stack.
 
-### Next (post-launch polish)
+- [ ] **App-level performance** — reduce cold-start embedding load, tighten search latency, and improve perceived speed (skeletons, prefetch, smarter caching)
+- [ ] **Professional UI/UX polish** — visual and interaction refinement across pages
+- [ ] **AWS migration** — `docker-compose.yml` (nginx + api + redis); move object storage R2 → S3 (point `DB_URL` / `upload_db_to_r2.sh` at an S3 bucket, same API); provision EC2 (**≥ 2 GB RAM**) + EBS volume for `/data/database.db`; cut DNS over; Let's Encrypt TLS; GitHub Actions deploy on push to `main`; CloudWatch logs + disk/memory alarms + synthetic `/api/health`; EBS snapshot backup playbook
+- [ ] **Corpus expansion (optional)** — grow the corpus where it adds value; demand-driven, no open-ended scraping
 
-- [ ] Watch Google Search Console **Pages**/**Performance** as indexing rolls in (days → ~2 weeks)
-- [ ] Add **Redis** (`RATELIMIT_STORAGE_URI`) if/when scaling past one worker — enforces the budget cap and shares rate-limit counters
+### Then — sustain & monetize (free core stays free)
 
-### AWS migration (future)
+- [ ] **Donation link** — Ko-fi / Stripe / PayPal; cheap, mission-fit, no UX cost. Do this early
+- [ ] **Feedback signal** — lightweight "was this helpful?" + privacy-respecting query insight, so later decisions are evidence-based
+- [ ] **Re-enable AI synthesis safely** — requires Redis (to actually enforce `MONTHLY_API_BUDGET_USD`) plus a per-user/day synthesis cap so one user can't burn the month. Free preview tier
+- [ ] **Paid synthesis tier** — once demand is validated: user accounts (auth) + Stripe entitlements, introduced as a deliberate, separate write/auth surface on top of the read-only API
 
-Plan is to run on Netlify + Render until traffic or cost warrants moving. The
-`backend/Dockerfile` and the S3-compatible `DB_URL` pattern already make the app
-portable. When ready:
+### Later
 
-- [x] **Docker image in repo** — `backend/Dockerfile` (host-agnostic; runs on Render today)
-- [ ] **Add `docker-compose.yml`** — nginx + api + redis for single-box prod-parity
-- [ ] Move object storage R2 → **AWS S3** (point `DB_URL`/`upload_db_to_r2.sh` at an S3 bucket — same API)
-- [ ] Provision EC2 + EBS + security group (SSH, 80/443 only) — note: the in-RAM embeddings need more than the 1 GB free-tier `t2.micro`; size for ≥ 2 GB RAM or trim vectors
-- [ ] Deploy docker-compose to EC2; keep SQLite on an EBS volume at `/data/database.db`
-- [ ] Cut DNS from Netlify/Render → EC2; TLS via Let's Encrypt
-- [ ] GitHub Actions: build → deploy to EC2 on push to `main`
-- [ ] CloudWatch: log shipping, disk/memory alarms, synthetic `/api/health` checks
-- [ ] EBS snapshot backup playbook for `database.db`
+- [ ] **PWA** — installable, offline reading of saved passages (already have `apple-touch-icon.png`); preferred over a native app until a paying audience asks for one
+- [ ] **Ads (only if traffic justifies)** — and even then prefer a single tasteful sponsor over an ad network, to protect speed, privacy, and the clean CSP
+- [ ] **Fine-tuned RAG model** — the corpus + retrieval is the moat, not the model. The right "our own AI" is better RAG and/or a fine-tuned small open model served via a hosted API — not training or self-hosting a base LLM (GPU cost is not worth it at this scale)
+- [ ] **User accounts beyond billing** — cloud-saved bookmarks across devices, only on real demand
 
-### Future (product)
-
-- [ ] **User accounts** — cloud-saved bookmarks (localStorage-only today)
-- [ ] **Native mobile app** — responsive web is sufficient for now
-- [ ] **Corpus expansion** — only if user demand warrants it; no open-ended scrape expansion by default
-- [ ] **Improve based on feedback** — search quality, UI/UX, performance
-- [ ] **Re-enable AI synthesis** — when API budget allows
-
-**Free forever** — no paid tiers, no ads.
+**Free core, forever** — donations and an optional paid AI tier exist to sustain the project, not to gate the library.
 
 ---
 
