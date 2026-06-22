@@ -6,7 +6,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 **Live:** [asktheearlychurch.com](https://asktheearlychurch.com)
 
-**Positioning:** the website is free and ad-free, supported by donations. A planned mobile app adds accounts and a corpus-trained AI assistant (one free query, then a subscription) plus in-app ads.
+**Positioning:** the website is free to read, supported by donations, Amazon affiliate book links, and display ads. A planned mobile app adds accounts and a corpus-trained AI assistant (one free query, then a subscription) plus in-app ads.
 
 > *"Stand firm and hold to the traditions that you were taught by us."* — 2 Thessalonians 2:15
 
@@ -182,7 +182,7 @@ Browser → asktheearlychurch.com
 
 ## Security
 
-The API is a **public read-only** service (no authentication today). The controls below describe the current state. The planned mobile app (see [Roadmap](#roadmap)) will add an authenticated, user-scoped API — accounts, subscriptions, and the AI assistant — as a deliberate, separate surface alongside this one. The website itself stays read-only and ad-free.
+The API is a **public read-only** service (no authentication today). The controls below describe the current state. Two planned changes (see [Roadmap](#roadmap)) will deliberately touch this posture: the mobile app adds an authenticated, user-scoped API (accounts, subscriptions, the AI assistant) as a separate surface, and website display ads relax the CSP to an explicit `script-src` / `frame-src` allowlist for the ad network. Both are scoped, intentional trade-offs rather than drift.
 
 | Control | Detail |
 |---------|--------|
@@ -402,11 +402,13 @@ VITE_SITE_URL=https://your-domain.com npm run build
 
 ### Then — sustain & monetize
 
-Monetization is split by surface. The **website stays free and ad-free**; the **mobile app** carries accounts, the AI assistant, and revenue.
+Monetization spans both surfaces. The **website stays free to read** — funded by donations, affiliate book links, and tasteful display ads; the **mobile app** carries accounts, the AI assistant, and subscription revenue.
 
-**Website — free, ad-free, donation-supported**
+**Website — free to read; donation-, affiliate-, and ad-supported**
 
-- [ ] **Stripe donations** — a single donation link, the only ask on the web. No ads on the website.
+- [ ] **Stripe donations** — a donation link, the most direct way to support the project.
+- [ ] **Amazon affiliate book links** — curated "further reading" links to print/Kindle editions of the Fathers and solid secondary scholarship via Amazon Associates, shown contextually on author and work pages. The affiliate relationship is disclosed (FTC).
+- [ ] **Display ads** — a revenue stream for the website, implemented to protect speed and the existing CSP: lazy-loaded below the fold, served from a defined `script-src` / `frame-src` allowlist, fixed slots so there is no cumulative layout shift, and kept off the reading and scripture views so study pages stay clean.
 
 **Mobile app — accounts, AI, and revenue**
 
@@ -416,7 +418,7 @@ Monetization is split by surface. The **website stays free and ad-free**; the **
 - [ ] **In-app ads** — ads run in the app only, implemented cleanly (lazy-loaded, fixed slots, no layout shift, kept off the reading view).
 - [ ] **Delivery** — ship as a PWA first (installable, offline reading; `apple-touch-icon.png` already ships), then native iOS/Android.
 
-**The website is free and ad-free, forever.** Donations support it; the mobile app's subscription and in-app ads fund the AI assistant. Reading the library is never gated.
+**The library is always free to read.** Donations, Amazon affiliate book links, and display ads support the website; the mobile app's subscription and in-app ads fund the AI assistant. Reading is never gated.
 
 ---
 
