@@ -6,7 +6,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 **Live:** [asktheearlychurch.com](https://asktheearlychurch.com)
 
-**Positioning:** the website is free to read, supported by donations, Amazon affiliate book links, and display ads. A planned mobile app adds accounts and a corpus-trained AI assistant (one free query, then a subscription) plus in-app ads.
+**Positioning:** reading and searching are always free. The website is supported by donations, Amazon affiliate book links, and display ads. A planned mobile app adds accounts and a corpus-trained AI assistant (one free query, then a subscription) plus in-app ads.
 
 > *"Stand firm and hold to the traditions that you were taught by us."* — 2 Thessalonians 2:15
 
@@ -402,9 +402,9 @@ VITE_SITE_URL=https://your-domain.com npm run build
 
 ### Then — sustain & monetize
 
-Monetization spans both surfaces. The **website stays free to read** — funded by donations, affiliate book links, and tasteful display ads; the **mobile app** carries accounts, the AI assistant, and subscription revenue.
+Monetization spans both surfaces. **Reading and searching stay free** on the website, which is funded by donations, affiliate book links, and tasteful display ads; the **mobile app** carries accounts, the AI assistant, and subscription revenue.
 
-**Website — free to read; donation-, affiliate-, and ad-supported**
+**Website — reading and searching always free; donation-, affiliate-, and ad-supported**
 
 - [ ] **Stripe donations** — a donation link, the most direct way to support the project.
 - [ ] **Amazon affiliate book links** — curated "further reading" links to print/Kindle editions of the Fathers and solid secondary scholarship via Amazon Associates, shown contextually on author and work pages. The affiliate relationship is disclosed (FTC).
@@ -418,7 +418,7 @@ Monetization spans both surfaces. The **website stays free to read** — funded 
 - [ ] **In-app ads** — ads run in the app only, implemented cleanly (lazy-loaded, fixed slots, no layout shift, kept off the reading view).
 - [ ] **Delivery** — ship as a PWA first (installable, offline reading; `apple-touch-icon.png` already ships), then native iOS/Android.
 
-**The library is always free to read.** Donations, Amazon affiliate book links, and display ads support the website; the mobile app's subscription and in-app ads fund the AI assistant. Reading is never gated.
+**Reading and searching the library are always free.** Donations, Amazon affiliate book links, and display ads support the website; the mobile app's subscription and in-app ads fund the AI assistant. The library itself is never gated.
 
 ---
 
