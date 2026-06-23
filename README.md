@@ -277,8 +277,11 @@ ask-the-early-church/
 │   └── ...
 │
 ├── public/
-│   ├── favicon.svg             # App icon — Chi-Rho Christogram on the gold tile
-│   ├── apple-touch-icon.png    # iOS home-screen icon (180px raster of the mark)
+│   ├── favicon.svg             # App icon — Ichthys (fish) on the parchment tile (scalable)
+│   ├── favicon-32.png · favicon-16.png  # PNG favicon fallbacks (non-SVG browsers)
+│   ├── apple-touch-icon.png    # iOS home-screen icon (180px)
+│   ├── icon-192.png · icon-512.png · icon-512-maskable.png  # Android/PWA icons
+│   ├── site.webmanifest        # PWA manifest — Android home-screen + install icons
 │   ├── _headers · _redirects   # Netlify security headers + SPA-routing fallback
 │   ├── robots.txt              # Crawler rules (regenerate with generate:seo)
 │   ├── sitemap.xml             # All work + topic URLs (regenerate with generate:seo)

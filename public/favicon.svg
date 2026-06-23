@@ -1,21 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
-  <defs>
-    <radialGradient id="bg" gradientUnits="userSpaceOnUse" cx="45.6" cy="36" r="138">
-      <stop offset="0%" stop-color="#d2a945"/>
-      <stop offset="55%" stop-color="#ab8226"/>
-      <stop offset="100%" stop-color="#74540f"/>
-    </radialGradient>
-    <clipPath id="tile"><rect width="120" height="120" rx="27"/></clipPath>
-  </defs>
-  <g clip-path="url(#tile)">
-    <rect width="120" height="120" fill="url(#bg)"/>
-    <!-- Bookmark / ribbon with swallowtail foot -->
-    <path d="M41 31 H79 V90 L60 76 L41 90 Z" fill="#fdfcf8" stroke="#fdfcf8" stroke-width="0.5" stroke-linejoin="round"/>
-    <!-- Text lines -->
-    <g stroke="#bd8f2e" stroke-width="5" stroke-linecap="round">
-      <line x1="49" y1="45" x2="71" y2="45"/>
-      <line x1="49" y1="55" x2="71" y2="55"/>
-      <line x1="49" y1="65" x2="65" y2="65"/>
-    </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" rx="229" fill="#fbf7ee"></rect>
+  <rect x="8" y="8" width="1008" height="1008" rx="222" fill="none" stroke="#a87c1f" stroke-width="10"></rect>
+  <g fill="none" stroke="#1a3a6b" stroke-width="46" stroke-linecap="round">
+    <path d="M212 596 C340 420 600 388 812 512"></path>
+    <path d="M212 428 C340 604 600 636 812 512"></path>
   </g>
 </svg>
