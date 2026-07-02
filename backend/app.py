@@ -34,6 +34,7 @@ import sqlite3
 import google.genai as genai
 from groq import Groq
 import os
+import json
 from load_secrets import load_secrets
 import re
 import logging
@@ -68,6 +69,15 @@ from ranking import (
 import time as _time
 
 log = logging.getLogger(__name__)
+
+# Surface application logs (search latency + AI-call telemetry, both emitted at
+# INFO) instead of leaving them below the default WARNING root threshold.
+# basicConfig is a no-op when handlers already exist, so an outer process that
+# already configured logging keeps control. Tune with LOG_LEVEL (e.g. WARNING).
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 
 def scripture_commentary_search(ref, limit=200):
@@ -871,6 +881,19 @@ def search():
             "results": [],
         })
 
+    # Request-level latency instrumentation. Web Analytics can't see the backend,
+    # so emit one structured line per search with a per-phase breakdown. `path`
+    # records which branch answered (scripture fast path vs. hybrid vs. empty),
+    # and the phase timings isolate the paid API round-trips (parse+embed) from
+    # local ranking/DB work so slow searches can be attributed.
+    _t_start = _time.perf_counter()
+    timings = {}
+    search_path = "hybrid"
+    result_count = 0
+
+    def _mark(name, start):
+        timings[name] = round((_time.perf_counter() - start) * 1000, 1)
+
     try:
         # Scripture reference (e.g. "Romans 8", "Matthew 5:3") -> patristic
         # catena: every commentary keyed to that verse/chapter. Deterministic,
@@ -888,6 +911,8 @@ def search():
                     "header": row[5],
                     "tradition": row[6],
                 } for row in rows]
+                search_path = "scripture"
+                result_count = len(results)
                 return jsonify({
                     "query": q,
                     "keywords": "",
@@ -907,10 +932,12 @@ def search():
         # Clients are thread-safe and embed_cache is keyed on the query string.
         # Trade-off: an author-only query (no topic) doesn't need the embed, so
         # this spends one speculative Voyage call in that case (result cached).
+        _t_pe = _time.perf_counter()
         with ThreadPoolExecutor(max_workers=1) as _ex:
             _embed_future = _ex.submit(_embed_query_vector, q)
             parsed = parse_user_query_safe(q, AUTHOR_NAMES)
             _embed_future.result()  # block until the embed cache is warm
+        _mark("parse_embed_ms", _t_pe)
         author = resolve_author_name(parsed.get("author", "none"), AUTHOR_NAMES)
 
         keywords_raw = (parsed.get("keywords") or "").strip()
@@ -921,6 +948,7 @@ def search():
         # Author named but no topic: frontend navigates to that Father's works list
         if author and not keywords:
             author_id = get_author_id_by_name(author)
+            search_path = "author_only"
             return jsonify({
                 "query": q,
                 "keywords": "",
@@ -934,9 +962,12 @@ def search():
         # Keywords drive exact-term (FTS) matching; the full natural query drives
         # semantic (vector) matching — embeddings read intent better from the
         # original phrasing than from a handful of stripped keywords.
+        _t_hybrid = _time.perf_counter()
         passage_ids = hybrid_search(search_text, semantic_text=q, author=author)
+        _mark("hybrid_ms", _t_hybrid)
 
         if not passage_ids:
+            search_path = "empty"
             return jsonify({
                 "query": q,
                 "keywords": keywords,
@@ -946,33 +977,49 @@ def search():
                 "results": [],
             })
 
+        _t_fetch = _time.perf_counter()
         rows = _fetch_search_results(passage_ids, author=author)
+        _mark("fetch_ms", _t_fetch)
+
+        passages = [{
+            "id": row[0],
+            "passage": strip_html(row[1]),
+            "author": row[2],
+            "work": row[3],
+            "work_id": row[4],
+            "header": row[5],
+            "tradition": row[6],
+        } for row in rows]
+
+        rank = {pid: i for i, pid in enumerate(passage_ids)}
+        passages.sort(key=lambda p: rank[p["id"]])
+        result_count = len(passages)
+
+        return jsonify({
+            "query": q,
+            "keywords": keywords,
+            "author": author,
+            "author_id": get_author_id_by_name(author) if author else None,
+            "author_only": False,
+            "scripture_ref": None,
+            "results": passages,
+        })
     except sqlite3.Error as exc:
         log.error("Search DB error: %s", exc)
+        search_path = "error"
         return jsonify({"error": "Search temporarily unavailable"}), 503
-
-    passages = [{
-        "id": row[0],
-        "passage": strip_html(row[1]),
-        "author": row[2],
-        "work": row[3],
-        "work_id": row[4],
-        "header": row[5],
-        "tradition": row[6],
-    } for row in rows]
-
-    rank = {pid: i for i, pid in enumerate(passage_ids)}
-    passages.sort(key=lambda p: rank[p["id"]])
-
-    return jsonify({
-        "query": q,
-        "keywords": keywords,
-        "author": author,
-        "author_id": get_author_id_by_name(author) if author else None,
-        "author_only": False,
-        "scripture_ref": None,
-        "results": passages,
-    })
+    finally:
+        timings["total_ms"] = round((_time.perf_counter() - _t_start) * 1000, 1)
+        try:
+            log.info(json.dumps({
+                "event": "search",
+                "path": search_path,
+                "query_len": len(q),
+                "results": result_count,
+                **timings,
+            }))
+        except Exception:  # logging must never break a response
+            pass
 
 
 @app.route("/api/authors")
