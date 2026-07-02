@@ -8,9 +8,13 @@
 
 html { scroll-behavior: smooth; }
 
+/* Slide-in only (no opacity fade): a fade from opacity:0 hides the largest
+   text/heading from the browser until the animation progresses, which defers
+   Largest Contentful Paint by the full animation duration. Animating transform
+   alone keeps the subtle entrance while letting content paint immediately. */
 @keyframes pageFadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { transform: translateY(10px); }
+  to   { transform: translateY(0); }
 }
 .page-fade { animation: pageFadeIn 0.42s var(--ease-out) both; }
 .view-fade { animation: pageFadeIn 0.32s var(--ease-out) both; }
