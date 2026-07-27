@@ -18,7 +18,7 @@ databases, not scraped from websites.
 | `apply_corrections.py` | Apply manual editorial fixes listed in `corrections.json` |
 | `reorder_passages.py` | Fix passage display order within multi-part works |
 | `backfill_commentary_sources.py` | Attach real per-quote citations to commentary passages |
-| `fts.py` | Rebuild the `passages_fts` full-text index |
+| `fts.py` | Rebuild the `passages_fts` full-text index (`--dry-run`, `--no-backup`; drops and recreates the index, safe to re-run) |
 
 **Shared modules** (imported by the above, not run directly):
 `scrape_utils.py` (HTML parsing/cleanup), `db_path.py` (resolves `backend/database.db`).
