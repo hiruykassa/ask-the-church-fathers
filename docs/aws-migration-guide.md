@@ -1,58 +1,64 @@
-# Moving ask-the-early-church to AWS — a beginner's runbook
+# Moving ask-the-early-church to AWS — how the migration went
 
-This is our shared map. We go one phase at a time, together. Nothing here touches
-your live site until the very last step, so you can stop and breathe at any point.
+This is the record of a migration that is now complete. The app runs entirely on
+AWS; Render, Netlify, and Cloudflare R2 are no longer in the serving path. Kept
+here for the reasoning behind each choice and, more usefully, the problems hit
+along the way — see [gotchas](#gotchas-we-hit-deploying-the-backend-phase-3).
 
-## What we're moving (and to what)
+## What moved (and to what)
 
-Right now your app lives on three services:
+The app previously ran across three services:
 
-| Piece | Today | Moving to on AWS | What the AWS thing is, in plain terms |
-|-------|-------|------------------|----------------------------------------|
+| Piece | Before | Now on AWS | What the AWS thing is, in plain terms |
+|-------|--------|------------|----------------------------------------|
 | React frontend | Netlify | **S3 + CloudFront** | S3 is a folder in the cloud that holds files. CloudFront is a global cache that serves those files fast and over HTTPS. |
 | Flask backend | Render | **App Runner** | You hand AWS your Docker container; it runs it, gives it a web address, HTTPS, and auto-restarts it. No servers to manage. |
-| `database.db` (663 MB) | Cloudflare R2 | **S3** | Same idea as R2 — object storage. Your backend downloads the file on startup (it already does this via `prestart.sh`). |
+| `database.db` (663 MB) | Cloudflare R2 | **S3** | Same idea as R2 — object storage. The backend downloads the file on startup via `prestart.sh`. |
 
-Your API keys (Voyage, Gemini, Groq) stay exactly as they are — they're third-party
-services we just point the new backend at.
+The API keys (Voyage, Gemini, Groq) were unaffected — they're third-party services
+the new backend simply points at.
 
 ## Why App Runner and not the scarier options
 
-You'll hear about EC2, ECS, Fargate, Lambda. For a single Flask container that keeps
-a big embedding matrix in memory, App Runner is the gentlest: it reads your existing
-`Dockerfile`, builds it, runs it, and hands you an `https://…awsapprunner.com` URL.
-No virtual machines, no load balancers, no networking to wire up by hand. We can
-always graduate to ECS later; nothing we do now blocks that.
+The alternatives were EC2, ECS, Fargate, and Lambda. For a single Flask container
+that keeps a big embedding matrix in memory, App Runner was the gentlest: it reads
+the existing `Dockerfile`, builds it, runs it, and hands back an
+`https://…awsapprunner.com` URL. No virtual machines, no load balancers, no
+networking wired up by hand. Graduating to ECS later remains possible; nothing
+here blocks it.
 
-## The order we'll go in
+## The order it went in
 
-We build the new stack *beside* the old one and only switch DNS at the end. If
-anything looks wrong, the live site never noticed.
+The new stack was built *beside* the old one, with DNS switched only at the end,
+so a problem at any earlier phase left the live site untouched.
 
-1. **Account + guardrails** — make sure you have an AWS account, turn on a spending
-   alarm so there are no surprise bills, and create a login that isn't the root
-   account. Install the AWS CLI so we can do steps from your Terminal.
-2. **Database → S3** — create a private S3 bucket, upload `database.db`, and get a
-   URL the backend can fetch on boot.
-3. **Backend → App Runner** — push the Docker image, set the environment variables
-   and secrets, deploy, and confirm `/api/health` returns OK.
-4. **Frontend → S3 + CloudFront** — build the React app pointed at the new backend
-   URL, upload it, and put CloudFront in front.
-5. **Test in parallel** — exercise the whole AWS stack while Render/Netlify stay
+1. **Account + guardrails** — set up the AWS account, turned on a spending alarm to
+   avoid surprise bills, and created a non-root login. Installed the AWS CLI so the
+   later steps could run from the Terminal.
+2. **Database → S3** — created a private S3 bucket, uploaded `database.db`, and got
+   a URL the backend could fetch on boot.
+3. **Backend → App Runner** — pushed the Docker image, set the environment variables
+   and secrets, deployed, and confirmed `/api/health` returned OK. This is the phase
+   that produced all three gotchas below.
+4. **Frontend → S3 + CloudFront** — built the React app pointed at the new backend
+   URL, uploaded it, and put CloudFront in front.
+5. **Test in parallel** — exercised the whole AWS stack while Render/Netlify stayed
    live. Search, browse, the works.
-6. **Cut over** — point your domain at CloudFront + App Runner. Watch it. Once it's
-   proven, turn off Render and Netlify.
+6. **Cut over** — pointed the domain at CloudFront + App Runner, watched it, and
+   once it was proven, shut off the Render and Netlify traffic.
 
-## Rough monthly cost
+## Monthly cost
 
-For a low-traffic app: App Runner ~$25–50, S3 + CloudFront a few dollars, data
-transfer negligible. We'll set a budget alarm in step 1 so you're never surprised.
+For this low-traffic app: App Runner ~$25–50, S3 + CloudFront a few dollars, data
+transfer negligible. A budget alarm was set in phase 1.
 
-## Ground rules we're keeping (from your CLAUDE.md)
+## Ground rules the migration followed (from CLAUDE.md)
 
-- API keys never get printed, pasted into chat, or committed. On AWS they go into
-  App Runner's secret fields (or AWS Secrets Manager) — you type them, not me.
-- You run any command that touches a real credential in your own Terminal.
+- API keys were never printed, pasted into chat, or committed. On AWS they live in
+  SSM Parameter Store and are referenced by ARN, so App Runner injects them at
+  runtime and no key value appears in any config file.
+- Every command touching a real credential was run by the owner in their own
+  Terminal.
 
 ## Gotchas we hit deploying the backend (phase 3)
 
@@ -75,4 +81,6 @@ your port number" message, so they're worth knowing in advance:
 
 ---
 
-*Progress is tracked in the task list. We'll check items off as we finish each phase.*
+*All six phases are complete. For the resulting production architecture, and the
+gaps the migration left open, see the Architecture and Roadmap sections of the
+[README](../README.md).*
