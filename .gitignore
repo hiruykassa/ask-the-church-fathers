@@ -39,10 +39,7 @@ tools/corpus/sources/*.pdf
 backend/audit*
 
 # AWS deploy artifacts (account-specific ARNs, no secret values — but not for a public repo)
-apprunner-service.json
-distribution-config.json
-bucket-policy.json
-response-headers-policy.json
+infra/
 
 # Local-only working material (not part of the shipped app)
 brand/
