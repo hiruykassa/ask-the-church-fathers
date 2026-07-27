@@ -40,6 +40,8 @@ backend/audit*
 
 # AWS deploy artifacts (account-specific ARNs, no secret values — but not for a public repo)
 apprunner-service.json
+distribution-config.json
+bucket-policy.json
 
 # Editor / AI tooling (not part of the app)
 .vscode/
