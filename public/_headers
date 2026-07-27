@@ -3,13 +3,20 @@
 # the Render origin — this file protects the actual HTML page.)
 # Netlify reads this file from the publish dir; Vite copies public/ into dist/.
 #
+# NOTE (post-AWS-migration): production now serves the frontend from S3 + CloudFront,
+# which has no equivalent of this file — CloudFront only applies headers you configure
+# explicitly via a Response Headers Policy (see the live policy
+# "ask-the-early-church-security-headers", attached to distribution EORM180KT9LTZ).
+# This file is only read if the app is ever previewed on Netlify again; it is NOT
+# part of the production request path today. Keep it in sync with the CloudFront
+# policy by hand if either changes — there is no shared source of truth between them.
+#
 # CSP notes:
 #   script-src 'self' + static.cloudflareinsights.com — app bundle + the
 #     Cloudflare Web Analytics beacon (privacy-first, cookieless page views)
 #   style-src  'unsafe-inline' + fonts.googleapis.com — Vite injects styles; Google Fonts CSS
-#   connect-src *.onrender.com — the API runs on Render (cross-origin fetch).
-#     cloudflareinsights.com — the analytics beacon POSTs its page-view ping there.
-#     Add your custom API domain here if you move off onrender.com.
+#   connect-src *.onrender.com — the API ran on Render when this file was written; the
+#     live API is now on *.awsapprunner.com (see the CloudFront policy for the current value).
 /*
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff

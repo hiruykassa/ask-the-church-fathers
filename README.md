@@ -14,16 +14,16 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 ## Status at a glance
 
-Production is live: frontend on **Netlify**, backend on **Render** (native Python), and `database.db` in **Cloudflare R2**, fetched on boot. The corpus is fully embedded (52,869 `voyage-3` vectors), so hybrid semantic + keyword search is on.
+Production is live on **AWS**: frontend on **S3 + CloudFront**, backend on **App Runner** (Docker), and `database.db` in **S3**, fetched on boot. The corpus is fully embedded (52,869 `voyage-3` vectors), so hybrid semantic + keyword search is on. The app previously ran on Netlify + Render + Cloudflare R2; that stack is being retired post-cutover (see [AWS migration](#aws-migration) below).
 
 | Area | Status |
 |------|--------|
 | Hybrid search (vector + FTS5) | Live — corpus fully embedded |
 | Scripture browser (verse-level catena) | Live |
-| Security hardening (rate limits, CSP, CORS, sanitization) | Live |
+| Security hardening (rate limits, CSP, CORS, sanitization) | Live — CSP/security headers now set via a CloudFront Response Headers Policy (previously Netlify `_headers`) |
 | SEO (sitemap, topic pages, meta) | Live — 2,997-URL sitemap in Search Console |
 | AI synthesis | Built, disabled until API budget allows |
-| AWS migration | Planned (next milestone) |
+| AWS migration | **Live** — S3+CloudFront / App Runner / S3, cut over from Render+Netlify+R2 |
 
 Full detail is in the deep-dive sections below: [How It Works](#how-it-works), [Architecture](#architecture), [Security](#security), [Roadmap](#roadmap).
 
@@ -141,42 +141,43 @@ Flask API (localhost:5001)
 SQLite (database.db) + embeddings in RAM
 ```
 
-### Production (live)
+### Production (live) <a name="aws-migration"></a>
 
 ```
-Browser → asktheearlychurch.com → Netlify (static dist/)
+Browser → asktheearlychurch.com (Cloudflare DNS, DNS-only — CloudFront manages TLS)
     │
-    │  VITE_API_URL → Render (native Python, gunicorn -w 1 --threads 8)
     ▼
-Flask API  (ask-the-early-church-api.onrender.com)
-    │  prestart.sh fetches database.db from Cloudflare R2 (DB_URL) on boot
+CloudFront (ACM cert, aliases: asktheearlychurch.com + www)
+    │  Response Headers Policy adds CSP/HSTS/frame-options/etc (see Security)
+    │  Origin Access Control → private S3 bucket (dist/ build output)
+    │  403/404 → /index.html, 200 (client-side routing fallback)
     ▼
-SQLite on the instance disk + embeddings in RAM (float16 — see Corpus)
-```
-
-Domain is registered and DNS-hosted at **Cloudflare** (records DNS-only so Netlify manages TLS); the API stays on its `onrender.com` origin (the frontend CSP already allows `*.onrender.com`). R2 is S3-compatible, so this same shape runs on AWS by pointing `DB_URL` at an S3 bucket (the S3 client in `prestart.sh` / `upload_db_to_r2.sh` is unchanged).
-
-### Target (next milestone): AWS EC2
-
-```
-Browser → asktheearlychurch.com
-    ▼
-┌─────────────────────────────────────────────┐
-│  EC2 + docker-compose                      │
-│    nginx   — static frontend + /api proxy   │
-│    api     — gunicorn + Flask               │
-│    redis   — shared rate-limit + budget     │
-│  EBS volume — /data/database.db (SQLite)    │
-└─────────────────────────────────────────────┘
+S3 (ask-the-early-church-frontend-<account-id>) — static frontend only
     │
-    ├── GitHub Actions — build & deploy on push to main
-    ├── CloudWatch — logs, CPU/RAM/disk, /api/health alarms
-    └── Secrets — Keychain (local) / AWS SSM or Secrets Manager (prod)
+    │  Browser calls VITE_API_URL cross-origin (baked in at build time)
+    ▼
+App Runner (Docker image, ECR, x86_64, 2 vCPU / 4 GB)
+    │  <service>.us-east-2.awsapprunner.com
+    │  prestart.sh fetches database.db from S3 (DB_URL=s3://...) via the
+    │  instance role — no credentials in the URL or environment
+    │  Secrets (Voyage/Gemini/Groq keys) come from SSM Parameter Store,
+    │  referenced by ARN, decrypted via the instance role's kms:Decrypt
+    ▼
+SQLite (downloaded from S3 on boot) + embeddings in RAM (float16 — see Corpus)
 ```
 
-**Why this shape:** keep SQLite on a persistent EBS volume (simplest migration from Render), run Redis in Compose (fixes multi-worker rate limits *and* enforces the budget cap without ElastiCache cost), and serve the frontend from the same box behind nginx (one domain, simpler CORS/CSP).
+Cut over from Render + Netlify + Cloudflare R2 in mid-2026. The old stack is kept temporarily (paused, not yet cancelled) as a rollback path before full decommission.
 
-**Sizing & budget.** The full corpus fits inside Render's 512 MB Starter today thanks to the float16 loader ([Corpus](#corpus--maintenance)), so AWS needs only modest headroom: size for **≥ 2 GB RAM** (the 1 GB free-tier `t2.micro` is too small once embeddings load). A 2 GB instance (e.g. `t4g.small`) runs roughly **$15-25/mo** before transfer; scale up only when traffic justifies it. The project is ministry-first, so migration timing should match the budget.
+**Why App Runner, not EC2/ECS/Fargate:** for a single container that just needs to run and be reachable, App Runner needed no load balancer, no VPC wiring, and no orchestration — push an image, get an HTTPS URL. The EC2 + docker-compose + Redis shape once planned here was superseded; Redis/`RATELIMIT_STORAGE_URI` is **not yet configured** on App Runner (see [Production checklist](#production-checklist)), which is the one gap carried over from that abandoned plan — the budget cap currently fails open (see "API cost guard") until it's added.
+
+**Three real deploy gotchas hit along the way** (full detail in [`docs/aws-migration-guide.md`](docs/aws-migration-guide.md)):
+
+- **App Runner is x86_64-only** — no Graviton/ARM support, in the console or the CLI. An image built on Apple Silicon must be built with `--platform linux/amd64` or the container fails to launch (`exec format error`) with zero logs.
+- **Modern `docker build` attaches a provenance/attestation manifest by default** (BuildKit ≥ 0.11), producing an OCI image index that App Runner can't launch (also breaks Lambda and Cloud Run the same way). Fix: `--provenance=false --sbom=false`.
+- **SSM `SecureString` parameters need `kms:Decrypt` on the instance role**, not just `ssm:GetParameters` — even for the AWS-managed key. Without it, App Runner fails to inject secrets before the container starts, producing zero application logs and a health-check failure that looks like a networking problem but isn't.
+- **S3 + CloudFront has no equivalent of Netlify's `_headers` file.** Security headers (CSP, HSTS, X-Frame-Options, etc.) must be set explicitly via a CloudFront Response Headers Policy or they silently disappear — caught and fixed post-cutover (see Security).
+
+**Sizing & cost.** App Runner at 2 vCPU / 4 GB runs roughly **$25-50/mo**; S3 + CloudFront adds a few dollars. Comparable to the old Render+Netlify cost, with full control over deploys, logs, and scaling.
 
 ---
 
@@ -186,10 +187,10 @@ The API is a **public read-only** service (no authentication today). The control
 
 | Control | Detail |
 |---------|--------|
-| **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages/scripture 30/min. Behind Render, `ProxyFix(x_for=1)` keys limits on the real client IP (one trusted proxy hop, so `X-Forwarded-For` can't be spoofed) instead of the shared proxy IP |
+| **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages/scripture 30/min. Behind App Runner's load balancer, `ProxyFix(x_for=1)` keys limits on the real client IP (one trusted proxy hop, so `X-Forwarded-For` can't be spoofed) instead of the shared proxy IP. In-memory only today — see the Redis gap noted in the [production checklist](#production-checklist) |
 | **Query length cap** | 500 chars max on search |
 | **CORS** | Locked to `ALLOWED_ORIGIN`; in dev, both `localhost` and `127.0.0.1` variants are allowed |
-| **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; HSTS in production. Set on API responses (Flask `after_request`) **and** on the static frontend (Netlify `public/_headers`) |
+| **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`; HSTS in production. Set on API responses (Flask `after_request`) **and** on the static frontend via a **CloudFront Response Headers Policy** (`ask-the-early-church-security-headers`) — the Netlify-era `public/_headers` file is no longer read by anything in production (S3/CloudFront has no equivalent mechanism; this was briefly a gap post-cutover until the CloudFront policy was added) |
 | **SQL injection** | Every query is parameterized; FTS5 `MATCH` input is tokenized and quoted (`prepare_fts_query`) so punctuation can't alter the query |
 | **HTML / XSS** | Stored corpus HTML is re-parsed and re-emitted through an allowlist sanitizer (`sanitizePassageHtml`) that escapes text nodes and drops every tag/attribute except page-mark spans; CSP `script-src 'self'` blocks inline execution as defense-in-depth |
 | **Path traversal** | Static file serving resolves the absolute path and confirms it stays inside the build dir before serving |
@@ -203,25 +204,34 @@ The API is a **public read-only** service (no authentication today). The control
 ### Production checklist
 
 ```bash
-# Set in Render → your service → Environment (the sync:false keys in render.yaml).
-# Never commit these.
-PRODUCTION=1
-ALLOWED_ORIGIN=https://asktheearlychurch.com
-VOYAGE_API_KEY=...        # Voyage AI dashboard
-GEMINI_API_KEY=...        # Google AI Studio (paid Tier 1; billed per use)
-GROQ_API_KEY=...          # Groq console (free tier — fallback parser)
-DB_URL=...                # Cloudflare R2 (or S3) URL to database.db; fetched by prestart.sh on boot
-VOYAGE_MODEL=voyage-3
-MONTHLY_API_BUDGET_USD=10            # monthly spend ceiling; on exhaustion → keyword-only until the 1st
-RATELIMIT_STORAGE_URI=redis://...   # required to enforce the budget cap (see "API cost guard" above)
-SENTRY_DSN=...                       # optional error monitoring; unset = disabled
+# Set on the App Runner service (console: Configuration → Environment variables).
+# Plain vars vs secrets, as actually configured today:
+PRODUCTION=1                                          # plain
+ALLOWED_ORIGIN=https://asktheearlychurch.com           # plain
+DB_URL=s3://ask-the-early-church-db-<account-id>/database.db   # plain — fetched via boto3
+                                                                #   using the instance role,
+                                                                #   not a signed URL
+VOYAGE_MODEL=voyage-3                                  # plain
 
-# render.yaml already wires this up. Equivalent manual run:
+# Secrets — stored in SSM Parameter Store (SecureString), referenced by ARN,
+# never typed into App Runner directly:
+VOYAGE_API_KEY   → /ask-the-early-church/VOYAGE_API_KEY
+GEMINI_API_KEY   → /ask-the-early-church/GEMINI_API_KEY
+GROQ_API_KEY     → /ask-the-early-church/GROQ_API_KEY
+
+# Not yet configured on App Runner (known gap — see Architecture above):
+MONTHLY_API_BUDGET_USD=10           # set, but has no effect without Redis below
+RATELIMIT_STORAGE_URI=redis://...   # NOT SET — budget cap currently fails open
+SENTRY_DSN=...                      # optional; unset = disabled
+
+# Local equivalent run (same Dockerfile, host-agnostic):
 cd backend
 bash prestart.sh && gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT --timeout 60 app:app
 ```
 
-`PRODUCTION=1` makes a missing `ALLOWED_ORIGIN` a startup error. `-w 1 --threads 8` keeps one shared copy of the embedding matrix in RAM while threads add concurrency for this I/O-bound workload (each search waits on the Gemini/Voyage APIs) without the per-worker N× memory more workers cost. Redis is required to enforce `MONTHLY_API_BUDGET_USD` (see [API cost guard](#search)). Monitor rate-limit 429s and Voyage/Gemini/Groq usage in their dashboards.
+`PRODUCTION=1` makes a missing `ALLOWED_ORIGIN` a startup error. `-w 1 --threads 8` keeps one shared copy of the embedding matrix in RAM while threads add concurrency for this I/O-bound workload (each search waits on the Gemini/Voyage APIs) without the per-worker N× memory more workers cost. **Redis is required to enforce `MONTHLY_API_BUDGET_USD`** (see [API cost guard](#search)) and is not yet wired up on App Runner — until it is, spend tracking has nowhere to persist across requests and the cap fails open. Monitor rate-limit 429s and Voyage/Gemini/Groq usage in their dashboards in the meantime.
+
+The instance role backing App Runner (`AppRunnerS3ReadInstanceRole`) holds exactly three scoped permissions: `s3:GetObject` on the one `database.db` key, `ssm:GetParameters` on the three parameters above, and `kms:Decrypt` (scoped via a `kms:ViaService` condition to SSM in `us-east-2`) needed to actually decrypt those `SecureString` values.
 
 ---
 
@@ -230,7 +240,8 @@ bash prestart.sh && gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT --timeout 60 app:
 ```
 ask-the-early-church/
 │
-├── render.yaml                 # Render.com deploy blueprint (env vars, start command)
+├── render.yaml                 # Render.com deploy blueprint — legacy, kept during the
+│                                #   Render→App Runner rollback window; not used in prod
 │
 ├── backend/
 │   ├── app.py                  # Flask API — search, library, security middleware
@@ -242,10 +253,13 @@ ask-the-early-church/
 │   ├── requirements.txt        # Pinned deps incl. flask-limiter, gunicorn, redis
 │   ├── load_secrets.py         # Keychain (local) + optional non-secret config file
 │   ├── store_keys_in_keychain.sh  # Run yourself — stores API keys in macOS Keychain
-│   ├── prestart.sh             # Fetch database.db from R2/S3 (DB_URL) on boot
-│   ├── upload_db_to_r2.sh      # Push a new database.db to Cloudflare R2 (boto3/S3 API)
+│   ├── prestart.sh             # Fetch database.db on boot — s3:// via boto3+instance role
+│                                #   (App Runner, prod today) or https:// via curl (R2, legacy)
+│   ├── upload_db_to_r2.sh      # Push database.db to Cloudflare R2 (boto3/S3 API) — legacy;
+│                                #   the live S3 copy was pushed with a plain `aws s3 cp`
 │   ├── verify_r2.sh            # Run yourself — checks R2 creds/bucket without printing them
-│   ├── Dockerfile              # Host-agnostic image (Render today, AWS later)
+│   ├── Dockerfile              # Host-agnostic image — runs on AWS App Runner today (ECR,
+│                                #   x86_64 — see Architecture for why not ARM)
 │   ├── .dockerignore           # Keeps secrets/DB/backups out of the image
 │   ├── .env.example            # Non-sensitive config template (no API keys)
 │   └── database.db             # NOT committed — hydrated from R2 in prod
@@ -282,12 +296,15 @@ ask-the-early-church/
 │   ├── apple-touch-icon.png    # iOS home-screen icon (180px)
 │   ├── icon-192.png · icon-512.png · icon-512-maskable.png  # Android/PWA icons
 │   ├── site.webmanifest        # PWA manifest — Android home-screen + install icons
-│   ├── _headers · _redirects   # Netlify security headers + SPA-routing fallback
+│   ├── _headers · _redirects   # Netlify security headers + SPA-routing fallback — legacy;
+│                                #   production now sets equivalent headers via a CloudFront
+│                                #   Response Headers Policy, and SPA fallback via CloudFront
+│                                #   custom error responses (403/404 → /index.html)
 │   ├── robots.txt              # Crawler rules (regenerate with generate:seo)
 │   ├── sitemap.xml             # All work + topic URLs (regenerate with generate:seo)
 │   ├── seo/topics.json         # Topic page content from database (+ seo/site.json)
 │   └── theme-init.js           # Theme flash prevention (external script for CSP)
-├── netlify.toml                # Frontend build config for Netlify
+├── netlify.toml                # Frontend build config for Netlify — legacy, rollback-window only
 ├── index.html
 ├── package.json
 ├── eslint.config.js            # ESLint flat config (run via `npm run lint`)
@@ -393,14 +410,16 @@ VITE_SITE_URL=https://your-domain.com npm run build
 - [x] **Post-launch hardening + UX** — `ProxyFix` real-client rate limiting, API HSTS, `gunicorn --threads 8` concurrency, session response cache + delayed spinner, UptimeRobot on `/api/health`, Sentry wired (enable via `SENTRY_DSN`)
 - [x] AI synthesis (built; disabled for launch)
 - [x] Docker image in repo (`backend/Dockerfile`, host-agnostic)
+- [x] **AWS migration** — S3 (private, OAC) + CloudFront (ACM cert, custom domain, SPA routing, Response Headers Policy) for the frontend; App Runner (Docker via ECR, x86_64) for the backend; `database.db` in S3, fetched by `prestart.sh` via the instance role (no credentials in the URL); secrets in SSM Parameter Store, decrypted via a scoped `kms:Decrypt` grant; DNS cut over at Cloudflare. Full runbook and the three gotchas hit along the way (x86_64-only, buildx attestation manifests, SSM `kms:Decrypt`) in [`docs/aws-migration-guide.md`](docs/aws-migration-guide.md). Render/Netlify/R2 kept temporarily as a rollback path before decommission.
 
-### Next milestone — performance, polish, and the move to AWS
+### Next milestone — performance, polish, and closing the AWS gaps
 
-**Objective:** make the app feel instant and look professional, then own the stack end-to-end. Performance and infrastructure are distinct tracks: latency is won in the application layer, while AWS removes the platform ceilings (Render's cold-start spin-down and fixed RAM) and gives full control over deploys, monitoring, and scaling.
+**Objective:** make the app feel instant and look professional, and close the two gaps the AWS migration left open. Performance is won in the application layer; the AWS gaps are ops work (Redis, decommissioning the old stack).
 
+- [ ] **Redis for App Runner** — `RATELIMIT_STORAGE_URI` is not yet configured on App Runner, so `MONTHLY_API_BUDGET_USD` currently fails open (no shared store to track spend across requests). Needs an ElastiCache (or self-hosted) Redis reachable from the App Runner VPC connector.
+- [ ] **Decommission Render/Netlify/R2** — currently paused but not cancelled, kept as a rollback path post-cutover. Cancel once the AWS stack has run cleanly for a few days.
 - [ ] **Performance** — attack actual and perceived latency: trim the cold-start embedding load, cut search round-trips, and mask the remainder with skeletons, prefetch, and warmer caches. Targets: no visible spin-up on first hit, sub-second warm search.
 - [ ] **UI/UX polish** — a deliberate visual and interaction pass for a cohesive, professional feel across every view.
-- [ ] **AWS migration** — `docker-compose.yml` (nginx + api + redis); R2 → S3 (repoint `DB_URL` / `upload_db_to_r2.sh`, same S3 client); EC2 (**≥ 2 GB RAM**) with an EBS-backed `/data/database.db`; DNS cutover with Let's Encrypt TLS; GitHub Actions deploy on push to `main`; CloudWatch logs, resource alarms, and synthetic `/api/health`; documented EBS-snapshot backups.
 - [ ] **Corpus expansion (optional)** — extend coverage where it adds real value; demand-driven, not open-ended scraping.
 
 ### Then — sustain & monetize
