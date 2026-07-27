@@ -44,6 +44,9 @@ distribution-config.json
 bucket-policy.json
 response-headers-policy.json
 
+# Local-only working material (not part of the shipped app)
+brand/
+
 # Editor / AI tooling (not part of the app)
 .vscode/
 .cursor/*
