@@ -42,6 +42,7 @@ backend/audit*
 apprunner-service.json
 distribution-config.json
 bucket-policy.json
+response-headers-policy.json
 
 # Editor / AI tooling (not part of the app)
 .vscode/
