@@ -2,7 +2,9 @@
 
 **Goal:** understand how the code becomes a live website — the build pipeline, the container, the cloud hosts, the boot-time database fetch, the CI gate, and how a JavaScript SPA gets found by Google. This is the "ops" layer: the part that turns a project into a *running product*, and the part most portfolios are missing.
 
-Files: `tools/generate_seo.py`, `public/_redirects`, `public/_headers`, `netlify.toml`, `render.yaml`, `backend/Dockerfile`, `backend/prestart.sh`, `.github/workflows/ci.yml`, `backend/tests/*`, `docs/aws-migration-guide.md`.
+Files: `tools/generate_seo.py`, `backend/Dockerfile`, `backend/prestart.sh`, `.github/workflows/ci.yml`, `backend/tests/*`, `docs/aws-migration-guide.md`.
+
+> **Note on the Netlify/Render files.** `netlify.toml`, `render.yaml`, `public/_redirects` and `public/_headers` are referenced throughout this module but have been **deleted from the tree** — they were removed once the AWS migration completed. They're still worth reading about, because each one's *job* still exists and is now done by CloudFront (§9's mapping table shows what took over). To see the originals, use git: `git show 0a9b06e^:netlify.toml`.
 
 ---
 
@@ -11,42 +13,40 @@ Files: `tools/generate_seo.py`, `public/_redirects`, `public/_headers`, `netlify
 ```mermaid
 flowchart TD
   dev["git push to main"] --> ci["GitHub Actions CI<br/>(lint, build, smoke tests)"]
-  ci --> netlify["Netlify: npm run build -> dist/<br/>serves static frontend"]
-  ci --> render["Render: pip install + prestart.sh + gunicorn<br/>serves Flask API"]
-  browser["Browser"] --> netlify
-  netlify -.->|"static HTML/JS/CSS"| browser
-  browser -->|"VITE_API_URL fetch /api/*"| render
-  render -->|"prestart.sh fetches on boot"| r2[("Cloudflare R2: database.db")]
+  browser["Browser"] --> cf["CloudFront (CDN + HTTPS)"]
+  cf -->|"OAC-signed reads"| s3f[("S3 (private): built frontend")]
+  browser -->|"VITE_API_URL fetch /api/*"| ar["App Runner: Flask container"]
+  ar -->|"prestart.sh fetches on boot"| s3db[("S3: database.db")]
+  ecr[("ECR: Docker image")] --> ar
 ```
 
-Two independent deploys from one repo: the **frontend** (static files) on Netlify, the **backend** (Python) on Render. They're glued by `VITE_API_URL` (frontend knows the API's address) and CORS (API allows the frontend's origin, Module 4).
+Two independent deploys from one repo: the **frontend** (static files on **S3**, served through **CloudFront**) and the **backend** (a Docker container on **App Runner**). They're glued by `VITE_API_URL` (frontend knows the API's address) and CORS (API allows the frontend's origin, Module 4).
 
-> **Update (2026) — migrated to AWS.** The "two deploys from one repo, glued by `VITE_API_URL` + CORS" model is unchanged, but the *hosts* changed: **CloudFront + S3** for the frontend, **App Runner** for the backend, **S3** for the database, **ECR/ACM/SSM/IAM** as supporting services. Sections 2–8 below still teach the fundamentals on the original Netlify/Render stack — the concepts map 1:1. **Section 9** covers the AWS specifics and the migration gotchas. The app code barely changed, which is itself the lesson (see 11.3–11.4).
+> **History.** This app originally ran on **Netlify** (frontend) + **Render** (backend) + **Cloudflare R2** (database), and migrated to AWS in 2026. The deploy *shape* — two deploys from one repo, glued by `VITE_API_URL` + CORS — never changed; only the hosts did. That portability was designed in (see 11.3–11.4), which is the real lesson. The repo still contains the old `netlify.toml` / `render.yaml` as legacy artifacts, and this module points out the current AWS equivalent wherever they appear. **Section 9** is the full AWS deep-dive and migration gotchas.
 
 ## 2. The frontend build — Vite
 
 `npm run build` (`vite build`) compiles the React source into a `dist/` folder of optimized static assets: minified JS bundles, CSS, hashed filenames for cache-busting, and the processed `index.html`. Static files are cheap and fast to serve from a CDN — there's no Node server running in production, just files. Everything in `public/` is copied verbatim into `dist/` (icons, `sitemap.xml`, `robots.txt`, `_headers`, `_redirects`, `theme-init.js`).
 
-`netlify.toml` configures it:
+On AWS, the build is run locally with the real backend URL and the output synced to S3:
 
-```toml
-[build]
-  command = "npm run build"
-  publish = "dist"
-[build.environment]
-  NODE_VERSION = "20"
+```bash
+VITE_API_URL=https://<app-runner-url> npm run build   # produces dist/
+aws s3 sync dist/ s3://ask-the-early-church-frontend-<acct>/ --delete
 ```
 
-`VITE_API_URL` is set in the Netlify dashboard (not committed), so the built bundle points at the real Render API. Recall the fail-fast guard in `api/client.js` (Module 2): build without it and the build errors.
+`VITE_API_URL` is passed at build time (never committed), so the bundle points at the real App Runner API. Recall the fail-fast guard in `api/client.js` (Module 2): build without it and the build errors. (The legacy `netlify.toml` set the same `command = "npm run build"` / `publish = "dist"` and read `VITE_API_URL` from the Netlify dashboard.)
 
-### Two Netlify-only files
+### Two CDN concerns: SPA fallback + page security headers
 
-- **`public/_redirects`** — the **SPA fallback**: `/* /index.html 200`. Every unknown path serves the React app so client-side routing works on a hard refresh of `/read/123`. This is the CDN-level equivalent of the Flask `index.html` fallback (Module 7). Without it, deep links 404.
-- **`public/_headers`** — **security headers for the HTML page itself**. The Flask `after_request` headers (Module 4) only cover API responses on the Render origin; this file protects the actual page served by Netlify. Its CSP is slightly looser than the API's because the page legitimately needs to: load the app bundle (`script-src 'self'` + the Cloudflare analytics beacon), inject Vite styles + Google Fonts (`style-src 'unsafe-inline' ...`), and **fetch the cross-origin API** (`connect-src 'self' https://*.onrender.com`). Note the comment: add your custom API domain here if you move off `onrender.com`. The same defense-in-depth posture, applied at the right layer. **(AWS:** CloudFront does *not* read `_headers` — that's a Netlify feature. On AWS these exact headers were recreated as a CloudFront **Response Headers Policy**, with `connect-src` repointed to `https://*.awsapprunner.com`. See Section 9 — this was gotcha #4.)
+Both were handled by files in `public/` on Netlify, and by CloudFront config on AWS:
+
+- **SPA fallback** — `public/_redirects` (`/* /index.html 200`) makes every unknown path serve the React app so client-side routing survives a hard refresh of `/read/123` (the CDN-level twin of the Flask `index.html` fallback, Module 7). On AWS this is a CloudFront **custom error response**: 403/404 → `/index.html` with a 200.
+- **Page security headers** — `public/_headers` sets **security headers for the HTML page itself**. The Flask `after_request` headers (Module 4) only cover API responses; this protects the actual page. Its CSP is slightly looser than the API's because the page legitimately needs to load the app bundle (`script-src 'self'` + the Cloudflare analytics beacon), inject Vite styles + Google Fonts (`style-src 'unsafe-inline' ...`), and **fetch the cross-origin API** (`connect-src`). CloudFront does *not* read `_headers` — that's a Netlify feature — so on AWS these exact headers were recreated as a CloudFront **Response Headers Policy**, with `connect-src` pointed at `https://*.awsapprunner.com` (see Section 9, gotcha #4).
 
 ## 3. The backend container — `Dockerfile`
 
-Even though Render runs native Python today, the repo ships a `Dockerfile` for the planned AWS move and for prod-parity testing. It's a textbook production Python image:
+The backend runs on App Runner as this exact `Dockerfile` image (the legacy Render deploy ran native Python; the container was built for the AWS move and for prod-parity testing). It's a textbook production Python image:
 
 ```dockerfile
 FROM python:3.13-slim                       # small base image
@@ -90,9 +90,9 @@ Small script, lots of good instincts:
 - **Retries** — `curl --retry 3` handles transient network blips on boot.
 - **Validation** — checks the SQLite magic header (`SQLite format 3`) and deletes the file if it's not a real database, so the app never boots on a truncated/HTML-error-page download. Validate what you download before trusting it.
 
-The portability payoff (noted in the comments): `DB_URL` points at Cloudflare R2 today; R2 is S3-compatible, so the AWS move just repoints it at an S3 bucket — `prestart.sh` doesn't change. That's the whole reason the README can say "this same shape runs on AWS."
+The portability payoff (noted in the comments): `DB_URL` now points at an **S3 bucket** (`s3://…/database.db`); it used to point at Cloudflare R2. Because R2 is S3-compatible and `prestart.sh` branches on `s3://` vs `https://`, the migration was a one-line env-var change — the script itself didn't change. That's the whole reason the same image "just runs" on AWS.
 
-`render.yaml` (Module 1/4) wires it as the start command: `bash prestart.sh && gunicorn -w 1 --threads 8 ...`, with `healthCheckPath: /api/health` and all secrets as `sync: false`.
+The `Dockerfile` `CMD` (Module 1/4) wires it as the start command — `./prestart.sh && gunicorn -w 1 ... app:app` — and App Runner is configured with health-check path `/api/health` and its secrets injected from SSM. (The legacy `render.yaml` did the equivalent with `healthCheckPath: /api/health` and `sync: false` env vars.)
 
 ## 5. Continuous Integration — `.github/workflows/ci.yml`
 
@@ -104,7 +104,7 @@ CI runs on every push to `main` and every pull request, gating bad code before i
 - run: npm run lint    # ESLint — same check you run locally
 - run: npm run build   # verify the production build compiles (with a placeholder VITE_API_URL)
 ```
-This catches lint errors and build breaks (a bad import, a syntax error) before they reach Netlify. `npm ci` (not `npm install`) installs exactly what's in the lockfile — reproducible CI.
+This catches lint errors and build breaks (a bad import, a syntax error) before they ship. `npm ci` (not `npm install`) installs exactly what's in the lockfile — reproducible CI.
 
 **`backend` job** (`:9`):
 ```yaml
@@ -146,19 +146,22 @@ They use Flask's **`test_client()`** (`:24`) — an in-process fake HTTP client,
 
 A single-page app is mostly an empty HTML shell that JavaScript fills in. Search-engine crawlers see that near-empty shell and have little to index — the search box itself isn't crawlable. So this script generates **crawlable assets from `database.db`** (no API keys needed — it reads the DB directly):
 
-- **`public/sitemap.xml`** — ~2,997 URLs (every `/read/:workId` work, topic pages, static pages) so Google can discover all the content.
+- **`public/sitemap.xml`** — ~2,870 URLs (every `/read/:workId` work, topic pages, static pages) so Google can discover all the content.
 - **`public/seo/topics.json`** — content for the `/topics/:slug` landing pages: real passage excerpts per father/subject (the `TOPICS` list at `:40`). These pages give Google *actual patristic text* to index instead of an empty shell — that's what can rank for "what did Augustine teach about grace."
 - **`public/seo/site.json`** — site metadata for JSON-LD structured data (`SeoJsonLd.jsx` injects a `SearchAction` so Google can show a search box for the site).
 
 Combined with the per-route `usePageMeta` (Module 8) that sets `<title>`/description/canonical/Open Graph tags per page, this is a complete "SPA SEO" story. Regenerate after corpus changes: `SITE_URL=... npm run generate:seo`. The `theme-init.js` in `public/` is a tiny external script (external so it complies with the strict CSP) that applies the saved theme *before* the page paints, preventing a flash — a perf/polish detail.
 
-## 8. The full path from commit to live
+## 8. The full path from commit to live (on AWS)
 
-1. `git push origin main`
-2. **CI** lints, builds the frontend, runs backend smoke tests (gate).
-3. **Netlify** runs `npm run build`, publishes `dist/` to its CDN.
-4. **Render** runs `pip install`, then `prestart.sh` (fetch DB from R2), then boots gunicorn; pings `/api/health` to confirm.
-5. Browser loads the static frontend from Netlify; the frontend calls the Render API; the API serves from the in-RAM embeddings + SQLite.
+Unlike the old Netlify/Render setup (which auto-deployed on `git push`), the AWS deploy is a deliberate manual push — two independent tracks:
+
+1. `git push origin main` → **CI** lints, builds the frontend, runs backend smoke tests (the gate; it does not deploy).
+2. **Backend:** `docker build --platform linux/amd64 --provenance=false --sbom=false` → tag → `docker push` to **ECR** → `aws apprunner update-service` (or a console deploy) pulls the new image. App Runner runs `prestart.sh` (fetch DB from S3) then boots gunicorn, and gates the deploy on `/api/health`.
+3. **Frontend:** `VITE_API_URL=… npm run build` → `aws s3 sync dist/ s3://…frontend… --delete` → `aws cloudfront create-invalidation` so the CDN serves the new files.
+4. Browser loads the static frontend from **CloudFront** (over HTTPS via ACM); the frontend calls the **App Runner** API; the API serves from the in-RAM embeddings + SQLite.
+
+The `--platform`/`--provenance` flags in step 2 aren't optional decoration — they're the fixes for gotchas #2 and #3 in Section 9.
 
 ## 9. The AWS migration — same shapes, managed services
 
@@ -211,7 +214,7 @@ All four surfaced as the same misleading `CREATE_FAILED` / "health check failed 
 - **CloudFront**: distribution `EORM180KT9LTZ` (aliases `asktheearlychurch.com` + `www`).
 - **ACM** (us-east-1), **IAM** roles `AppRunnerECRAccessRole` / `AppRunnerS3ReadInstanceRole`, **SSM** params under `/ask-the-early-church/*`.
 
-> **Cutover status:** the AWS stack is fully built and verified in parallel; the final step is the DNS switch in Cloudflare (apex + `www` → the CloudFront domain), after which Render/Netlify are decommissioned.
+> **Cutover status: complete.** The DNS switch in Cloudflare (apex + `www` → the CloudFront domain) has been made, `asktheearlychurch.com` is served by CloudFront, and Render/Netlify are decommissioned — their config files have since been deleted from the repo. Treat this whole section as a record of how the live stack was built, not as work still to do.
 
 ## 10. Check yourself
 

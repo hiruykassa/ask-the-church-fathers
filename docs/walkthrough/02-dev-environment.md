@@ -117,7 +117,7 @@ export const API_BASE = fromEnv || ''
 Read this carefully — it encodes the dev-vs-prod difference in one place:
 
 - **In dev** (`import.meta.env.DEV` is true), `VITE_API_URL` is usually unset, so `API_BASE` is the empty string `''`. A fetch to `` `${API_BASE}/api/search` `` becomes `/api/search` — a relative path the Vite proxy handles.
-- **In production**, there is no Vite proxy (the frontend is static files on Netlify, the API is on Render — genuinely different domains). So `VITE_API_URL` *must* be set at build time, and `API_BASE` becomes e.g. `https://...onrender.com`. The fetch becomes an absolute cross-origin URL (and now CORS on the backend matters — Module 4).
+- **In production**, there is no Vite proxy (the frontend is static files on S3 served through CloudFront, the API is a container on AWS App Runner — genuinely different domains). So `VITE_API_URL` *must* be set at build time, and `API_BASE` becomes the App Runner URL e.g. `https://...awsapprunner.com`. The fetch becomes an absolute cross-origin URL (and now CORS on the backend matters — Module 4).
 - The `if (!import.meta.env.DEV && !fromEnv) throw` is a **fail-fast** guard: if someone builds for production without setting the API URL, the build errors instead of silently shipping a broken app that points at `localhost`. This "fail loud at build time, not silently at runtime" instinct is a hallmark of production-minded code.
 
 `import.meta.env` is Vite's way of injecting environment variables at build time. Only variables prefixed `VITE_` are exposed to the browser (so you can't accidentally leak a secret env var into client code).
@@ -128,7 +128,7 @@ API keys (Voyage, Gemini, Groq) are money and access. The repo's hard rule: **ke
 
 - **Local dev:** macOS **Keychain** (the OS credential store).
 - **Non-secret config:** `~/.secrets/ask-the-early-church.env` (things like `ALLOWED_ORIGIN`, cache sizes — *no keys*).
-- **Production:** the platform's secret store (Render dashboard env vars, all marked `sync: false` in `render.yaml` so they're never committed).
+- **Production:** AWS **SSM Parameter Store** (`SecureString` parameters). App Runner reads them via the instance role and injects them as environment variables at container start — the values live only in AWS, never in the repo.
 
 ### How loading works — `backend/load_secrets.py`
 
@@ -154,7 +154,7 @@ for env_name, account in _KEYCHAIN_ACCOUNTS.items():
         os.environ[env_name] = value
 ```
 
-The `_keychain_get` helper (`:34`) runs `security find-generic-password -s ask-the-early-church -a <account> -w` and captures stdout. The `if os.getenv(env_name): continue` line is the key to portability: **in production there is no Keychain**, but the keys are already in the environment (set by Render), so this step does nothing and the existing values win.
+The `_keychain_get` helper (`:34`) runs `security find-generic-password -s ask-the-early-church -a <account> -w` and captures stdout. The `if os.getenv(env_name): continue` line is the key to portability: **in production there is no Keychain**, but the keys are already in the environment (injected by App Runner from SSM Parameter Store), so this step does nothing and the existing values win.
 
 2. **`load_dotenv(path, override=False)`** (`:69`) — load the non-secret config file *if it exists*, with `override=False` so it can **never** overwrite a key already set (Keychain/platform wins). This is why that file is documented as "non-secret only."
 

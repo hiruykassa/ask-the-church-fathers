@@ -70,8 +70,7 @@ Key takeaways:
 ```
 ask-the-early-church/
 ├── README.md              # The project's own deep-dive docs (excellent — read it)
-├── render.yaml            # Deploy blueprint for the backend (Render.com)
-├── netlify.toml           # Deploy config for the frontend (Netlify)
+├── Dockerfile / prestart.sh # (in backend/) Container image + boot-time DB fetch — the live AWS deploy
 ├── package.json           # Frontend dependencies + npm scripts
 ├── vite.config.js         # Frontend build tool config (incl. the /api dev proxy)
 │
@@ -88,7 +87,7 @@ ask-the-early-church/
 │   ├── embed_passages.py  # OFFLINE: generate Voyage vectors for the corpus
 │   ├── requirements.txt   # Python dependencies
 │   ├── Dockerfile         # Container image for the backend
-│   ├── prestart.sh        # Fetches database.db from cloud storage on boot
+│   ├── prestart.sh        # Fetches database.db from S3 (or HTTPS) on boot
 │   └── tests/             # pytest smoke + parsing tests
 │
 ├── tools/                 # OFFLINE corpus pipeline (run by hand, never imported by the server)
@@ -124,6 +123,8 @@ The migration off Netlify/Render/R2 onto AWS is covered end-to-end in **Module 1
 - **The backend start command** lives in the container's `Dockerfile` `CMD` (`backend/Dockerfile`): `./prestart.sh && gunicorn -w 1 -b 0.0.0.0:${PORT:-5001} --timeout 60 app:app`. Note `-w 1`: **one** worker process, so the big embedding matrix lives in RAM exactly once (it fits the instance's memory). App Runner injects `PORT`. (The older `render.yaml:21` used `-w 1 --threads 8` for the same reason — one worker for memory, threads for I/O-bound concurrency while requests wait on the Gemini/Voyage calls.)
 - **The frontend build** is `npm run build` → `dist/` (`netlify.toml:2` on the old stack; on AWS the same `dist/` is synced to the S3 bucket).
 
+(`render.yaml` and `netlify.toml` were deleted from the repo once the migration finished — where this guide cites them, it's describing the old stack for contrast. They're recoverable from git history.)
+
 The "one worker" decision is a great interview talking point: it trades horizontal scaling for memory efficiency, which is correct *for this specific workload* (read-only shared data + I/O-bound requests).
 
 ## 6. The skills map — what each part teaches you
@@ -142,7 +143,7 @@ This project is a deliberately complete slice of modern fullstack-plus-AI engine
 | `src/` React app | Component architecture, hooks, client-side state, routing |
 | `passageText.js` | Safely rendering untrusted HTML (XSS) |
 | `tools/corpus/*` | **ETL / data pipelines** that feed an AI system |
-| `render.yaml`, `Dockerfile`, `netlify.toml`, `ci.yml` | Containerization, cloud deploy, CI/CD |
+| `backend/Dockerfile`, `prestart.sh`, `ci.yml` (+ AWS: App Runner, S3, CloudFront) | Containerization, cloud deploy, CI/CD |
 | `tools/generate_seo.py`, sitemap | Making a JavaScript SPA discoverable by search engines |
 
 ## 7. Check yourself

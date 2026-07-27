@@ -13,11 +13,19 @@ SQLite is a database that lives in a **single file** (`database.db`) — no serv
 
 That's exactly this workload. Using Postgres would add an entire server to operate for zero benefit. Being able to *justify* "SQLite because the corpus is read-only and single-node" is a senior-level instinct — most people reach for a heavyweight DB by reflex.
 
-The whole DB is created/served in `backend/`, and in production the file is fetched from cloud storage (Cloudflare R2) on boot rather than committed to git (it's large and not source code).
+The whole DB is created/served in `backend/`, and in production the file is fetched from cloud object storage (AWS S3; Cloudflare R2 previously) on boot by `prestart.sh` rather than committed to git (it's large and not source code).
 
 ## 2. The core schema — `backend/database.py`
 
-Three tables, in a simple hierarchy: an **author** writes **works**, and a work is split into **passages**.
+Three tables carry the content, in a simple hierarchy: an **author** writes **works**, and a work is split into **passages**. `database.py` also creates four supporting tables — `scripture_index` (section 4), `passages_fts` (section 3), and the two batch-job tables `embeddings` and `editorial_cleaned` — so that a freshly created database is one the server can actually boot against.
+
+That last point is worth understanding, because it was broken until recently. `app.py` counts rows in `embeddings` at *import* time (`_load_embeddings`, Module 5), so a database without that table doesn't merely return errors from an endpoint — the process won't start:
+
+```
+sqlite3.OperationalError: no such table: embeddings
+```
+
+The rule this illustrates is general: **the setup script's output has to satisfy everything the app touches on startup**, not just the tables you think of as "yours." Schema scripts drift out of sync with the app when new tables arrive through migrations and nobody backports them to the first-run path.
 
 ```mermaid
 erDiagram
@@ -30,8 +38,8 @@ erDiagram
     int died
     text tradition
     text bio
-    text category "added by migration"
-    text era "added by migration"
+    text category "father/commentary/council/..."
+    text era "classification bucket"
   }
   works {
     int id PK
@@ -50,7 +58,7 @@ erDiagram
   }
 ```
 
-The definitions (`database.py:27-60`):
+The definitions (`database.py:36-79`):
 
 ```python
 CREATE TABLE IF NOT EXISTS passages (
@@ -71,13 +79,15 @@ Things to notice:
 - **`header`** is the most important column for this app's identity. For a commentary passage it holds a scripture reference like `"Romans 8:1-4"`. That single text field is what powers the entire verse-by-verse scripture browser — by being parsed into a structured index (section 4).
 - **`text` is often HTML.** The corpus was scraped from sites like CCEL and New Advent, so passages carry markup. This matters twice later: full-text search must strip the HTML so you don't match on tag names, and the frontend must sanitize the HTML before rendering it (Module 9).
 
-`CREATE TABLE IF NOT EXISTS` makes the script safe to re-run — it won't error if the tables already exist.
+- **`category` and `era`** arrived later, added to existing databases by `migrate_schema.py` as `ALTER TABLE`s. `database.py` now declares them in the `authors` DDL *and* re-adds them via `ALTER TABLE` when they're absent (`database.py:64-68`), so it both creates a correct fresh DB and repairs an old one. `/api/authors` selects `authors.category` and `authors.era` directly, which is why their absence was fatal rather than cosmetic.
+
+`CREATE TABLE IF NOT EXISTS` makes the script safe to re-run — it won't error if the tables already exist. The one statement that is *not* idempotent is the FTS rebuild at the end (section 3), which drops and recreates the index unconditionally.
 
 ## 3. Full-text search with FTS5 — the clever part
 
 A normal `WHERE text LIKE '%grace%'` scan over 53k rows is slow and dumb (it can't rank, can't handle word stems, scans every row). SQLite ships **FTS5**, a full-text search engine built in. The app creates a *virtual table* that indexes the passage text for fast keyword search with relevance ranking (BM25).
 
-`database.py:63-77`:
+`database.py:122-136`:
 
 ```python
 cursor.execute("DROP TABLE IF EXISTS passages_fts")
@@ -103,7 +113,9 @@ Decode this:
 - **`content_rowid=id`** is the link back. Each FTS row's `rowid` is set to the matching `passages.id`. So when FTS says "rows 12, 88, 415 match `eucharist`," the app joins those rowids straight back to `passages.id` to fetch the real content. This is why `passages.id` being the `rowid` (section 2) matters.
 - The `INSERT ... SELECT` populates the index by joining all three tables, so author name and work title are searchable alongside the passage text.
 
-**The HTML wrinkle.** `database.py` indexes `p.text` *raw* (including HTML). The maintenance rebuilder `tools/corpus/fts.py` does it better — it strips HTML first (`fts.py:31`: `strip_html(text)`), so search matches words, not `<span>` tags. The docstring in `database.py:12` calls this out: after corpus edits, prefer `tools/corpus/fts.py`. Knowing *why* the two differ (raw vs. stripped) is the kind of detail that shows you actually read the code.
+**The HTML wrinkle.** `database.py` indexes `p.text` *raw* (including HTML). The maintenance rebuilder `tools/corpus/fts.py` does it better — it strips HTML first (`fts.py:54`: `strip_html(text)`), so search matches words, not `<span>` tags. The docstring in `database.py:21-23` calls this out: after corpus edits, prefer `tools/corpus/fts.py`. Knowing *why* the two differ (raw vs. stripped) is the kind of detail that shows you actually read the code.
+
+Note the asymmetry in blast radius: `database.py` **drops and recreates** `passages_fts` every run, so re-running it on a populated database silently replaces a properly stripped index with a worse raw-HTML one. That's why the schema script is a first-run/repair tool and `fts.py` is the maintenance tool — see Module 13 §3.
 
 ### How a search query uses it (preview)
 

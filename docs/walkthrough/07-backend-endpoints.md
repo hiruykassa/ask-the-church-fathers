@@ -128,7 +128,7 @@ The N+1-ish `(SELECT COUNT(*) FROM passages WHERE work_id = ...)` correlated sub
 
 ## 7. Serving the frontend + path-traversal guard (`:1429`)
 
-Optionally, Flask can serve the built React app itself (used when frontend and backend live on one box; in the Netlify+Render split it's off). The interesting part is the security guard (`:1442`):
+Optionally, Flask can serve the built React app itself (used when frontend and backend live on one box; in the split deploy — CloudFront + S3 for the frontend, App Runner for the API — it's off). The interesting part is the security guard (`:1442`):
 
 ```python
 @app.route("/<path:path>")
@@ -145,7 +145,7 @@ def serve_frontend(path):
 
 **Path traversal** is the attack where a user requests `../../etc/passwd` to escape the served directory and read arbitrary files. The defense (`:1451`): resolve the requested path to an **absolute** path (`os.path.abspath`), then verify it still **starts with** the allowed directory (`candidate.startswith(FRONTEND_DIST + os.sep)`). If `..` segments pushed it outside the build folder, the check fails and you fall through. Never trust a user-supplied path; always resolve-then-confirm-inside-the-jail.
 
-The final `return send_from_directory(..., "index.html")` is the **SPA fallback**: for any unknown route that isn't a real file (like `/read/123`, a client-side route), serve `index.html` so React Router can handle it in the browser. (Netlify does this same fallback via `public/_redirects` — Module 11.)
+The final `return send_from_directory(..., "index.html")` is the **SPA fallback**: for any unknown route that isn't a real file (like `/read/123`, a client-side route), serve `index.html` so React Router can handle it in the browser. (In production CloudFront does this same fallback via custom error responses — 403/404 → `/index.html` with a 200; Netlify used to do it via `public/_redirects` — Module 11.)
 
 ## 8. The dev entry point (`:1458`)
 
@@ -154,7 +154,7 @@ if __name__ == "__main__":
     app.run(debug=False, port=5001)
 ```
 
-`app.run()` is Flask's **development** server — convenient, but single-threaded-ish and not built for load. In production you never use it; gunicorn does (the comment and `render.yaml` spell out the real command). `debug=False` even in dev is a deliberate safety choice: Flask's debug mode exposes an interactive debugger that can execute code, which you never want reachable. The `if __name__ == "__main__"` guard means this block only runs when you do `python app.py` directly — when gunicorn imports `app:app`, it's skipped.
+`app.run()` is Flask's **development** server — convenient, but single-threaded-ish and not built for load. In production you never use it; gunicorn does (the comment and the `backend/Dockerfile` `CMD` spell out the real command that App Runner runs). `debug=False` even in dev is a deliberate safety choice: Flask's debug mode exposes an interactive debugger that can execute code, which you never want reachable. The `if __name__ == "__main__"` guard means this block only runs when you do `python app.py` directly — when gunicorn imports `app:app`, it's skipped.
 
 ## 9. Patterns to carry away
 

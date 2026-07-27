@@ -60,7 +60,7 @@ This is the app's skeleton:
 
 - **`createRoot(...).render(...)`** attaches React to the `<div id="root">` in `index.html`.
 - **`<React.StrictMode>`** is a dev-only wrapper that intentionally double-invokes effects to surface bugs (like missing cleanup). It does nothing in production.
-- **`<BrowserRouter>` + `<Routes>` + `<Route>`** is **client-side routing**. Instead of the server returning a new HTML page per URL, React swaps components in the browser. `:workId`, `:slug`, etc. are **URL parameters** the page reads via `useParams`. This is the "SPA" model — and it's why the server needs the `index.html` fallback (Module 7) and Netlify needs `_redirects` (Module 11): a hard refresh on `/read/123` must still serve the app.
+- **`<BrowserRouter>` + `<Routes>` + `<Route>`** is **client-side routing**. Instead of the server returning a new HTML page per URL, React swaps components in the browser. `:workId`, `:slug`, etc. are **URL parameters** the page reads via `useParams`. This is the "SPA" model — and it's why the server needs the `index.html` fallback (Module 7) and the CDN needs an equivalent (CloudFront custom error responses in production; Netlify's `_redirects` previously — Module 11): a hard refresh on `/read/123` must still serve the app.
 - **Provider nesting**: `<ThemeProvider>` wraps everything so any component can read the theme via context (section 6).
 
 ## 3. `App.jsx` — the home page and search controller
@@ -188,7 +188,7 @@ useEffect(() => {
 Three patterns to internalize:
 
 - **`useEffect(() => {...}, [])`** runs once after first render (empty dependency array = "on mount"). This is where you do data fetching.
-- **Retry with backoff** (`if (attempt < 4) setTimeout(load(attempt+1), 2000)`). Why? The backend cold-starts by loading embeddings (~10-15s) and Render free instances spin down. So the first `/api/library` call can fail or hang; the hook retries up to 4 times, 2s apart, before giving up. This is the client side of "the backend may be warming up" — graceful degradation on the frontend too.
+- **Retry with backoff** (`if (attempt < 4) setTimeout(load(attempt+1), 2000)`). Why? The backend cold-starts by loading the embedding matrix into RAM (~10-15s) whenever App Runner spins up a fresh instance (a new deploy, or scaling from idle). So the first `/api/library` call against a cold instance can fail or hang; the hook retries up to 4 times, 2s apart, before giving up. This is the client side of "the backend may be warming up" — graceful degradation on the frontend too.
 - **Cleanup function** (`return () => controller.abort()`). The function an effect returns runs on unmount (or before the effect re-runs). Aborting the fetch prevents "set state on an unmounted component" warnings and wasted work. Returning `{ sections, loading, error }` gives consumers a clean loading/error/data tri-state.
 
 `useCategories` (`hooks/useCategories.js`) is the same shape for `/api/categories`, reshaping the array into a `{category: {...}}` map for easy lookup.

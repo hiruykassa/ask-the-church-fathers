@@ -6,7 +6,7 @@
 
 ## 1. The 60-second system pitch (memorize this)
 
-> Ask the Early Church is a full-stack hybrid-search application over a 53,000-passage corpus of early Christian writings. The frontend is a React SPA on Netlify; the backend is a Flask API on Render that loads pre-computed embeddings into RAM and serves search over SQLite with FTS5. A search parses the query (Gemini, with Groq and a free local fallback), embeds it with Voyage, and fuses three signals — vector similarity, FTS5 keyword, and title match — using reciprocal rank fusion, then diversifies the results. Scripture references short-circuit to a direct verse-index lookup. The whole AI path is wrapped in caching and a Redis-backed monthly budget cap so it costs about a dollar a month, and it degrades to keyword-only search rather than ever failing. There's also an offline ETL pipeline that builds and embeds the corpus, security hardening across the stack, CI, and a containerized path to AWS.
+> Ask the Early Church is a full-stack hybrid-search application over a 53,000-passage corpus of early Christian writings. The frontend is a React SPA hosted on S3 behind CloudFront; the backend is a containerized Flask API on AWS App Runner that loads pre-computed embeddings into RAM and serves search over SQLite with FTS5. A search parses the query (Gemini, with Groq and a free local fallback), embeds it with Voyage, and fuses three signals — vector similarity, FTS5 keyword, and title match — using reciprocal rank fusion, then diversifies the results. Scripture references short-circuit to a direct verse-index lookup. The whole AI path is wrapped in caching and a Redis-backed monthly budget cap so it costs about a dollar a month, and it degrades to keyword-only search rather than ever failing. There's also an offline ETL pipeline that builds and embeds the corpus, security hardening across the stack, CI, and a fully containerized AWS deployment (ECR image → App Runner, S3-hosted database, S3 + CloudFront frontend, secrets in SSM Parameter Store).
 
 That paragraph hits: full-stack, RAG/hybrid search, LLM-with-fallbacks, cost control, graceful degradation, data pipeline, security, ops. Practice it out loud until it's natural.
 
@@ -17,16 +17,17 @@ flowchart TD
   subgraph build [Offline build - tools/]
     etl["scrape/import -> classify -> repair -> FTS -> embed"] --> db[("database.db")]
   end
-  db --> r2[("Cloudflare R2")]
-  subgraph runtime [Runtime]
-    fe["React SPA (Netlify)"] -->|"/api/* fetch"| api["Flask API (Render)"]
+  db --> s3db[("S3 (database.db)")]
+  subgraph runtime [Runtime on AWS]
+    fe["React SPA (S3 + CloudFront)"] -->|"/api/* fetch"| api["Flask API (App Runner container)"]
     api --> sqlite[("SQLite + FTS5")]
     api --> ram["embeddings in RAM (float16)"]
     api -.->|parse| llm["Gemini / Groq"]
     api -.->|embed| voy["Voyage"]
     api -.->|budget + rate limit| redis[("Redis")]
+    api -.->|secrets| ssm[("SSM Parameter Store")]
   end
-  r2 -->|"prestart.sh on boot"| sqlite
+  s3db -->|"prestart.sh on boot"| sqlite
 ```
 
 ## 3. The trade-offs you must be able to defend
@@ -37,7 +38,7 @@ Interviewers probe *why*, not *what*. For each decision, know the alternative yo
 |---|---|---|
 | **SQLite, not Postgres** | Corpus is read-only, single-node, fits on disk. Zero ops overhead. | No concurrent writers, no horizontal DB scaling. Change if data became write-heavy or multi-node. |
 | **Embeddings in RAM, not a vector DB** | 53k vectors is tiny (~108 MB at float16); a numpy dot-product is fast and free. | Doesn't scale to millions of vectors. Change to a vector DB (pgvector, Pinecone) at much larger scale. |
-| **float16 store + chunked float32 scoring** | Halves memory to fit Render's 512 MB; precision loss is immaterial for top-k. | Tiny precision loss. The chunked scoring is required so the multiply doesn't re-inflate to float32. |
+| **float16 store + chunked float32 scoring** | Halves memory (originally to fit Render's 512 MB free plan; still keeps the App Runner container lean and cheap); precision loss is immaterial for top-k. | Tiny precision loss. The chunked scoring is required so the multiply doesn't re-inflate to float32. |
 | **Reciprocal Rank Fusion** | Scale-free — fuses cosine + BM25 + title without normalizing incompatible scores. Almost parameter-free. | Ignores score magnitude (only rank). Fine here; a learned ranker would need training data. |
 | **One gunicorn worker, 8 threads** | Keeps one shared copy of the embedding matrix in RAM; workload is I/O-bound so threads add concurrency. | Can't use multiple cores for CPU work. Scale to multi-worker + Redis on a bigger box. |
 | **LLM only for topic; local author detection** | Author detection is a lookup, not reasoning — don't pay a model for it. Cut token cost dramatically. | Local detection skips ambiguous names; the LLM tier recovers those. |
@@ -67,21 +68,23 @@ Walk the Module 4 table: CORS allowlist, rate limiting (with ProxyFix for real c
 Nothing fatal. Gemini down → Groq → local parse. Voyage down → keyword-only search. Redis down → budget fails open, rate limits fall back to per-process. The app never 500s on a dependency failure. (Modules 5-6.)
 
 **"How would you scale this to 10x the corpus / traffic?"**
-Corpus 10x (~500k vectors): still fits RAM at float16 (~1 GB) on a bigger instance; beyond that, move to a vector DB. Traffic: multi-worker gunicorn + Redis for shared rate-limit/budget; the AWS plan (EC2 + Redis + EBS) in the README. Be honest about the single-node ceiling.
+Corpus 10x (~500k vectors): still fits RAM at float16 (~1 GB) on a bigger instance (App Runner scales up to 4 vCPU / 12 GB); beyond that, move to a vector DB. Traffic: multi-worker gunicorn + Redis (ElastiCache) for shared rate-limit/budget, and App Runner's built-in autoscaling across instances — or move to ECS/EKS for finer control. Be honest about the single-node ceiling.
 
 **"What was the hardest/most interesting part?"**
 Good answers: the float16 streaming loader (fitting 53k vectors in 512 MB without a 3x memory spike), or the parallel embed+parse latency optimization, or designing the three-tier graceful degradation. Pick one and go deep.
 
 **"What would you do differently / what's next?"**
-The roadmap: trim cold-start latency, UI polish, AWS migration, then monetization (donations, affiliate links, the mobile app with a corpus-trained AI assistant). The `npm audit`/Vite advisory is a known, scoped deferral. Showing you know the project's weak spots is a strength.
+The AWS migration is **done** — App Runner + S3 + CloudFront + SSM, DNS cut over, Render and Netlify decommissioned (Module 11 §9). The project is now in maintenance mode, so the honest answer is about *known weak spots and what maintenance looks like*, which is Module 13: a ghost `/api/synthesize` still documented but never implemented, an `og-image.png` that exists only in S3 and not in git, dead CSS and an inert scroll-reveal hook in the frontend, and FTS-rebuild logic duplicated four ways across the ETL scripts. The roadmap beyond that: trim cold-start latency, UI polish, then monetization (donations, affiliate links, the mobile app with a corpus-trained AI assistant). The `npm audit`/Vite advisory is a known, scoped deferral.
+
+Naming specific, prioritized flaws — and being able to say which ones change behavior versus which are just untidy — reads far better than "nothing much." Module 13 §5 ranks them for exactly this purpose.
 
 ## 5. Resume bullets (draft — adapt the numbers to truth)
 
 - Built a full-stack hybrid-search app (React/Vite + Flask/SQLite) over a 52,869-passage corpus, fusing Voyage vector embeddings, SQLite FTS5 keyword search, and title matching via reciprocal rank fusion with per-work/author diversification.
-- Engineered a memory-lean embedding loader (streamed float16 matrix, chunked float32 scoring) to serve 52k+ vectors in RAM within a 512 MB instance; warmed the query embedding in parallel with LLM query-parsing to cut search latency to roughly the slower of the two calls.
+- Engineered a memory-lean embedding loader (streamed float16 matrix, chunked float32 scoring) to serve 52k+ vectors in RAM within a 512 MB-class instance; warmed the query embedding in parallel with LLM query-parsing to cut search latency to roughly the slower of the two calls.
 - Implemented LLM query parsing (Gemini 2.5 Flash-Lite) with Groq and zero-cost local fallbacks, 30-day TTL caching, and a Redis-backed monthly budget cap, keeping AI spend near $1/month while degrading gracefully to keyword-only search on any provider failure.
 - Hardened a public API with rate limiting (real-client-IP via ProxyFix), CORS allowlisting, parameterized SQL + FTS-injection guards, an allowlist HTML sanitizer plus CSP, and path-traversal protection; gated on GitHub Actions CI (lint, build, pytest smoke tests).
-- Designed an idempotent offline ETL pipeline (import → classify → repair → index → embed) and a containerized, cloud-portable deploy (Netlify + Render today, R2→S3/EC2 path) with boot-time DB hydration and SEO generation (2,997-URL sitemap + topic landing pages).
+- Designed an idempotent offline ETL pipeline (import → classify → repair → index → embed) and a fully containerized AWS deployment (Docker image in ECR → App Runner, S3 + CloudFront frontend with Origin Access Control, S3-hosted database, secrets in SSM Parameter Store, ACM/HTTPS) with boot-time DB hydration and SEO generation (~2,870-URL sitemap + topic landing pages).
 
 ## 6. Concept glossary (the durable, transferable vocabulary)
 

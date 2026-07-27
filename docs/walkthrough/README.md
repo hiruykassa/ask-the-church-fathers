@@ -20,7 +20,10 @@ Each file teaches one slice of the system: first the **concept** (the transferab
 | 10 | [Offline corpus pipeline](10-corpus-pipeline.md) | ETL / data pipelines for AI |
 | 11 | [SEO, build & deploy, CI](11-deploy-ci.md) | Build pipeline, containers, cloud deploy, CI/CD |
 | 12 | [Ownership & interview prep](12-ownership.md) | Communicating architecture |
+| 13 | [Maintenance mode & known issues](13-maintenance.md) | Operating a finished system; honest defect triage |
 
 ## How to use this
+
+Modules 01–12 are a course: read them in order. **Module 13 is a reference** — skim it once so you know what's in it, then return to it whenever you're about to change the corpus or ship a deploy. It's also where the project's known defects are recorded honestly, which is the part worth reading before an interview asks "what would you do differently?"
 
 Read a module, then open the real file beside it and trace the lines. The line references look like `backend/app.py:164` — jump there and confirm what the guide says against the live code. When something changes in the code, update the matching note here.

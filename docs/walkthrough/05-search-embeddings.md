@@ -45,9 +45,9 @@ The qualities that make this a *good* batch job:
 - **Oversized-input guard** (`:110`): a few "passages" are entire treatises (hundreds of thousands of tokens). It truncates each to `PER_INPUT_CHARS` so they embed on their opening text instead of erroring.
 - **`input_type="document"`** (`:128`): Voyage supports *asymmetric* embeddings — passages are embedded as `"document"`, queries as `"query"` (you'll see the query side use `"query"` in section 4). Using the matching pair improves retrieval quality. They must agree, which is why both sides pin the same `VOYAGE_MODEL`.
 
-## 3. Loading 52,869 vectors into 512 MB — the float16 trick (`app.py:164`)
+## 3. Loading 52,869 vectors into a small instance — the float16 trick (`app.py:164`)
 
-This is the single most impressive piece of engineering in the backend and a guaranteed interview highlight. The problem: at startup the server loads *every* passage vector into RAM so it can score queries fast. 52,869 vectors × 1024 dims × 4 bytes (float32) ≈ **217 MB** just for the matrix — and a naive load would briefly hold ~3× that (the raw bytes, a joined copy, and the final array), blowing past the 512 MB plan.
+This is the single most impressive piece of engineering in the backend and a guaranteed interview highlight. The problem: at startup the server loads *every* passage vector into RAM so it can score queries fast. 52,869 vectors × 1024 dims × 4 bytes (float32) ≈ **217 MB** just for the matrix — and a naive load would briefly hold ~3× that (the raw bytes, a joined copy, and the final array). This optimization was originally written to fit the **512 MB** Render free plan; it still matters, keeping the container's footprint small on the current App Runner instance (2 vCPU / 4 GB) and cheap to run.
 
 Two optimizations in `_load_embeddings()`:
 
@@ -185,7 +185,7 @@ Two responsibilities, both about operating an AI feature responsibly.
 - **The "fail open" decision** (`:58-71`): if Redis is unreachable, `budget_remaining()` returns `True` (allow the call). The reasoning: "we'd rather serve a query than 500 because the spend counter is down." The documented flip side — **the cap is only enforced when Redis is configured** — is the single most important caveat to be able to state. Without Redis, caching is the only thing bounding spend.
 - `budget_status()` (`:74`) feeds `/api/health` so you can see whether the cap is actually live (`enabled`) and how much is spent.
 
-**(b) Structured logging.** `log_ai_call` (`:104`) emits one **JSON line** per AI call (provider, model, latency_ms, ok, error). JSON logs are greppable/queryable in any log backend (Render logs, CloudWatch) — so you can answer "what's our p95 Voyage latency?" or "what's our error rate?" from logs alone. Logging *structured* events instead of free-text strings is a small habit with big operational payoff.
+**(b) Structured logging.** `log_ai_call` (`:104`) emits one **JSON line** per AI call (provider, model, latency_ms, ok, error). JSON logs are greppable/queryable in any log backend (App Runner streams application logs to CloudWatch Logs) — so you can answer "what's our p95 Voyage latency?" or "what's our error rate?" from logs alone. Logging *structured* events instead of free-text strings is a small habit with big operational payoff.
 
 ## 11. Putting part 1 together
 

@@ -75,7 +75,7 @@ if IS_PRODUCTION:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 ```
 
-This is subtle and a great interview topic. In production the app sits **behind a reverse proxy** (Render's load balancer). From Flask's perspective, the TCP connection comes from the *proxy*, so `request.remote_addr` is the proxy's IP — the same for every visitor. That breaks per-IP rate limiting: every client would share one bucket, so one abuser could exhaust the limit for everyone.
+This is subtle and a great interview topic. In production the app sits **behind a reverse proxy** (App Runner's request router / load balancer). From Flask's perspective, the TCP connection comes from the *proxy*, so `request.remote_addr` is the proxy's IP — the same for every visitor. That breaks per-IP rate limiting: every client would share one bucket, so one abuser could exhaust the limit for everyone.
 
 The proxy appends the real client IP to the `X-Forwarded-For` header. `ProxyFix(x_for=1)` tells Flask: "trust exactly **one** hop of `X-Forwarded-For` and use it as `remote_addr`." 
 
@@ -100,7 +100,7 @@ elif allowed_origin.startswith("http://127.0.0.1:"):
 CORS(app, origins=_cors_origins)
 ```
 
-**CORS (Cross-Origin Resource Sharing)** is the browser rule that decides whether JavaScript served from origin A may read responses from origin B. Since the production frontend (`asktheearlychurch.com`) and API (`...onrender.com`) are different origins, the API must explicitly *allow* the frontend's origin, or the browser blocks the response.
+**CORS (Cross-Origin Resource Sharing)** is the browser rule that decides whether JavaScript served from origin A may read responses from origin B. Since the production frontend (`asktheearlychurch.com`, via CloudFront) and API (`...awsapprunner.com`) are different origins, the API must explicitly *allow* the frontend's origin, or the browser blocks the response.
 
 Design points:
 
@@ -124,7 +124,7 @@ limiter = Limiter(
 
 Rate limiting caps how many requests one client can make per minute, protecting against abuse and runaway cost (each search can hit paid APIs). Defaults are 60/min, and specific routes tighten it with a decorator — `/api/search` is `10 per minute` (`:856`), the expensive one.
 
-**The storage caveat is the key insight** (and is flagged with explicit warnings at `:748`): the counters live in `memory://` by default, which is **per-process**. With multiple gunicorn workers, each worker has its own counter, so the *effective* limit is N× looser (4 workers → 40/min instead of 10). To enforce a true shared limit you need `RATELIMIT_STORAGE_URI=redis://...`. This is also why the production config runs **one** worker (`render.yaml`): with `-w 1`, the in-memory counter is exact even without Redis. (Redis becomes required only when you scale to multiple workers — and it's also what gates the spend budget, Module 5.)
+**The storage caveat is the key insight** (and is flagged with explicit warnings at `:748`): the counters live in `memory://` by default, which is **per-process**. With multiple gunicorn workers, each worker has its own counter, so the *effective* limit is N× looser (4 workers → 40/min instead of 10). To enforce a true shared limit you need `RATELIMIT_STORAGE_URI=redis://...`. This is also why the production config runs **one** worker (the gunicorn `CMD` in `backend/Dockerfile`, which App Runner runs): with `-w 1`, the in-memory counter is exact even without Redis. (Redis becomes required only when you scale to multiple workers — and it's also what gates the spend budget, Module 5.)
 
 ## 8. Error handlers — no stack traces leak — `:778`
 
@@ -192,7 +192,7 @@ def health():
     })
 ```
 
-A **health check** is a lightweight endpoint that proves the service is alive and correctly configured. Render pings `/api/health` (`render.yaml:22`) to decide if a deploy succeeded; an external uptime monitor (UptimeRobot) pings it to alert on outages. This one is richer than a bare "ok":
+A **health check** is a lightweight endpoint that proves the service is alive and correctly configured. App Runner pings `/api/health` (configured in the service's `HealthCheckConfiguration`) to decide if a deploy succeeded and to keep the instance in rotation; an external uptime monitor (UptimeRobot) pings it to alert on outages. This one is richer than a bare "ok":
 
 - **`embeddings_loaded`** — how many vectors made it into RAM. `0` means semantic search is silently off (degraded to keyword-only) — a critical thing to surface, because the app would still return 200s and *look* fine.
 - **`providers`** — which API keys are configured, as **booleans only, never the keys**. Lets you diagnose "why is search degraded?" without exposing secrets.
