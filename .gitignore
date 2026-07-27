@@ -38,6 +38,9 @@ tools/corpus/sources/*.pdf
 *.log
 backend/audit*
 
+# AWS deploy artifacts (account-specific ARNs, no secret values — but not for a public repo)
+apprunner-service.json
+
 # Editor / AI tooling (not part of the app)
 .vscode/
 .cursor/*
