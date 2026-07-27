@@ -14,7 +14,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 ## Status at a glance
 
-Production is live on **AWS**: frontend on **S3 + CloudFront**, backend on **App Runner** (Docker), and `database.db` in **S3**, fetched on boot. The corpus is fully embedded (52,869 `voyage-3` vectors), so hybrid semantic + keyword search is on. The app previously ran on Netlify + Render + Cloudflare R2; that stack is being retired post-cutover (see [AWS migration](#aws-migration) below).
+Production is live on **AWS**: frontend on **S3 + CloudFront**, backend on **App Runner** (Docker), and `database.db` in **S3**, fetched on boot. The corpus is fully embedded (52,869 `voyage-3` vectors), so hybrid semantic + keyword search is on. The app originally launched on Netlify + Render + Cloudflare R2 and was migrated to AWS in mid-2026 (see [AWS migration](#aws-migration) below).
 
 | Area | Status |
 |------|--------|
@@ -166,7 +166,7 @@ App Runner (Docker image, ECR, x86_64, 2 vCPU / 4 GB)
 SQLite (downloaded from S3 on boot) + embeddings in RAM (float16 — see Corpus)
 ```
 
-Cut over from Render + Netlify + Cloudflare R2 in mid-2026. The old stack is kept temporarily (paused, not yet cancelled) as a rollback path before full decommission.
+Cut over from Render + Netlify + Cloudflare R2 in mid-2026. AWS is now the sole production stack; the old hosting is being decommissioned (see [Roadmap](#roadmap)).
 
 **Why App Runner, not EC2/ECS/Fargate:** for a single container that just needs to run and be reachable, App Runner needed no load balancer, no VPC wiring, and no orchestration — push an image, get an HTTPS URL. The EC2 + docker-compose + Redis shape once planned here was superseded; Redis/`RATELIMIT_STORAGE_URI` is **not yet configured** on App Runner (see [Production checklist](#production-checklist)), which is the one gap carried over from that abandoned plan — the budget cap currently fails open (see "API cost guard") until it's added.
 
@@ -190,16 +190,16 @@ The API is a **public read-only** service (no authentication today). The control
 | **Rate limiting** | Default 60 req/min; `/api/search` 10/min; works/passages/scripture 30/min. Behind App Runner's load balancer, `ProxyFix(x_for=1)` keys limits on the real client IP (one trusted proxy hop, so `X-Forwarded-For` can't be spoofed) instead of the shared proxy IP. In-memory only today — see the Redis gap noted in the [production checklist](#production-checklist) |
 | **Query length cap** | 500 chars max on search |
 | **CORS** | Locked to `ALLOWED_ORIGIN`; in dev, both `localhost` and `127.0.0.1` variants are allowed |
-| **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`; HSTS in production. Set on API responses (Flask `after_request`) **and** on the static frontend via a **CloudFront Response Headers Policy** (`ask-the-early-church-security-headers`) — the Netlify-era `public/_headers` file is no longer read by anything in production (S3/CloudFront has no equivalent mechanism; this was briefly a gap post-cutover until the CloudFront policy was added) |
+| **Security headers** | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`; HSTS in production. Set on API responses (Flask `after_request`) **and** on the static frontend via a **CloudFront Response Headers Policy** (`ask-the-early-church-security-headers`) — S3/CloudFront has no equivalent of the old Netlify `_headers` mechanism, so this was briefly a gap post-cutover until the CloudFront policy was added |
 | **SQL injection** | Every query is parameterized; FTS5 `MATCH` input is tokenized and quoted (`prepare_fts_query`) so punctuation can't alter the query |
 | **HTML / XSS** | Stored corpus HTML is re-parsed and re-emitted through an allowlist sanitizer (`sanitizePassageHtml`) that escapes text nodes and drops every tag/attribute except page-mark spans; CSP `script-src 'self'` blocks inline execution as defense-in-depth |
 | **Path traversal** | Static file serving resolves the absolute path and confirms it stays inside the build dir before serving |
-| **Secret hygiene** | No keys in git (scanned); macOS Keychain locally, platform secret env in prod; all `render.yaml` keys are `sync: false`; `.dockerignore` keeps secrets/DB out of the image; container runs as a non-root user |
+| **Secret hygiene** | No keys in git (scanned); macOS Keychain locally, SSM Parameter Store (`SecureString`, referenced by ARN) in prod; `.dockerignore` keeps secrets/DB out of the image; container runs as a non-root user |
 | **Graceful degradation** | Voyage / Gemini / Groq failure never returns 500; falls back to FTS keyword search |
 | **DB safety** | All connections closed in `try/finally`; search DB errors return 503; error handlers return generic JSON without leaking stack traces |
 | **Monitoring** | Optional Sentry error tracking (`SENTRY_DSN`), errors only, `send_default_pii=False` so client IPs / query text are never sent; disabled when the DSN is unset. Uptime via an external pinger (e.g. UptimeRobot) on `/api/health` |
 
-> **Known advisory (dev-only):** `npm audit` flags `esbuild`/`vite` (GHSA-67mh-4wv8-2f99). It affects only the local Vite **dev server**, not the static production bundle Netlify serves, so it is not exploitable in the hosted app. The fix is a breaking major bump to Vite 8; deferred until a planned dependency upgrade.
+> **Known advisory (dev-only):** `npm audit` flags `esbuild`/`vite` (GHSA-67mh-4wv8-2f99). It affects only the local Vite **dev server**, not the static production bundle served by CloudFront, so it is not exploitable in the hosted app. The fix is a breaking major bump to Vite 8; deferred until a planned dependency upgrade.
 
 ### Production checklist
 
@@ -240,9 +240,6 @@ The instance role backing App Runner (`AppRunnerS3ReadInstanceRole`) holds exact
 ```
 ask-the-early-church/
 │
-├── render.yaml                 # Render.com deploy blueprint — legacy, kept during the
-│                                #   Render→App Runner rollback window; not used in prod
-│
 ├── backend/
 │   ├── app.py                  # Flask API — search, library, security middleware
 │   ├── search_cache.py         # Thread-safe TTL LRU caches for search hot paths
@@ -253,16 +250,13 @@ ask-the-early-church/
 │   ├── requirements.txt        # Pinned deps incl. flask-limiter, gunicorn, redis
 │   ├── load_secrets.py         # Keychain (local) + optional non-secret config file
 │   ├── store_keys_in_keychain.sh  # Run yourself — stores API keys in macOS Keychain
-│   ├── prestart.sh             # Fetch database.db on boot — s3:// via boto3+instance role
-│                                #   (App Runner, prod today) or https:// via curl (R2, legacy)
-│   ├── upload_db_to_r2.sh      # Push database.db to Cloudflare R2 (boto3/S3 API) — legacy;
-│                                #   the live S3 copy was pushed with a plain `aws s3 cp`
-│   ├── verify_r2.sh            # Run yourself — checks R2 creds/bucket without printing them
+│   ├── prestart.sh             # Fetch database.db on boot — s3:// via boto3 + the
+│                                #   App Runner instance role (no keys in URL or env)
 │   ├── Dockerfile              # Host-agnostic image — runs on AWS App Runner today (ECR,
 │                                #   x86_64 — see Architecture for why not ARM)
 │   ├── .dockerignore           # Keeps secrets/DB/backups out of the image
 │   ├── .env.example            # Non-sensitive config template (no API keys)
-│   └── database.db             # NOT committed — hydrated from R2 in prod
+│   └── database.db             # NOT committed — hydrated from S3 in prod
 │
 ├── tools/
 │   ├── generate_seo.py         # Build sitemap + topic pages from database.db
@@ -296,15 +290,10 @@ ask-the-early-church/
 │   ├── apple-touch-icon.png    # iOS home-screen icon (180px)
 │   ├── icon-192.png · icon-512.png · icon-512-maskable.png  # Android/PWA icons
 │   ├── site.webmanifest        # PWA manifest — Android home-screen + install icons
-│   ├── _headers · _redirects   # Netlify security headers + SPA-routing fallback — legacy;
-│                                #   production now sets equivalent headers via a CloudFront
-│                                #   Response Headers Policy, and SPA fallback via CloudFront
-│                                #   custom error responses (403/404 → /index.html)
 │   ├── robots.txt              # Crawler rules (regenerate with generate:seo)
 │   ├── sitemap.xml             # All work + topic URLs (regenerate with generate:seo)
 │   ├── seo/topics.json         # Topic page content from database (+ seo/site.json)
 │   └── theme-init.js           # Theme flash prevention (external script for CSP)
-├── netlify.toml                # Frontend build config for Netlify — legacy, rollback-window only
 ├── index.html
 ├── package.json
 ├── eslint.config.js            # ESLint flat config (run via `npm run lint`)
@@ -403,21 +392,21 @@ VITE_SITE_URL=https://your-domain.com npm run build
 - [x] Verse-first scripture browser (books → chapters → verses → catena) + scripture-ref routing in search
 - [x] Browse by category with live counts (`/api/categories`) + author filters (category / tradition / era)
 - [x] Book reader, dark mode, saved passages (localStorage)
-- [x] Security hardening (rate limits, CSP, CORS, query cap, HTML sanitization, parameterized SQL + FTS-injection guard, path-traversal guard, non-root container, Netlify `_headers`)
+- [x] Security hardening (rate limits, CSP, CORS, query cap, HTML sanitization, parameterized SQL + FTS-injection guard, path-traversal guard, non-root container, CloudFront Response Headers Policy)
 - [x] ESLint (flat config) + backend smoke tests, gated in GitHub Actions CI
 - [x] SEO: sitemap (2,997 URLs, submitted to Search Console), robots.txt, topic landing pages, dynamic meta, SearchAction JSON-LD
-- [x] **Production launch** — `database.db` in Cloudflare R2 (fetched on boot via `DB_URL`), backend on Render (`render.yaml`, `sync:false` secrets, float16 loader fits 512 MB), frontend on Netlify, `asktheearlychurch.com` via Cloudflare DNS with Let's Encrypt TLS
+- [x] **Production launch** — `database.db` in Cloudflare R2 (fetched on boot via `DB_URL`), backend on Render (`sync:false` secrets, float16 loader fits 512 MB), frontend on Netlify, `asktheearlychurch.com` via Cloudflare DNS with Let's Encrypt TLS
 - [x] **Post-launch hardening + UX** — `ProxyFix` real-client rate limiting, API HSTS, `gunicorn --threads 8` concurrency, session response cache + delayed spinner, UptimeRobot on `/api/health`, Sentry wired (enable via `SENTRY_DSN`)
 - [x] AI synthesis (built; disabled for launch)
 - [x] Docker image in repo (`backend/Dockerfile`, host-agnostic)
-- [x] **AWS migration** — S3 (private, OAC) + CloudFront (ACM cert, custom domain, SPA routing, Response Headers Policy) for the frontend; App Runner (Docker via ECR, x86_64) for the backend; `database.db` in S3, fetched by `prestart.sh` via the instance role (no credentials in the URL); secrets in SSM Parameter Store, decrypted via a scoped `kms:Decrypt` grant; DNS cut over at Cloudflare. Full runbook and the three gotchas hit along the way (x86_64-only, buildx attestation manifests, SSM `kms:Decrypt`) in [`docs/aws-migration-guide.md`](docs/aws-migration-guide.md). Render/Netlify/R2 kept temporarily as a rollback path before decommission.
+- [x] **AWS migration** — S3 (private, OAC) + CloudFront (ACM cert, custom domain, SPA routing, Response Headers Policy) for the frontend; App Runner (Docker via ECR, x86_64) for the backend; `database.db` in S3, fetched by `prestart.sh` via the instance role (no credentials in the URL); secrets in SSM Parameter Store, decrypted via a scoped `kms:Decrypt` grant; DNS cut over at Cloudflare. Full runbook and the three gotchas hit along the way (x86_64-only, buildx attestation manifests, SSM `kms:Decrypt`) in [`docs/aws-migration-guide.md`](docs/aws-migration-guide.md).
 
 ### Next milestone — performance, polish, and closing the AWS gaps
 
 **Objective:** make the app feel instant and look professional, and close the two gaps the AWS migration left open. Performance is won in the application layer; the AWS gaps are ops work (Redis, decommissioning the old stack).
 
 - [ ] **Redis for App Runner** — `RATELIMIT_STORAGE_URI` is not yet configured on App Runner, so `MONTHLY_API_BUDGET_USD` currently fails open (no shared store to track spend across requests). Needs an ElastiCache (or self-hosted) Redis reachable from the App Runner VPC connector.
-- [ ] **Decommission Render/Netlify/R2** — currently paused but not cancelled, kept as a rollback path post-cutover. Cancel once the AWS stack has run cleanly for a few days.
+- [ ] **Decommission Render/Netlify/R2** — the old hosting services are paused; cancel them now that the repo's legacy deploy configs are removed and AWS is the sole production stack.
 - [ ] **Performance** — attack actual and perceived latency: trim the cold-start embedding load, cut search round-trips, and mask the remainder with skeletons, prefetch, and warmer caches. Targets: no visible spin-up on first hit, sub-second warm search.
 - [ ] **UI/UX polish** — a deliberate visual and interaction pass for a cohesive, professional feel across every view.
 - [ ] **Corpus expansion (optional)** — extend coverage where it adds real value; demand-driven, not open-ended scraping.
