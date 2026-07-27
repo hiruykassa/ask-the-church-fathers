@@ -6,7 +6,8 @@
  * can cancel in-flight requests instead of racing generation counters.
  *
  * Dev:  empty base — Vite proxies /api → Flask on 5001 (see vite.config.js).
- * Prod: VITE_API_URL must be set at build time (e.g. on Netlify).
+ * Prod: VITE_API_URL must be set at build time — the App Runner API origin,
+ *       baked into the bundle that gets uploaded to S3 and served by CloudFront.
  *
  * We fail fast at build time if VITE_API_URL is missing in a production build
  * rather than silently falling back to localhost.

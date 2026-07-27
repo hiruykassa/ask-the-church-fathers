@@ -813,9 +813,10 @@ def set_security_headers(response):
     response.headers["X-XSS-Protection"] = "0"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    # Force HTTPS for a year on the API origin too (the frontend already sets
-    # this via Netlify _headers). Production only — never send HSTS over the
-    # plain-HTTP dev server, which would pin localhost to HTTPS in the browser.
+    # Force HTTPS for a year on the API origin too (the frontend gets it from
+    # the CloudFront Response Headers Policy). Production only — never send
+    # HSTS over the plain-HTTP dev server, which would pin localhost to HTTPS
+    # in the browser.
     if IS_PRODUCTION:
         response.headers["Strict-Transport-Security"] = (
             "max-age=31536000; includeSubDomains"
@@ -1475,8 +1476,9 @@ def get_author_works(author_id):
 
 # --- Optional: serve the built Vite frontend from Flask ---
 # Enabled automatically when a build is present (FRONTEND_DIST, else ../dist).
-# In the API-only deploy (frontend on Netlify) no dist is shipped, so this stays
-# off and unknown routes fall through to the JSON 404 handler above.
+# In the API-only deploy (App Runner serves the API; the frontend is a separate
+# S3 + CloudFront distribution) no dist is shipped, so this stays off and
+# unknown routes fall through to the JSON 404 handler above.
 FRONTEND_DIST = os.path.abspath(
     os.getenv("FRONTEND_DIST")
     or os.path.join(os.path.dirname(__file__), "..", "dist")

@@ -66,6 +66,7 @@ jobs:
 
       - name: Build
         env:
-          # CI verifies the build only — real URL is set on Netlify.
+          # CI verifies the build compiles only — the real App Runner API
+          # origin is baked in at build time by the S3 + CloudFront deploy.
           VITE_API_URL: https://placeholder.invalid
         run: npm run build
