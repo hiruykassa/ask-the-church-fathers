@@ -6,7 +6,7 @@ Built for Christians of every tradition — Protestant, Catholic, Eastern Orthod
 
 **Live:** [asktheearlychurch.com](https://asktheearlychurch.com)
 
-**Positioning:** reading and searching are always free. The website is supported by donations, Amazon affiliate book links, and display ads. A planned mobile app adds accounts and a corpus-trained AI assistant (one free query, then a subscription) plus in-app ads.
+**Positioning:** reading and searching are, and will always be, free. No monetization is live yet — the site is still pre-traction (submitted to Search Console, not yet showing up in organic search), and donations, Amazon affiliate book links, and display ads are all planned, not implemented (see [Roadmap](#roadmap)). A future mobile app would add accounts and a corpus-trained AI assistant (one free query, then a subscription) plus in-app ads — also not built.
 
 > *"Stand firm and hold to the traditions that you were taught by us."* — 2 Thessalonians 2:15
 
