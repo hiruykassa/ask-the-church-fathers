@@ -86,7 +86,9 @@ Everything below is verified against the current tree. Ranked by whether it can 
 
 ### Tier 1 — can cause real damage
 
-**`og-image.png` exists only in S3, not in git.** `index.html:28` and `:38` point every Open Graph and Twitter link preview at `https://asktheearlychurch.com/og-image.png`, but the file is not in `public/` and not tracked by git. The frontend deploy uses `aws s3 sync dist/ … --delete`. Since `dist/` is built from `public/`, and `public/` doesn't contain the image, **the next sync deletes it** — and there's no copy in version control to restore from. Every link preview on every platform breaks, permanently. Fix: download it from S3 into `public/` and commit it.
+**`og-image.png` exists only in S3, not in git.** `index.html:28` and `:38` point every Open Graph and Twitter link preview at `https://asktheearlychurch.com/og-image.png`, but the file is not in `public/` and not tracked by git. The frontend deploy uses `aws s3 sync dist/ … --delete`. Since `dist/` is built from `public/`, and `public/` doesn't contain the image, **the next sync deletes it** — and there's no copy in version control to restore from. Every link preview on every platform breaks, permanently.
+
+**Update 2026-07-30 — this already happened.** A `--delete` sync removed it. `curl -I https://asktheearlychurch.com/og-image.png` returns 200, but that is CloudFront's SPA fallback serving `index.html` as `text/html` — there is no PNG behind it, and there was no copy in git to restore from. A replacement 1200×630 card was regenerated and committed to `public/og-image.png`, which is now tracked, so a `--delete` sync can no longer destroy it. The original advice on this line ("download it from S3") is no longer possible and has been removed.
 
 **`backend/database.py` is destructive to a populated DB.** Covered in §3. Its docstring now warns about this, but the behaviour is unchanged: it's a first-run and repair tool, not a maintenance tool.
 
