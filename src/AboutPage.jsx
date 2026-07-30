@@ -85,11 +85,12 @@ export default function AboutPage() {
           <section className="about-section">
             <h2 className="about-heading">About the AI Summary</h2>
             <p className="about-text">
-            The website has an AI synthesis feature that was built but is
-            switched off for now, because it costs money per search and I would
-            rather spend that on keeping the library free and fast. If funding
-            comes together it will come back. Until then, read the passages
-            directly and explore the full works in the reader.
+            The website once had an AI synthesis feature. It was built and then
+            removed before launch, because it costs money per search and I would
+            rather spend that on keeping the library free and fast. Bringing it
+            back is real work rather than flipping a switch, and it needs
+            funding first. Until then, read the passages directly and explore
+            the full works in the reader.
             </p>
           </section>
         </article>
