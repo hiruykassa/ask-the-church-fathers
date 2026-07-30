@@ -92,7 +92,7 @@ Everything below is verified against the current tree. Ranked by whether it can 
 
 ### Tier 2 — misleads anyone reading the code
 
-**`/api/synthesize` is documented but does not exist.** Referenced in `backend/app.py:12`, `README.md:321`, and — the one that matters — promised to users in `src/AboutPage.jsx:90`, which tells visitors an AI synthesis feature "will be integrated into the website." The `syn-*` CSS block in `App.css` is its leftover styling. Either build it or strip the references; right now the site advertises a feature it doesn't have.
+**`/api/synthesize` — resolved 2026-07-30.** This was previously listed here as "documented but never implemented," which was itself wrong on the second half: it *was* implemented and working, last present in commit `ac6ec5e^`, then commented out for launch and finally deleted in `da80fe7`. The module docstring and `src/AboutPage.jsx` kept advertising it afterwards. Now: the working implementation is parked as a commented block in `app.py` with a checklist of the seven things re-enabling requires, the docstring lists only live routes, and the About page says the feature is switched off rather than "ready to go." The `.syn-*` CSS in `App.css` is deliberately retained so a restore is drop-in. Note the ordering constraint — reviving it before Redis exists ships an uncapped paid endpoint, since `budget_remaining()` fails open.
 
 **Stale comments that describe the wrong behaviour.** These are worth knowing because they'll mislead you when you come back in six months:
 

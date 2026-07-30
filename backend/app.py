@@ -1,20 +1,32 @@
 """Flask API for Ask the Early Church.
 
 Runtime server for the React frontend. SQLite ``database.db`` holds authors,
-works, passages, FTS index ``passages_fts``, and optional ``embeddings`` /
-``editorial_cleaned`` rows created by offline batch scripts.
+works, passages, the FTS index ``passages_fts``, ``scripture_index``, and
+``embeddings`` (one row per passage, loaded into RAM at import). The schema
+also defines ``editorial_cleaned``, but it is vestigial: the script that wrote
+it is no longer in the tree and the table holds a handful of stale rows.
 
-Endpoints (summary):
-    GET  /api/search              Gemini query parse + vector search (Voyage embeddings)
-    GET  /api/passages/<id>       Single passage with metadata
+Endpoints (all live routes):
+    GET  /api/health              Liveness + cache/budget status
+    GET  /api/search              Gemini query parse + hybrid vector/FTS search
+    GET  /api/authors             Author roster
+    GET  /api/authors/<id>/works  Works list + bio for one Father
     GET  /api/works/<work_id>     Full work for the book reader
-    GET  /api/authors, /api/authors/<id>/works, /api/library
-    POST /api/synthesize          (disabled — see comment in code)
+    GET  /api/passages/<id>       Single passage with metadata
+    GET  /api/library             Catalog grouped by collection
+    GET  /api/categories          Collection labels
+    GET  /api/scripture/books
+    GET  /api/scripture/<book>[/<chapter>[/<verse>]]
+                                  Verse-level patristic catena
+
+There is NO /api/synthesize route. A commented-out implementation is parked
+further down this file with the checklist required to revive it.
 
 Offline maintenance (not imported here):
-    ``clean_editorial_notes.py`` — strip editorial framing from passage text
-    ``embed_passages.py``       — Voyage vectors for future semantic search
-    ``database.py``             — create core tables + rebuild FTS once
+    ``embed_passages.py``  — Voyage vectors for the semantic half of search
+    ``database.py``        — create core tables + rebuild FTS once
+    ``../tools/corpus/``   — corpus import, repair, and FTS rebuild pipeline
+    ``../tools/generate_seo.py`` — sitemap, robots.txt, topic-page JSON
 
 API keys: macOS Keychain (service ``ask-the-early-church``) via ``load_secrets``.
     Non-sensitive config: ``~/.secrets/ask-the-early-church.env``.
@@ -1426,6 +1438,89 @@ def library():
         })
 
     return jsonify({"sections": sections})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI SYNTHESIS — NOT LIVE. This block is commented out on purpose.
+#
+# There is no /api/synthesize route in the running app. The implementation
+# below is the last working version (commit ``ac6ec5e^``), parked here so the
+# prompt isn't lost in git history. It is NOT a flip-the-switch feature: the
+# code as written predates the budget/telemetry plumbing and will not run
+# unmodified.
+#
+# To re-enable, all of the following are required:
+#   1. Add ``Response`` to the flask import at the top of this file.
+#   2. Uncomment ``anthropic`` in requirements.txt and the import above.
+#   3. Add a ``@limiter.limit(...)`` decorator. Every other route has one;
+#      without it this is an unmetered paid endpoint on a public site.
+#   4. Gate on ``budget_remaining()`` and call ``record_spend(...)``, and add
+#      an entry to ``COST_PER_CALL_USD`` in telemetry.py — there is none today.
+#      NOTE: the budget cap is currently inert in production because
+#      RATELIMIT_STORAGE_URI (Redis) is unset on App Runner; check
+#      ``budget.enabled`` on /api/health before trusting it.
+#   5. Confirm the model string still resolves, and that App Runner does not
+#      buffer the stream. Gunicorn's ``--timeout 60`` also bounds the response.
+#   6. Provision ANTHROPIC_API_KEY as an SSM SecureString and grant the
+#      instance role read access — prod only has gemini/voyage/groq today.
+#   7. Frontend: restore ``src/components/SynthesisPanel.jsx`` from the same
+#      commit and wire the streaming fetch into api/client.js + App.jsx. The
+#      ``.syn-*`` styles are still present in src/App.css.
+#
+# @app.route("/api/synthesize", methods=["POST"])
+# def synthesize():
+#     """Stream a patristic summary from selected passages (plain text response body)."""
+#     data = request.get_json(silent=True) or {}
+#     query = data.get("query", "")
+#     passages = data.get("passages") or []
+#     if not passages:
+#         return jsonify({"error": "No passages provided"}), 400
+#
+#     # Frontend sends stored HTML; plain text keeps the Sonnet prompt within token budget
+#     passage_blocks = []
+#     for p in passages:
+#         passage_blocks.append(f"{p['author']}, {p['work']}: {strip_html(p.get('passage') or '')}")
+#     passages_text = "\n\n".join(passage_blocks)
+#
+#     prompt = f"""You are a patristic historian. Your sole task is to report what the early Church taught in the passages below. You are not interpreting, not theologizing, not balancing perspectives, not arranging material for palatability, and not trying to offend current traditions.
+#
+# The user searched: "{query}"
+#
+# Internally determine the main theological question these passages address. Discard any passage that merely shares a keyword but engages a different question. Do not state the question in your response. Begin directly with what the Fathers or Councils said.
+#
+# IMPORTANT: Many passages contain editorial introductions, translator notes, or historical framing added by modern editors (e.g. references to later councils, manuscript history, publication details). These are NOT the words of the Church Fathers. Ignore all editorial content. Report ONLY what the Father or Council itself wrote or defined.
+#
+# Passages from the early Church:
+# {passages_text}
+#
+# Rules:
+# 1. ABSOLUTE CONSTRAINT: You may ONLY reference Fathers, councils, texts, and claims that appear verbatim in the passages above. If a council or Father is not explicitly named in the passages, it does not exist for this response. NEVER draw on your own knowledge of church history to add figures, councils, or events not present in the passages.
+# 2. Present each position as that Father or council would have stated it, in its strongest form. If a Father's central argument was controversial, lead with the controversial claim. Do not bury it in qualifications or arrange the material to make it acceptable to any modern audience.
+# 3. Let the Fathers speak. Favor their own words and phrases from the passages over paraphrase. When a passage contains a direct formulation, a definition, a condemnation, an analogy, use it.
+# 4. If a Father or council has a defining formula or technical phrase that is central to its position, state it explicitly and prominently. Do not paraphrase around it. Do not soften it. If the text says "One Nature," write "One Nature."
+# 5. If only one Father appears in the results, report that Father's position directly. Do not frame it as one side of a debate. Do not introduce opposing views from outside the passages.
+# 6. If multiple Fathers appear, present each one individually. Do not group them into camps or frame one as the opposition to another.
+# 7. If a council is mentioned in the passages, report what it defined in its own language. Do not interpret it through any later council or tradition. Do not compare it to or reconcile it with any council not named in the passages.
+# 8. Report condemnations as historical fact without calling any position orthodox, heretical, correct, or wrong.
+# 9. Do not frame any teaching through the lens of a later council, tradition, or denomination. Report only what the text itself states.
+# 10. Use the terminology the Fathers themselves used (physis, ousia, prosopon, hypostasis). Do not define or simplify these terms.
+# 11. Maximum of 3 and half short paragraphs. Third person. No disclaimers. No meta-commentary.
+# 12. Do not use em dashes. Use commas, periods, or semicolons instead."""
+#
+#     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+#
+#     # Generator yields chunks for Flask streaming (not JSON)
+#     def generate():
+#         with client.messages.stream(
+#             model="claude-sonnet-4-6",
+#             max_tokens=1024,
+#             messages=[{"role": "user", "content": prompt}]
+#         ) as stream:
+#             for text in stream.text_stream:
+#                 yield text
+#
+#     return Response(generate(), mimetype="text/plain")
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 @app.route("/api/authors/<int:author_id>/works")
