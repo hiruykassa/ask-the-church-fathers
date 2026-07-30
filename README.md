@@ -224,12 +224,14 @@ MONTHLY_API_BUDGET_USD=10           # set, but has no effect without Redis below
 RATELIMIT_STORAGE_URI=redis://...   # NOT SET — budget cap currently fails open
 SENTRY_DSN=...                      # optional; unset = disabled
 
-# Local equivalent run (same Dockerfile, host-agnostic):
-cd backend
-bash prestart.sh && gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT --timeout 60 app:app
 ```
 
-`PRODUCTION=1` makes a missing `ALLOWED_ORIGIN` a startup error. `-w 1 --threads 8` keeps one shared copy of the embedding matrix in RAM while threads add concurrency for this I/O-bound workload (each search waits on the Gemini/Voyage APIs) without the per-worker N× memory more workers cost. **Redis is required to enforce `MONTHLY_API_BUDGET_USD`** (see [API cost guard](#search)) and is not yet wired up on App Runner — until it is, spend tracking has nowhere to persist across requests and the cap fails open. Monitor rate-limit 429s and Voyage/Gemini/Groq usage in their dashboards in the meantime.
+The container runs `prestart.sh && gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT --timeout 60 app:app`. A single worker keeps exactly one copy of the embedding matrix in RAM; adding workers multiplies that memory by N and also splits the in-memory rate-limit counters. The 8 threads inside that worker are what provide concurrency: a search spends most of its wall time blocked on Gemini/Voyage HTTP and on SQLite, all of which release the GIL, so without threads one slow search serializes every other visitor. Threads share the matrix, so this costs no extra memory. (`--threads > 1` switches gunicorn from the `sync` worker to `gthread`; the DB layer opens a connection per request under WAL, and the TTL caches are lock-guarded, so this is safe.) Reproduce the production process locally with the same Dockerfile:
+
+```bash
+cd backend
+bash prestart.sh && gunicorn -w 1 --threads 8 -b 0.0.0.0:5001 --timeout 60 app:app
+```
 
 The instance role backing App Runner (`AppRunnerS3ReadInstanceRole`) holds exactly three scoped permissions: `s3:GetObject` on the one `database.db` key, `ssm:GetParameters` on the three parameters above, and `kms:Decrypt` (scoped via a `kms:ViaService` condition to SSM in `us-east-2`) needed to actually decrypt those `SecureString` values.
 

@@ -58,7 +58,7 @@ RUN pip install -r requirements.txt          # ...so this layer caches across co
 COPY . .                                     # then the code
 RUN useradd ... aetc && chown ... && USER aetc   # drop root privileges
 EXPOSE 5001
-CMD ["sh", "-c", "./prestart.sh && exec gunicorn -w 1 -b 0.0.0.0:${PORT:-5001} --timeout 60 app:app"]
+CMD ["sh", "-c", "./prestart.sh && exec gunicorn -w 1 --threads 8 -b 0.0.0.0:${PORT:-5001} --timeout 60 app:app"]
 ```
 
 Four things that signal production maturity:
@@ -92,7 +92,7 @@ Small script, lots of good instincts:
 
 The portability payoff (noted in the comments): `DB_URL` now points at an **S3 bucket** (`s3://…/database.db`); it used to point at Cloudflare R2. Because R2 is S3-compatible and `prestart.sh` branches on `s3://` vs `https://`, the migration was a one-line env-var change — the script itself didn't change. That's the whole reason the same image "just runs" on AWS.
 
-The `Dockerfile` `CMD` (Module 1/4) wires it as the start command — `./prestart.sh && gunicorn -w 1 ... app:app` — and App Runner is configured with health-check path `/api/health` and its secrets injected from SSM. (The legacy `render.yaml` did the equivalent with `healthCheckPath: /api/health` and `sync: false` env vars.)
+The `Dockerfile` `CMD` (Module 1/4) wires it as the start command — `./prestart.sh && gunicorn -w 1 --threads 8 ... app:app` — and App Runner is configured with health-check path `/api/health` and its secrets injected from SSM. (The legacy `render.yaml` did the equivalent with `healthCheckPath: /api/health` and `sync: false` env vars.)
 
 ## 5. Continuous Integration — `.github/workflows/ci.yml`
 

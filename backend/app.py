@@ -1508,5 +1508,8 @@ if __name__ == "__main__":
     # DEV ONLY — use gunicorn in production (see backend/.env.example):
     #   PRODUCTION=1 ALLOWED_ORIGIN=https://your-frontend-domain.com \
     #   RATELIMIT_STORAGE_URI=redis://localhost:6379 \
-    #   gunicorn -w 4 -b 0.0.0.0:5001 app:app
+    #   gunicorn -w 1 --threads 8 -b 0.0.0.0:5001 --timeout 60 app:app
+    # Keep -w 1: every worker holds its own copy of the embedding matrix, so
+    # -w N multiplies RAM by N and splits the in-memory rate-limit counters.
+    # Concurrency comes from --threads, matching the Dockerfile CMD.
     app.run(debug=False, port=5001)
