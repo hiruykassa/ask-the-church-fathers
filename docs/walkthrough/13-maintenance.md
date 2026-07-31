@@ -51,6 +51,8 @@ SITE_URL=https://asktheearlychurch.com python3 tools/generate_seo.py   # 4. site
 
 Step 4 is the one most easily forgotten, and its failure mode is invisible locally: the sitemap drifts ahead of the corpus and Google accumulates soft-404s on `/read/:id` URLs for works that no longer exist. This actually happened — the sitemap sat at 2,997 URLs against a 2,858-work corpus for seven weeks. Re-running the generator dropped exactly 127 dead URLs.
 
+Since 2026-07-31 there is a **second** derived artifact with the same contract: `tools/generate_static_meta.py` bakes work titles, author names, and canonicals into 3,121 per-route `dist/**/index.html` files. A corpus change stales those exactly as it stales the sitemap, and a stale title in a `<title>` tag is more visible than a stale sitemap entry — it is what Google shows in the results page. Don't run `generate_seo.py` alone after a corpus change; run `npm run build:deploy`, which sequences sitemap → Vite build → static meta correctly, and then deploy the frontend. The sitemap is now 10,984 URLs.
+
 > **Historical trap, now fixed.** Until recently `tools/corpus/fts.py` defined `rebuild_fts()` but had **no `if __name__ == "__main__"` block**. Step 1 above — documented in five separate places — ran, printed nothing, and exited 0 without touching the index. If you find old notes or a shell history where `fts.py` "worked," that's what was happening. It has a real CLI now.
 
 ### Which FTS rebuild actually ran?

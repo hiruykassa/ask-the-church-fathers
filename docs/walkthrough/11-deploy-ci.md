@@ -13,20 +13,28 @@ Files: `tools/generate_seo.py`, `backend/Dockerfile`, `backend/prestart.sh`, `.g
 ```mermaid
 flowchart TD
   dev["git push to main"] --> ci["GitHub Actions CI<br/>(lint, build, smoke tests)"]
+  ci -->|"on pass, path-scoped"| dbe["deploy-backend<br/>(OIDC role)"]
+  ci -->|"on pass, path-scoped"| dfe["deploy-frontend<br/>(OIDC role)"]
+  dbe --> ecr[("ECR: Docker image")]
+  dbe -->|"start-deployment"| ar["App Runner: Flask container"]
+  dfe -->|"sync + invalidate"| s3f[("S3 (private): built frontend")]
   browser["Browser"] --> cf["CloudFront (CDN + HTTPS)"]
-  cf -->|"OAC-signed reads"| s3f[("S3 (private): built frontend")]
-  browser -->|"VITE_API_URL fetch /api/*"| ar["App Runner: Flask container"]
+  cf -->|"OAC-signed reads"| s3f
+  cf -->|"viewer-request fn:<br/>/read/852 → /read/852/index.html"| s3f
+  browser -->|"VITE_API_URL fetch /api/*"| ar
   ar -->|"prestart.sh fetches on boot"| s3db[("S3: database.db")]
-  ecr[("ECR: Docker image")] --> ar
+  ecr --> ar
 ```
 
 Two independent deploys from one repo: the **frontend** (static files on **S3**, served through **CloudFront**) and the **backend** (a Docker container on **App Runner**). They're glued by `VITE_API_URL` (frontend knows the API's address) and CORS (API allows the frontend's origin, Module 4).
 
-> **History.** This app originally ran on **Netlify** (frontend) + **Render** (backend) + **Cloudflare R2** (database), and migrated to AWS in 2026. The deploy *shape* — two deploys from one repo, glued by `VITE_API_URL` + CORS — never changed; only the hosts did. That portability was designed in (see 11.3–11.4), which is the real lesson. The repo still contains the old `netlify.toml` / `render.yaml` as legacy artifacts, and this module points out the current AWS equivalent wherever they appear. **Section 9** is the full AWS deep-dive and migration gotchas.
+> **History.** This app originally ran on **Netlify** (frontend) + **Render** (backend) + **Cloudflare R2** (database), and migrated to AWS in 2026. The deploy *shape* — two deploys from one repo, glued by `VITE_API_URL` + CORS — never changed; only the hosts did. That portability was designed in (see 11.3–11.4), which is the real lesson. The old `netlify.toml` and `render.yaml` were **deleted** in `0a9b06e` (see the note above the diagram) — this module points out the current AWS equivalent wherever they appear. **Section 9** is the full AWS deep-dive and migration gotchas.
 
 ## 2. The frontend build — Vite
 
-`npm run build` (`vite build`) compiles the React source into a `dist/` folder of optimized static assets: minified JS bundles, CSS, hashed filenames for cache-busting, and the processed `index.html`. Static files are cheap and fast to serve from a CDN — there's no Node server running in production, just files. Everything in `public/` is copied verbatim into `dist/` (icons, `sitemap.xml`, `robots.txt`, `_headers`, `_redirects`, `theme-init.js`).
+`npm run build` (`vite build`) compiles the React source into a `dist/` folder of optimized static assets: minified JS bundles, CSS, hashed filenames for cache-busting, and the processed `index.html`. Static files are cheap and fast to serve from a CDN — there's no Node server running in production, just files. Everything in `public/` is copied verbatim into `dist/` (icons, `og-image.png`, `sitemap.xml`, `robots.txt`, `seo/*.json`, `site.webmanifest`, `theme-init.js`). The Netlify-era `_headers` and `_redirects` are gone — CloudFront does both jobs now.
+
+Production builds use `npm run build:deploy`, which wraps `vite build` between two generator steps: `generate:seo` writes the sitemap and topic JSON *before* the build so they land in `dist/`, and `generate:meta` runs *after* it, reading the freshly built `dist/index.html` as a template so the content-hashed asset names are always correct.
 
 On AWS, the build is run locally with the real backend URL and the output synced to S3:
 
@@ -96,7 +104,7 @@ The `Dockerfile` `CMD` (Module 1/4) wires it as the start command — `./prestar
 
 ## 5. Continuous Integration — `.github/workflows/ci.yml`
 
-CI runs on every push to `main` and every pull request, gating bad code before it ships. Two parallel jobs:
+CI runs on every push to `main` and every pull request, gating bad code before it ships. Two parallel test jobs — plus, since 2026-07-31, three deploy jobs that run only on push to `main` and only after both test jobs pass (§8, and `docs/github-actions-deploy.md`).
 
 **`frontend` job** (`:50`):
 ```yaml
@@ -114,7 +122,9 @@ This catches lint errors and build breaks (a bad import, a syntax error) before 
 - pytest -q  (if database.db present)
 ```
 
-Notice the **graceful skip** (`:30`, `:44`): if the `DB_URL` secret isn't configured (e.g. on a fork's PR), it logs and skips the DB-dependent tests instead of failing the build. Tests degrade rather than break — the same philosophy as the runtime.
+Notice the **graceful skip**: if the `DB_URL` secret isn't configured (e.g. on a fork's PR), it logs and skips the DB-dependent tests instead of failing the build. Tests degrade rather than break — the same philosophy as the runtime.
+
+> **The graceful skip hid a real problem.** `prestart.sh` downloads the database with boto3 using *ambient AWS credentials*, and until 2026-07-31 the workflow had none. So even with `DB_URL` set the fetch could not succeed, `database.db` was never present, and the smoke-test step took its `else` branch and exited 0. **Every green `backend` check meant "nothing ran"** — visible in hindsight from the job finishing in ~24 seconds, which is far too fast to download 633 MB and load 52,869 embeddings. The job now assumes the OIDC deploy role so the fetch works, emits a `::warning::` rather than passing silently when it can't, and falls back to running the pure-Python unit tests. A skip that is indistinguishable from a pass is worse than a failure.
 
 `cache: pip` / `cache: npm` speed up CI by caching dependencies between runs. Running CI in **parallel jobs** (frontend and backend at once) keeps the feedback loop short.
 
@@ -146,7 +156,7 @@ They use Flask's **`test_client()`** (`:24`) — an in-process fake HTTP client,
 
 A single-page app is mostly an empty HTML shell that JavaScript fills in. Search-engine crawlers see that near-empty shell and have little to index — the search box itself isn't crawlable. So this script generates **crawlable assets from `database.db`** (no API keys needed — it reads the DB directly):
 
-- **`public/sitemap.xml`** — ~2,870 URLs (every `/read/:workId` work, topic pages, static pages) so Google can discover all the content.
+- **`public/sitemap.xml`** — 10,984 URLs so Google can discover all the content: every `/read/:workId` work (2,858), every `/author/:id` (247), scripture books, chapters, and the 6,585 verse pages carrying three or more commentaries, plus topic, browse, and static pages. Rewritten 2026-07-31 in `bee41aa`; it previously held 2,870 URLs and omitted the author and scripture families entirely. That commit also dropped `lastmod`, `changefreq`, and `priority` — every URL had been stamped with `date.today()` on each run, marking 4th-century texts as modified this morning, and Google's trust in `lastmod` is all-or-nothing.
 - **`public/seo/topics.json`** — content for the `/topics/:slug` landing pages: real passage excerpts per father/subject (the `TOPICS` list at `:40`). These pages give Google *actual patristic text* to index instead of an empty shell — that's what can rank for "what did Augustine teach about grace."
 - **`public/seo/site.json`** — site metadata for JSON-LD structured data (`SeoJsonLd.jsx` injects a `SearchAction` so Google can show a search box for the site).
 
@@ -154,14 +164,18 @@ Combined with the per-route `usePageMeta` (Module 8) that sets `<title>`/descrip
 
 ## 8. The full path from commit to live (on AWS)
 
-Unlike the old Netlify/Render setup (which auto-deployed on `git push`), the AWS deploy is a deliberate manual push — two independent tracks:
+For most of the AWS era this was a deliberate manual push. As of 2026-07-31 the same steps run from GitHub Actions on push to `main` — the workflow is in `.github/workflows/ci.yml`, the one-time OIDC setup in `docs/github-actions-deploy.md`. Understanding the manual sequence still matters, because that is exactly what the workflow automates and what you fall back to when it breaks:
 
-1. `git push origin main` → **CI** lints, builds the frontend, runs backend smoke tests (the gate; it does not deploy).
-2. **Backend:** `docker build --platform linux/amd64 --provenance=false --sbom=false` → tag → `docker push` to **ECR** → `aws apprunner update-service` (or a console deploy) pulls the new image. App Runner runs `prestart.sh` (fetch DB from S3) then boots gunicorn, and gates the deploy on `/api/health`.
-3. **Frontend:** `VITE_API_URL=… npm run build` → `aws s3 sync dist/ s3://…frontend… --delete` → `aws cloudfront create-invalidation` so the CDN serves the new files.
+1. `git push origin main` → **CI** lints, builds the frontend, runs backend smoke tests. This is the gate: the deploy jobs `need` it.
+2. **Backend:** `docker build --platform linux/amd64 --provenance=false --sbom=false` → tag with both the commit SHA and `:latest` → `docker push` to **ECR** → `aws apprunner start-deployment`. App Runner runs `prestart.sh` (fetch DB from S3) then boots gunicorn.
+3. **Frontend:** `VITE_API_URL=… npm run build:deploy` (sitemap → Vite build → 3,121 static-meta files) → `aws s3 sync dist/ s3://…frontend… --delete` → `aws cloudfront create-invalidation`.
 4. Browser loads the static frontend from **CloudFront** (over HTTPS via ACM); the frontend calls the **App Runner** API; the API serves from the in-RAM embeddings + SQLite.
 
 The `--platform`/`--provenance` flags in step 2 aren't optional decoration — they're the fixes for gotchas #2 and #3 in Section 9.
+
+> **`start-deployment`, not `update-service`.** An earlier version of this section said `update-service` pulls the new image. It does not — it applies configuration only, and will not re-pull an unchanged `:latest` tag. On 2026-07-31 that reported a successful deployment while the old code kept serving; it was caught only because response headers the new build should have emitted were absent. Ship code with `start-deployment`, or pin `ImageIdentifier` to an explicit digest.
+>
+> Note also that **verifying `/api/health` returns 200 is not enough** — an instance still running the old image answers it perfectly well. Check for something only the new build produces.
 
 ## 9. The AWS migration — same shapes, managed services
 

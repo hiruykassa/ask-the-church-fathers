@@ -62,8 +62,8 @@ python -m pytest -q    # smoke tests
 ## Working rules
 
 - **Don't touch the corpus casually.** `backend/database.db` is ~633 MB, gitignored, and lives in S3. There are no DB triggers, so any edit to `passages` leaves `passages_fts`, `scripture_index`, and `embeddings` stale — rebuild per [`tools/corpus/README.md`](tools/corpus/README.md). Re-embedding costs real money.
-- **Never regress a security control.** Rate limits, CSP, CORS, the 500-char query cap, `prepare_fts_query`, and `sanitizePassageHtml` are load-bearing; see the Security table in the README before changing them.
+- **Never regress a security control.** Rate limits, CSP, CORS, the 500-char query cap, `prepare_fts_query`, and `sanitizePassageHtml` are load-bearing; read [`docs/security.md`](docs/security.md) before changing any of them.
 - **Search must degrade, never 500.** Any Voyage/Gemini/Groq failure falls back to FTS keyword search.
 - **`App.css` is authoritative** for styling. Tailwind v4 runs with preflight skipped, so it contributes utilities and theme layers only.
 - **Known gap:** `RATELIMIT_STORAGE_URI` (Redis) is unset on App Runner, so `MONTHLY_API_BUDGET_USD` fails open. Check `budget.enabled` on `/api/health`.
-- Update the README and `docs/walkthrough/` when a change makes them wrong.
+- Update the README, `docs/`, and `docs/walkthrough/` when a change makes them wrong. The README is deliberately short — it links out rather than explaining. Deep detail belongs in `docs/architecture.md`, `docs/deploying.md`, `docs/security.md`, `docs/api-reference.md`, `docs/seo.md`, or `docs/corpus.md`. Don't grow the README back.
