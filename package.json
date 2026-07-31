@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "generate:seo": "python3 tools/generate_seo.py",
+    "generate:meta": "python3 tools/generate_static_meta.py",
     "lint": "eslint .",
     "build": "vite build",
+    "build:deploy": "npm run generate:seo && npm run build && npm run generate:meta",
     "preview": "vite preview"
   },
   "dependencies": {

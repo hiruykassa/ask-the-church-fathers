@@ -5,7 +5,21 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist', 'node_modules', 'backend', 'public/theme-init.js'] },
+  // tools/cloudfront-rewrite-function.js is edge-runtime source, not
+  // application code: CloudFront Functions run on their own ES5.1-era runtime
+  // and invoke a global `handler` that nothing imports, so the browser globals
+  // and module rules configured below do not apply and `no-unused-vars` would
+  // flag the entry point.
+  {
+    ignores: [
+      'dist',
+      'node_modules',
+      'backend',
+      'infra',
+      'tools/cloudfront-rewrite-function.js',
+      'public/theme-init.js',
+    ],
+  },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
