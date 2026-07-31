@@ -1,7 +1,13 @@
 # Per-route static meta — design note
 
-**Status:** phase 1 implemented 2026-07-31 — `tools/generate_static_meta.py` +
-`infra/cloudfront-rewrite-function.js`. Phase 2 (body content) not started.
+**Status:** phase 1 shipped and **LIVE** 2026-07-31 (`2fe5734`) —
+`tools/generate_static_meta.py` + `tools/cloudfront-rewrite-function.js`.
+Deployed 2026-07-31: `build:deploy` wrote 3,121 route files and `aws s3 sync`
+pushed them, and the CloudFront function `aetc-directory-index` is published
+and attached to the default cache behaviour as a viewer-request function
+(distribution `Deployed`). Verified live: the raw HTML at `/read/852` returns
+its own canonical (`.../read/852`) and title rather than the homepage, and
+`/author/246` carries per-page JSON-LD. Phase 2 (body content) not started.
 **Date:** 2026-07-30, updated 2026-07-31
 
 ## What shipped, and where phase 1 diverged from this plan
