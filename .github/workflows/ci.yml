@@ -4,11 +4,33 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_backend:
+        description: 'Force a backend deploy even if backend/ did not change'
+        type: boolean
+        default: false
+      deploy_frontend:
+        description: 'Force a frontend deploy even if frontend files did not change'
+        type: boolean
+        default: false
+
+# Only one deploy at a time. Two concurrent syncs with --delete against the
+# same bucket can interleave and delete each other's files.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   backend:
     name: Backend smoke tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # OIDC, so prestart.sh can pull database.db from S3
     steps:
       - uses: actions/checkout@v4
 
@@ -22,6 +44,27 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt
 
+      # Needs real AWS credentials: prestart.sh downloads via boto3 with
+      # ambient credentials, so without this the fetch below cannot succeed and
+      # the smoke tests silently skip.
+      #
+      # The `secrets` context is not available in `if:` expressions, so the ARN
+      # is copied into `env` first and the guard reads that instead. The guard
+      # exists so pull requests from forks — which get no secrets — still run
+      # the unit tests instead of erroring on an empty role.
+      - name: Check for AWS role
+        id: awsrole
+        env:
+          ROLE: ${{ secrets.AWS_ROLE_ARN }}
+        run: echo "present=${ROLE:+yes}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        if: steps.awsrole.outputs.present == 'yes'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+
       - name: Fetch test database
         working-directory: backend
         env:
@@ -30,7 +73,7 @@ jobs:
           if [ -n "$DB_URL" ]; then
             bash prestart.sh
           else
-            echo "[ci] DB_URL secret not set — skipping database fetch; smoke tests will be skipped."
+            echo "::warning::DB_URL secret not set — smoke tests will be SKIPPED, not run."
           fi
 
       - name: Run smoke tests
@@ -44,7 +87,8 @@ jobs:
           if [ -f database.db ]; then
             pytest -q
           else
-            echo "[ci] No database.db — skipping smoke tests (set DB_URL secret to enable)"
+            echo "::warning::No database.db — smoke tests SKIPPED. A green check here does not mean the backend was tested."
+            pytest -q tests/test_parsing.py
           fi
 
   frontend:
@@ -70,3 +114,239 @@ jobs:
           # origin is baked in at build time by the S3 + CloudFront deploy.
           VITE_API_URL: https://placeholder.invalid
         run: npm run build
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Deploy. Only on push to main, only after both test jobs pass.
+  #
+  # Deploys are path-scoped so a docs-only commit does not trigger a ~135s
+  # backend restart or a 3,100-file S3 sync for nothing. Use the
+  # workflow_dispatch inputs to force either half.
+  # ───────────────────────────────────────────────────────────────────────────
+  changes:
+    name: Detect what changed
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # workflow_dispatch has no before/after SHAs, so both halves default to
+      # true there unless the operator narrowed it with the inputs.
+      - id: filter
+        env:
+          FORCE_BACKEND: ${{ inputs.deploy_backend }}
+          FORCE_FRONTEND: ${{ inputs.deploy_frontend }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "backend=${FORCE_BACKEND:-true}"   >> "$GITHUB_OUTPUT"
+            echo "frontend=${FORCE_FRONTEND:-true}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BEFORE="${{ github.event.before }}"
+          # First push to a branch, or a force-push that orphaned the old tip:
+          # fall back to deploying both rather than guessing.
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "backend=true"  >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+          echo "Changed files:"; echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -qE '^backend/'; then
+            echo "backend=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # tools/ matters because generate_seo.py and generate_static_meta.py
+          # both produce files that ship in dist/.
+          if echo "$CHANGED" | grep -qE '^(src/|public/|tools/|index\.html|package(-lock)?\.json|vite\.config\.js|eslint\.config\.js)'; then
+            echo "frontend=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy-backend:
+    name: Deploy backend to App Runner
+    needs: [backend, frontend, changes]
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      # provenance/sbom off: BuildKit's default attestation manifest produces an
+      # OCI image index that App Runner cannot launch. Runners are amd64, so no
+      # cross-build is needed, but the platform is pinned anyway to stay honest
+      # about what App Runner accepts.
+      - name: Build and push image
+        env:
+          IMAGE: ${{ secrets.ECR_REPOSITORY_URI }}
+        run: |
+          set -euo pipefail
+          docker build --platform linux/amd64 --provenance=false --sbom=false \
+            -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" backend/
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      # start-deployment, NOT update-service. update-service applies config and
+      # does not re-pull an unchanged tag — on 2026-07-31 that reported success
+      # while the old code kept serving. See README "Backend → App Runner".
+      - name: Roll the service
+        run: |
+          set -euo pipefail
+          OP=$(aws apprunner start-deployment \
+                 --service-arn "${{ secrets.APPRUNNER_SERVICE_ARN }}" \
+                 --query 'OperationId' --output text)
+          echo "Deployment operation: $OP"
+
+          for _ in $(seq 1 60); do
+            STATUS=$(aws apprunner describe-service \
+                       --service-arn "${{ secrets.APPRUNNER_SERVICE_ARN }}" \
+                       --query 'Service.Status' --output text)
+            echo "status=$STATUS"
+            case "$STATUS" in
+              RUNNING) exit 0 ;;
+              CREATE_FAILED|DELETE_FAILED|PAUSED) echo "::error::Service entered $STATUS"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::Service did not reach RUNNING within 15 minutes"; exit 1
+
+      # Boot is ~135s: 633 MB database download, then 52,869 embeddings into
+      # RAM. RUNNING can precede readiness, so verify the app itself answers.
+      - name: Verify health
+        run: |
+          set -euo pipefail
+          URL=$(aws apprunner describe-service \
+                  --service-arn "${{ secrets.APPRUNNER_SERVICE_ARN }}" \
+                  --query 'Service.ServiceUrl' --output text)
+          for _ in $(seq 1 40); do
+            BODY=$(curl -fsS "https://$URL/api/health" 2>/dev/null || true)
+            LOADED=$(echo "$BODY" | jq -r '.embeddings_loaded // 0')
+            if [ "$LOADED" -gt 0 ]; then
+              echo "$BODY" | jq .
+              echo "$BODY" | jq -e '.status == "ok"' > /dev/null
+              echo "$BODY" | jq -e '.providers | all(.)' > /dev/null \
+                || echo "::warning::Not all providers configured — search will degrade to FTS."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Backend never reported embeddings_loaded > 0"; exit 1
+
+  deploy-frontend:
+    name: Deploy frontend to S3 + CloudFront
+    needs: [backend, frontend, changes, deploy-backend]
+    # deploy-backend is skipped on frontend-only commits; always() keeps this
+    # job alive in that case while still failing if the backend deploy failed.
+    if: always() && needs.changes.outputs.frontend == 'true' && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-2' }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # build:deploy runs generate:seo and generate_static_meta.py, both of
+      # which read backend/database.db directly. Without it the sitemap and the
+      # 3,121 per-route files cannot be generated.
+      - name: Fetch corpus database
+        working-directory: backend
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+        run: bash prestart.sh
+
+      - name: Resolve API origin
+        id: api
+        run: |
+          URL=$(aws apprunner describe-service \
+                  --service-arn "${{ secrets.APPRUNNER_SERVICE_ARN }}" \
+                  --query 'Service.ServiceUrl' --output text)
+          echo "url=https://$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          VITE_API_URL: ${{ steps.api.outputs.url }}
+        run: npm run build:deploy
+
+      # Guard against shipping a half-built dist. og-image.png in particular has
+      # been destroyed once by a --delete sync.
+      - name: Verify build output
+        run: |
+          set -euo pipefail
+          test -f dist/index.html
+          test -f dist/og-image.png
+          file dist/og-image.png | grep -q 'PNG image data'
+          test -f dist/read/852/index.html
+          grep -q 'read/852' dist/read/852/index.html
+          COUNT=$(find dist -name index.html | wc -l)
+          echo "per-route files: $COUNT"
+          [ "$COUNT" -gt 3000 ] || { echo "::error::Only $COUNT index.html files — static meta did not generate"; exit 1; }
+          LOCS=$(grep -c '<loc>' dist/sitemap.xml)
+          echo "sitemap URLs: $LOCS"
+          [ "$LOCS" -gt 10000 ] || { echo "::error::Sitemap has only $LOCS URLs"; exit 1; }
+
+      - name: Sync to S3
+        run: |
+          aws s3 sync dist/ "s3://${{ secrets.S3_FRONTEND_BUCKET }}/" --delete
+
+      - name: Invalidate CloudFront
+        run: |
+          set -euo pipefail
+          ID=$(aws cloudfront create-invalidation \
+                 --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" \
+                 --paths '/*' --query 'Invalidation.Id' --output text)
+          aws cloudfront wait invalidation-completed \
+            --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" --id "$ID"
+
+      # A cache-busting query string is required: without it an edge may serve
+      # a stale object and the check passes or fails for the wrong reason.
+      - name: Verify live
+        run: |
+          set -euo pipefail
+          CB="?ci=${{ github.sha }}"
+          HTML=$(curl -fsS "https://asktheearlychurch.com/read/852$CB")
+          echo "$HTML" | grep -q 'rel="canonical" href="https://asktheearlychurch.com/read/852"' \
+            || { echo "::error::Per-route canonical missing — is the CloudFront function still attached?"; exit 1; }
+          echo "$HTML" | grep -q 'application/ld+json' \
+            || { echo "::error::JSON-LD missing from /read/852"; exit 1; }
+          curl -fsSI "https://asktheearlychurch.com/og-image.png$CB" | grep -qi 'content-type: image/png' \
+            || { echo "::error::og-image.png is not being served as a PNG"; exit 1; }
+          echo "Live verification passed."
