@@ -87,10 +87,10 @@ Small script, lots of good instincts:
 
 - **`set -euo pipefail`** — the bash equivalent of "don't continue after an error." `-e` exit on error, `-u` error on undefined variable, `-o pipefail` catch failures mid-pipe. Every serious bash script should start with this.
 - **Idempotent** — if the file already exists (a persistent disk, local dev), skip the download.
-- **Retries** — `curl --retry 3` handles transient network blips on boot.
 - **Validation** — checks the SQLite magic header (`SQLite format 3`) and deletes the file if it's not a real database, so the app never boots on a truncated/HTML-error-page download. Validate what you download before trusting it.
+- **Credentials stay ambient** — the download runs through `boto3`, which picks up App Runner's instance role. No keys in the URL, the env, or the image.
 
-The portability payoff (noted in the comments): `DB_URL` now points at an **S3 bucket** (`s3://…/database.db`); it used to point at Cloudflare R2. Because R2 is S3-compatible and `prestart.sh` branches on `s3://` vs `https://`, the migration was a one-line env-var change — the script itself didn't change. That's the whole reason the same image "just runs" on AWS.
+`DB_URL` points at an **S3 bucket** (`s3://…/database.db`); it used to point at Cloudflare R2. The script accepts **only** `s3://` URLs and exits non-zero on anything else, so the R2-to-S3 move was a one-line env-var change *and* a rewrite of the fetch from `curl` to `boto3` — the earlier claim in this file that the script "branches on `s3://` vs `https://`" and retries with `curl --retry 3` was wrong, and neither the branch nor `curl` exists in the code today. Read `backend/prestart.sh` if you need the current behaviour; it is 50 lines.
 
 The `Dockerfile` `CMD` (Module 1/4) wires it as the start command — `./prestart.sh && gunicorn -w 1 --threads 8 ... app:app` — and App Runner is configured with health-check path `/api/health` and its secrets injected from SSM. (The legacy `render.yaml` did the equivalent with `healthCheckPath: /api/health` and `sync: false` env vars.)
 
@@ -186,7 +186,7 @@ flowchart TD
 | Page security headers (`_headers`) | Netlify reads the file | CloudFront **Response Headers Policy** |
 | Backend host | Render | **App Runner** (runs the same `Dockerfile`) |
 | Backend image | Render builds from repo | Built locally, pushed to **ECR** (private Docker registry) |
-| `database.db` storage | Cloudflare R2 | **S3** (same `s3://`-vs-`https` branch in `prestart.sh`) |
+| `database.db` storage | Cloudflare R2 (fetched over HTTPS) | **S3** (`prestart.sh` accepts `s3://` only, downloading via `boto3` and the instance role) |
 | Secrets | Render env vars | **SSM Parameter Store** (SecureString) |
 | HTTPS certificate | Netlify auto | **ACM** (must be in `us-east-1` for CloudFront) |
 | Cloud credentials | — | **IAM roles** (no long-lived keys anywhere) |

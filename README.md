@@ -21,13 +21,14 @@ Production runs entirely on **AWS**: React frontend on **S3 + CloudFront**, Flas
 | Hybrid search (vector + FTS5) | **Live** — corpus fully embedded |
 | Scripture browser (verse-level catena) | **Live** — 49,757 verse-keyed passages across 76 books |
 | Security hardening (rate limits, CSP, CORS, sanitization) | **Live** — headers set by a CloudFront Response Headers Policy and by Flask on API responses |
-| SEO (sitemap, topic pages, meta) | **Live** — 2,870-URL sitemap submitted to Search Console; not yet ranking |
+| SEO (sitemap, topic pages, meta) | **Live** — 10,984-URL sitemap submitted to Search Console; per-route static `<head>` for non-JS crawlers; not yet ranking |
 | AWS migration | **Live** — cut over from Render + Netlify + R2 |
+| Error monitoring (Sentry) | **Code ready, not active** — `app.py` initializes Sentry only when `SENTRY_DSN` is set, and it is not set on App Runner; see [Known gaps](#known-gaps) |
 | Monthly API budget cap | **Not enforced** — needs Redis; see [Known gaps](#known-gaps) |
 | AI synthesis | **Not live** — parked as a commented block in `app.py`; see [Known gaps](#known-gaps) |
 | Automated deploys | **None** — deploys are manual; see [Deploying](#deploying) |
 
-Verified against the live `/api/health` and the local corpus on 2026-07-30. Deep detail follows: [Architecture](#architecture) · [How it works](#how-it-works) · [Security](#security) · [Deploying](#deploying) · [Known gaps](#known-gaps) · [Roadmap](#roadmap).
+Verified against the live `/api/health` and the local corpus on 2026-07-31. Deep detail follows: [Architecture](#architecture) · [How it works](#how-it-works) · [Security](#security) · [Deploying](#deploying) · [Known gaps](#known-gaps) · [Roadmap](#roadmap).
 
 ### Corpus snapshot
 
@@ -166,6 +167,8 @@ Author detection is LLM-first because the roster resolves fuzzy and partial name
 
 **Caching.** Queries are capped at **500 characters**. Repeats are served from in-memory TTL caches (default TTL 30 days) covering Voyage embeddings, Gemini/Groq parse results, FTS hits, and fused rankings — a query repeated within the month makes no external API calls. Tune with `SEARCH_CACHE_TTL_SEC` (`2592000`), `EMBED_CACHE_SIZE` (`10000`), `PARSE_CACHE_SIZE` (`50000`), `HYBRID_CACHE_SIZE` (`20000`), `FTS_CACHE_SIZE` (`20000`).
 
+**Response caching.** The corpus cannot change without a redeploy, so the ten reference endpoints (`/api/library`, `/api/authors`, `/api/categories`, the four `/api/scripture/*` routes, `/api/passages/:id`, `/api/works/:id`, `/api/authors/:id/works`) return `Cache-Control: public, max-age=3600, stale-while-revalidate=86400`. Tune with `STATIC_API_CACHE_SEC` (`3600`) and `STATIC_API_SWR_SEC` (`86400`); `max-age` is the ceiling on how long a corpus change takes to become visible after a redeploy. Endpoints are matched by view-function name, not URL, so a route rename cannot silently drop the header. `/api/search` is excluded on purpose — a transient Gemini or Voyage failure returns fewer results with a 200, and caching that would pin the degraded answer for an hour — as is `/api/health`, and no non-200 is ever cached.
+
 **API cost guard.** Spend is tracked against `MONTHLY_API_BUDGET_USD` (default `$10`). When the month's spend crosses it, search degrades to keyword-only FTS for the rest of the month and resets on the 1st. Roster parsing on Gemini 2.5 Flash-Lite costs ~$0.00015 per uncached search and Voyage embedding is negligible, so with caching the budget covers heavy use. **The cap only bites when `RATELIMIT_STORAGE_URI` (Redis) is set** — the counter has nowhere to live otherwise and fails *open*, leaving caching as the only limit. This is the authoritative statement of that caveat; other sections point here. Verify with `budget.enabled` on `/api/health` (currently `false` in production).
 
 A query shaped like a scripture reference (`Romans 8`, `Matthew 5:3`) is detected and answered directly from the verse-keyed index — a patristic catena for that verse — with no LLM or embedding call at all.
@@ -246,32 +249,50 @@ There is **no automated deploy pipeline**. CI verifies the code; shipping is man
 
 ### Backend → App Runner
 
+The ECR repository is **`ask-the-early-church-api`**, matching the `ImageIdentifier` the live service pulls. Pushing to `ask-the-early-church` (no suffix) creates a repo nothing reads from, and the subsequent `start-deployment` silently redeploys the *old* image.
+
 ```bash
 # 1. Build for x86_64 with attestations off (both are required — see gotchas)
 docker build --platform linux/amd64 --provenance=false --sbom=false \
-  -t <account-id>.dkr.ecr.us-east-2.amazonaws.com/ask-the-early-church:latest backend/
+  -t <account-id>.dkr.ecr.us-east-2.amazonaws.com/ask-the-early-church-api:latest backend/
 
 # 2. Push to ECR
 aws ecr get-login-password --region us-east-2 \
   | docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-2.amazonaws.com
-docker push <account-id>.dkr.ecr.us-east-2.amazonaws.com/ask-the-early-church:latest
+docker push <account-id>.dkr.ecr.us-east-2.amazonaws.com/ask-the-early-church-api:latest
 
 # 3. Roll the service, then confirm it came back healthy
 aws apprunner start-deployment --service-arn <service-arn> --region us-east-2
 curl -s https://<service>.us-east-2.awsapprunner.com/api/health | jq
 ```
 
-`/api/health` should report `status: ok`, `embeddings_loaded: 52869`, and all three providers `true`. Boot takes ~60-90s: the 633 MB database downloads from S3, then the embedding matrix loads into RAM.
+`/api/health` should report `status: ok`, `embeddings_loaded: 52869`, and all three providers `true`. **Boot takes ~135 seconds**, measured on a 2026-07-31 config deploy: the 633 MB database downloads from S3, then 52,869 embeddings load into RAM before gunicorn answers anything.
+
+Because the image tag is `:latest` and `AutoDeploymentsEnabled` is `false`, any `update-service` call also re-pulls the image. So an env-var change and a code change can share a single deployment — push the image *first*, then call `update-service`, and you pay one ~135s restart instead of two.
 
 ### Frontend → S3 + CloudFront
 
 ```bash
-# VITE_API_URL is baked into the bundle at build time — a wrong value ships broken
-VITE_API_URL=https://<service>.us-east-2.awsapprunner.com npm run build
+# VITE_API_URL is baked into the bundle at build time — a wrong value ships broken.
+# build:deploy runs generate:seo → vite build → generate:meta, in that order.
+VITE_API_URL=https://<service>.us-east-2.awsapprunner.com npm run build:deploy
 
 aws s3 sync dist/ s3://ask-the-early-church-frontend-<account-id>/ --delete
 aws cloudfront create-invalidation --distribution-id <dist-id> --paths '/*'
 ```
+
+`generate:meta` needs `backend/database.db` present locally (633 MB, gitignored). If it is missing the script exits non-zero rather than shipping a build with homepage meta on every route.
+
+The sync now moves ~3,100 extra small files, so expect minutes rather than seconds on the first run; subsequent syncs only transfer what changed.
+
+**Verify after every frontend deploy** — a `--delete` sync destroyed `og-image.png` once:
+
+```bash
+curl -sI https://asktheearlychurch.com/og-image.png | grep -i content-type   # must be image/png
+curl -s  https://asktheearlychurch.com/read/852 | grep -E 'canonical|<title>' # must be the work, not the homepage
+```
+
+The second check is the one that tells you the CloudFront function is still attached. If it returns the homepage title, the static files deployed but nothing is routing to them.
 
 ### Changing AWS resource config
 
@@ -429,19 +450,35 @@ A search box is not indexable on its own. The repo ships crawlable assets genera
 
 | Asset | Purpose |
 |-------|---------|
-| `public/sitemap.xml` | 2,870 URLs — 2,858 `/read/:workId` + 8 topic pages + 4 static routes |
+| `public/sitemap.xml` | 10,984 URLs — works, authors, scripture books/chapters/verses, topics, browse, static routes |
 | `public/robots.txt` | Points crawlers at the sitemap |
 | `public/seo/topics.json` | Content for `/topics/:slug` landing pages |
-| Per-route `<title>` / meta + SearchAction JSON-LD | Home, read, browse, author, scripture, about, contact, topics |
+| `dist/<route>/index.html` | Per-route **static** `<head>` — title, description, canonical, `og:*`, `twitter:*`, and per-page JSON-LD. Built by `tools/generate_static_meta.py` |
+| Client-side `usePageMeta` + `SeoJsonLd` | The same values, reapplied after React mounts. The static files are what non-JS consumers see |
+
+### Why the static files exist
+
+`usePageMeta` only corrects the `<head>` *after* React mounts. Facebook, X, LinkedIn, Slack, Discord, iMessage, and WhatsApp do not execute JavaScript, so before this every link to any page previewed as the generic homepage card — a shared link to *On the Incarnation* was indistinguishable from a shared link to the homepage. Bing and most AI crawlers render JS far less reliably than Google.
+
+`tools/generate_static_meta.py` reads `dist/index.html` *after* `vite build` (so the content-hashed asset names are always right, and there is no second template to drift) and writes 3,121 per-route files. The values are computed from the same SQLite tables the client reads, and each builder cites the `usePageMeta` call it mirrors — if they diverge, a crawler that *does* render JS sees the canonical change after hydration, which is worse than not doing this at all.
+
+Directory-index layout (`dist/read/852/index.html`) rather than extensionless keys, because `aws s3 sync` infers Content-Type from the extension and extensionless files upload as `binary/octet-stream`. Serving them needs the CloudFront viewer-request function in [`tools/cloudfront-rewrite-function.js`](tools/cloudfront-rewrite-function.js) — **without it attached, the files deploy but are never served**.
+
+JSON-LD types are chosen from `authors.category`, not assumed: 34 of the 247 attributed sources are councils, liturgies, or anonymous texts, so "Council of Chalcedon of 451" gets `Organization` and the *Didache* gets `CollectionPage` rather than a `Person` with a fabricated `deathDate`.
+
+`/scripture/*` is deliberately **not** generated. It is the largest route family in the sitemap, and pre-generating it would multiply deploy time and file count for pages whose value is the aggregated catena. Revisit once the generated routes show up in Search Console.
 
 Regenerate after corpus changes or a domain change:
 
 ```bash
-SITE_URL=https://your-domain.com npm run generate:seo   # default: https://asktheearlychurch.com
-VITE_SITE_URL=https://your-domain.com npm run build     # build must use the same domain
+SITE_URL=https://your-domain.com VITE_SITE_URL=https://your-domain.com \
+VITE_API_URL=https://<service>.us-east-2.awsapprunner.com \
+npm run build:deploy   # generate:seo → vite build → generate:meta, in that order
 ```
 
-The sitemap is submitted to Google Search Console. **The site does not yet rank for competitive queries** — that takes time and backlinks. Topic pages exist so Google sees real corpus text instead of an empty SPA shell.
+The order is load-bearing: `generate:seo` writes into `public/`, which `vite build` copies into `dist/`; `generate:meta` then rewrites `dist/index.html` per route and must run last.
+
+The sitemap is submitted to Google Search Console. **The site does not yet rank for competitive queries** — that takes months and backlinks. These assets are the technical prerequisites for discovery, not a growth mechanism.
 
 ---
 
@@ -452,6 +489,10 @@ An honest register. Each of these is a real, current defect or missing piece, no
 | Gap | Impact | Fix |
 |-----|--------|-----|
 | **No Redis** — `RATELIMIT_STORAGE_URI` unset on App Runner | `MONTHLY_API_BUDGET_USD` fails **open**: spend has no shared store, so the cap never triggers. Rate limits are per-process (harmless at one worker, wrong the moment a second is added). Live `/api/health` reports `budget.enabled: false` | ElastiCache or self-hosted Redis reachable from an App Runner VPC connector |
+| **API is not CDN-fronted** | `Cache-Control` now ships on the ten immutable reference endpoints, so repeat visits and reloads are served from the browser cache. But `infra/distribution-config.json` still has exactly one origin and no `/api/*` behaviour, so a *first* visit from every new visitor still reaches App Runner. A CloudFront behaviour would collapse that to one origin fetch per hour globally | Add an `/api/*` cache behaviour to the distribution, forwarding `Origin` and honouring origin `Cache-Control` |
+| **Cold start is ~135 seconds** | Measured on a config deploy: App Runner must pull the 633 MB `database.db` from S3 and load 52,869 embeddings into RAM before serving. With `MinSize: 1`, a traffic spike that peaks inside two minutes cannot be met by scaling out — the second instance is still booting | Raise `MinSize` to 2 (≈$20/month for the extra provisioned 4 GB), or reduce the boot cost |
+| **Sentry is wired but inactive** | `app.py:146` initializes Sentry only when `SENTRY_DSN` is set, and it is not set on App Runner. `sentry-sdk[flask]` *is* in `requirements.txt`, so this is one environment variable away, but today backend exceptions surface only in CloudWatch | Add `SENTRY_DSN` to the App Runner service's `RuntimeEnvironmentVariables` |
+| **Uptime monitoring covers the frontend only** | UptimeRobot watches the CloudFront distribution, which serves static files from S3 and stays up even when the API is completely down. A backend outage is invisible to monitoring | Add a monitor against the App Runner `/api/health` URL, with a keyword check on `"status": "ok"` |
 | **AI synthesis is not live** | There is no `/api/synthesize` route. The last working implementation (commit `ac6ec5e^`) is parked as a commented block in `app.py` with a re-enable checklist; the frontend `SynthesisPanel` is gone, though its `.syn-*` styles remain in `App.css`. Reviving it is a day of work, not an uncomment — and it needs the Redis gap closed first, or it ships as an uncapped paid endpoint | Restore per the checklist in `app.py`, after Redis |
 | **Old hosting not confirmed cancelled** | Render, Netlify, and R2 were disconnected from the repo and are out of the serving path, but billing cancellation has not been verified. Possible ongoing charges | Confirm in each provider's billing console and cancel |
 | **No automated deploys** | Every ship is a manual sequence of build, push, sync, invalidate. Easy to forget the CloudFront invalidation or to build with the wrong `VITE_API_URL` | A GitHub Actions deploy job gated on CI, using an OIDC role |
@@ -475,7 +516,12 @@ An honest register. Each of these is a real, current defect or missing piece, no
 - [x] Book reader, dark mode, saved passages (localStorage), skeleton loading, paginated results
 - [x] Security hardening — rate limits, CSP, CORS, query cap, HTML sanitization, parameterized SQL with an FTS-injection guard, path-traversal guard, non-root container, CloudFront Response Headers Policy
 - [x] ESLint flat config + backend smoke tests, both gated in GitHub Actions CI
-- [x] SEO — 2,870-URL sitemap submitted to Search Console, robots.txt, topic landing pages, dynamic meta, SearchAction JSON-LD
+- [x] SEO — 10,984-URL sitemap submitted to Search Console, robots.txt, topic landing pages, dynamic meta, SearchAction JSON-LD
+- [x] **Per-route static `<head>`** — 3,121 pre-generated route files with correct title, description, canonical, `og:*`, `twitter:*`, and per-page `Book` / `Person` / `Organization` / `Article` JSON-LD, served via a CloudFront viewer-request function. Social previews and non-JS crawlers now see the actual page instead of the homepage card
+- [x] **Reliability under load** — App Runner `MaxConcurrency` cut from 100 to 8 to match gunicorn's thread count (above that, requests queue behind 8 threads instead of triggering scale-out); health-check `Timeout` 2s→5s and `Interval` 5s→10s so a queued check cannot kill a merely busy instance; `/api/health` rate limit raised to 300/min so the health checker can never 429 itself into a rebuild loop
+- [x] **Response caching for immutable reference data** — `Cache-Control: public, max-age=3600, stale-while-revalidate=86400` on the ten endpoints that cannot change without a redeploy, with an explicit `Vary: Origin` because flask-cors omits it when only one origin is configured. `/api/search` and `/api/health` are deliberately excluded, and non-200s are never cached; all four negative cases are covered by smoke tests
+- [x] **S3 versioning + lifecycle** on both the database and frontend buckets, so an `aws s3 rm` or a `--delete` sync is recoverable rather than terminal. The frontend rule also reaps expired-object delete markers, which `--delete` plus content-hashed filenames would otherwise accumulate forever
+- [x] **Blank-screen fixes** — a render `ErrorBoundary`; a `try/catch` around the module-scope `localStorage` read in `main.jsx` that could throw before React ever mounted; and a catch-all `*` route, without which an unmatched URL rendered an entirely empty document under an HTTP 200
 - [x] Production launch on Render + Netlify + Cloudflare R2, then post-launch hardening: `ProxyFix` real-client rate limiting, API HSTS, session response cache, delayed spinner, uptime pinging, Sentry wired
 - [x] **AWS migration** — private S3 + CloudFront (ACM cert, custom domain, SPA routing fallback, Response Headers Policy) for the frontend; App Runner (ECR, x86_64) for the backend; `database.db` in S3 fetched by `prestart.sh` via the instance role; secrets in SSM Parameter Store with a scoped `kms:Decrypt` grant; DNS cut over at Cloudflare. Runbook and gotchas in [`docs/aws-migration-guide.md`](docs/aws-migration-guide.md)
 
@@ -485,6 +531,9 @@ Ordered by value per unit of effort. The first three are small, concrete, and fi
 
 - [x] **Add `--threads 8` to the Dockerfile** — one line; removes request serialization at zero memory cost
 - [x] **Fix the AI-synthesis claims** — `AboutPage.jsx` and the `app.py` docstring now match reality; the implementation is parked as a commented block with a re-enable checklist
+- [ ] **Put CloudFront in front of `/api/*`** — the origin now emits `Cache-Control`, so a cache behaviour would let the CDN honour it and collapse first-visit traffic too. Highest-leverage remaining reliability work
+- [ ] **Turn on Sentry** — set `SENTRY_DSN` on App Runner; the code path already exists and the dependency already ships
+- [ ] **Monitor the API, not just the CDN** — an UptimeRobot check against `/api/health` with a `"status": "ok"` keyword match
 - [ ] **Cancel Render / Netlify / R2** — confirm billing is actually stopped, not just disconnected
 - [ ] **Redis for App Runner** — makes `MONTHLY_API_BUDGET_USD` real and rate limits correct across processes
 - [ ] **Automate deploys** — a GitHub Actions job gated on CI, authenticating via OIDC, that builds, pushes, rolls the service, syncs S3, and invalidates CloudFront

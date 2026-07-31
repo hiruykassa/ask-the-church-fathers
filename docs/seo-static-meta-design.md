@@ -1,7 +1,32 @@
 # Per-route static meta — design note
 
-**Status:** proposal, nothing implemented
-**Date:** 2026-07-30
+**Status:** phase 1 implemented 2026-07-31 — `tools/generate_static_meta.py` +
+`infra/cloudfront-rewrite-function.js`. Phase 2 (body content) not started.
+**Date:** 2026-07-30, updated 2026-07-31
+
+## What shipped, and where phase 1 diverged from this plan
+
+Option B, as recommended. Three deliberate changes:
+
+1. **`/author/:id` is now included.** This note excluded it because those routes
+   were absent from the sitemap. Commit `bee41aa` added author and scripture
+   URLs, so the reason no longer holds. 247 author pages are generated.
+2. **`/scripture/*` is still excluded**, but for a new reason: it is now *in*
+   the sitemap, and it is the largest route family there. Generating it would
+   multiply file count and deploy time for pages whose value is the aggregate
+   catena. Revisit once the generated routes appear in Search Console.
+3. **JSON-LD types come from `authors.category`.** Emitting `Person` for all
+   247 attributed sources would have been wrong for 34 of them — councils,
+   liturgies, and anonymous texts like the *Didache*. Councils get
+   `Organization`, texts get `CollectionPage`, and only real people get
+   `birthDate` / `deathDate`.
+
+Totals: 3,121 files — 2,858 works, 247 authors, 9 topic pages, 5 browse pages,
+2 static pages. All canonicals verified unique; all JSON-LD verified parseable.
+
+Adjacent finding 1 below (`og-image.png` untracked) was fixed in `46bf757`.
+Finding 2 (site-wide-only JSON-LD) is closed by this work. Finding 3 (sitemap
+omits route families) was fixed in `bee41aa`.
 
 ## The problem, with evidence
 
