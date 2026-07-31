@@ -186,3 +186,70 @@ input[type="search"]::-webkit-search-results-decoration {
   -webkit-appearance: none;
   appearance: none;
 }
+
+/* ── Render-error fallback (src/components/ErrorBoundary.jsx) ──
+   Lives here rather than App.css because the boundary sits above every page
+   and must render even if a page stylesheet never loads. Uses only theme
+   variables that theme-init.js sets on <html> before React mounts. */
+.error-boundary {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg, #fdfcf8);
+}
+.error-boundary-inner {
+  max-width: 34rem;
+  text-align: center;
+}
+.error-boundary-mark {
+  display: block;
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--cross-gold, #a87c1f);
+  margin-bottom: 18px;
+}
+.error-boundary-title {
+  font-family: var(--font-display), serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-heading, #141210);
+  margin-bottom: 12px;
+}
+.error-boundary-text {
+  font-family: var(--font-prose), serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  color: var(--text-dim, #5c574e);
+  margin-bottom: 26px;
+}
+.error-boundary-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.error-boundary-btn {
+  font-family: var(--font-ui), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--btn-on-gold, #fffdf9);
+  background: var(--gold, #2a2724);
+  border: 1.5px solid var(--gold, #2a2724);
+  border-radius: var(--radius-pill, 999px);
+  padding: 11px 24px;
+  cursor: pointer;
+}
+.error-boundary-btn:hover {
+  background: var(--cross-gold, #4a463f);
+  border-color: var(--cross-gold, #4a463f);
+}
+.error-boundary-link {
+  font-family: var(--font-ui), sans-serif;
+  font-size: 0.82rem;
+  color: var(--link, #1a3a6b);
+}
