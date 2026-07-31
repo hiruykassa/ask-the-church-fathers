@@ -287,8 +287,19 @@ jobs:
       # prestart.sh downloads database.db via boto3; build:deploy's generate
       # scripts import backend/utils (from bs4 import BeautifulSoup), so the
       # runner needs both even though the frontend is otherwise Node-only.
+      #
+      # The version constraints are read out of backend/requirements.txt rather
+      # than repeated here, so this job cannot drift from the backend's pins
+      # while still avoiding a full install of Flask, numpy, and voyageai.
+      # If the grep matches nothing the step fails loudly rather than silently
+      # installing whatever is newest.
       - name: Install Python deps (boto3 for prestart, bs4 for build:deploy)
-        run: pip install boto3 beautifulsoup4
+        run: |
+          set -euo pipefail
+          SPECS=$(grep -E '^(boto3|beautifulsoup4)' backend/requirements.txt | sed 's/#.*//' | xargs)
+          test -n "$SPECS" || { echo "::error::No boto3/beautifulsoup4 pins found in backend/requirements.txt"; exit 1; }
+          echo "Installing: $SPECS"
+          pip install $SPECS
 
       # build:deploy runs generate:seo and generate_static_meta.py, both of
       # which read backend/database.db directly. Without it the sitemap and the
