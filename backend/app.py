@@ -818,6 +818,83 @@ def handle_server_error(exc):
     return jsonify({"error": "Internal server error"}), 500
 
 
+# ── Response caching for immutable reference data ────────────────────────────
+#
+# The corpus is static between deploys: works, authors, categories, scripture
+# structure, and passage text cannot change without a redeploy (database.db is
+# baked into S3 and fetched at boot). Yet until now every response carried no
+# Cache-Control at all, and CloudFront fronts only the S3 frontend bucket —
+# infra/distribution-config.json has a single origin and no /api/* behaviour —
+# so every visitor hit App Runner directly for the same unchanging JSON on
+# every page load.
+#
+# Endpoints listed by *function name* rather than URL so a route path change
+# cannot silently drop the caching, and an unknown endpoint simply gets no
+# header rather than the wrong one.
+#
+# /api/search is deliberately absent. Its result can legitimately degrade — a
+# transient Gemini or Voyage failure returns fewer results with a 200 — and
+# caching that would pin a degraded answer. src/api/client.js makes the same
+# call for the same reason. /api/health is absent because a cached health
+# check is not a health check.
+CACHEABLE_ENDPOINTS = frozenset({
+    "library",
+    "authors",
+    "categories",
+    "scripture_books",
+    "scripture_chapters",
+    "scripture_verses",
+    "scripture",
+    "get_passage",
+    "get_work",
+    "get_author_works",
+})
+
+def _positive_int_env(name: str, default: int) -> int:
+    """Read a positive integer from the environment, falling back on garbage.
+
+    A malformed override must not take the app down at import time — this runs
+    at module scope, so raising here would mean the container never boots.
+    """
+    try:
+        return max(0, int(os.getenv(name, default)))
+    except (TypeError, ValueError):
+        log.warning("%s is not an integer — using default %s", name, default)
+        return default
+
+
+# One hour, overridable. This is the ceiling on how long a corpus change takes
+# to become visible after a redeploy — the same staleness contract the sitemap
+# already has. stale-while-revalidate lets a browser paint instantly from a
+# slightly stale copy while it refreshes in the background, which is exactly
+# the behaviour we want during a traffic spike.
+STATIC_API_CACHE_SEC = _positive_int_env("STATIC_API_CACHE_SEC", 3600)
+STATIC_API_SWR_SEC = _positive_int_env("STATIC_API_SWR_SEC", 86400)
+
+
+@app.after_request
+def set_cache_headers(response):
+    # Only successful responses. Caching a 429 would lock a client out for the
+    # full max-age, and caching a 500 would pin an outage in place.
+    if response.status_code != 200:
+        return response
+    if request.endpoint not in CACHEABLE_ENDPOINTS:
+        return response
+
+    response.headers["Cache-Control"] = (
+        f"public, max-age={STATIC_API_CACHE_SEC}, "
+        f"stale-while-revalidate={STATIC_API_SWR_SEC}"
+    )
+    # Set explicitly rather than relying on flask-cors, which only adds this
+    # when more than one origin is configured (see flask_cors/core.py:220-231).
+    # Production has exactly one, so flask-cors stays silent — fine for a
+    # browser's private cache, wrong the moment a shared cache is in front of
+    # this, because the Access-Control-Allow-Origin value would be stored
+    # against a request that did not vary on Origin.
+    response.headers.add("Vary", "Origin")
+    return response
+
+
 @app.after_request
 def set_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -852,7 +929,17 @@ def set_security_headers(response):
 
 
 @app.route("/api/health")
-@limiter.limit("30 per minute", override_defaults=True)
+# 300/min, not the 30/min this used to be. The App Runner health checker polls
+# this endpoint on a fixed interval, and a 429 counts as a failed check — five
+# consecutive failures replace the instance, which costs a 633 MB S3 re-fetch
+# and ~135s of downtime. At the configured 10s interval the checker makes only
+# 6 req/min, but we cannot verify from here that it gets its own rate-limit
+# bucket rather than sharing one with real traffic, and dropping the interval
+# to 1s would put it at 60/min. The generous ceiling removes that whole class
+# of self-inflicted outage. Safe to loosen: the handler does no I/O (with no
+# Redis configured, budget_status() is pure in-memory) and returns no secrets —
+# only booleans for which providers are configured.
+@limiter.limit("300 per minute", override_defaults=True)
 def health():
     """Liveness check for deploy and local dev.
 

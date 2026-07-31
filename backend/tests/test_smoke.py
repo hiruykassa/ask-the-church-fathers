@@ -71,3 +71,42 @@ def test_security_headers_present(client):
 def test_passage_404_for_unknown_id(client):
     r = client.get("/api/passages/999999999")
     assert r.status_code == 404
+
+
+# ── Response caching for immutable reference data ─────────────────────────────
+# The corpus cannot change without a redeploy, so these responses are cacheable.
+# The interesting assertions are the *negative* ones: search and health must
+# never acquire a Cache-Control header, and non-200s must never be cached.
+
+def test_reference_endpoints_are_cacheable(client):
+    for path in ("/api/library", "/api/authors", "/api/categories",
+                 "/api/scripture/books"):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        cc = r.headers.get("Cache-Control", "")
+        assert "public" in cc, f"{path} missing public: {cc!r}"
+        assert "max-age=" in cc, f"{path} missing max-age: {cc!r}"
+        # A shared cache must not reuse one origin's CORS response for another.
+        assert "Origin" in r.headers.get("Vary", ""), path
+
+
+def test_search_is_never_cached(client):
+    # Search can degrade to fewer results on a transient provider failure and
+    # still return 200. Caching that would pin the degraded answer.
+    r = client.get("/api/search?q=")
+    assert r.status_code == 200
+    assert "Cache-Control" not in r.headers
+
+
+def test_health_is_never_cached(client):
+    # A cached health check is not a health check.
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    assert "Cache-Control" not in r.headers
+
+
+def test_error_responses_are_not_cached(client):
+    # Caching a 404 (or a 429) would pin the failure for the full max-age.
+    r = client.get("/api/passages/999999999")
+    assert r.status_code == 404
+    assert "Cache-Control" not in r.headers
