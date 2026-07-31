@@ -284,6 +284,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # prestart.sh downloads database.db via boto3; build:deploy's generate
+      # scripts import backend/utils (from bs4 import BeautifulSoup), so the
+      # runner needs both even though the frontend is otherwise Node-only.
+      - name: Install Python deps (boto3 for prestart, bs4 for build:deploy)
+        run: pip install boto3 beautifulsoup4
+
       # build:deploy runs generate:seo and generate_static_meta.py, both of
       # which read backend/database.db directly. Without it the sitemap and the
       # 3,121 per-route files cannot be generated.
