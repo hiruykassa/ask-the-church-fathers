@@ -32,7 +32,7 @@ Two behaviours are deliberate and should not be "simplified" later:
   always an immutable identifier to roll back to.
 - **Health is verified by polling `/api/health` until `embeddings_loaded > 0`,
   not by the service reaching `RUNNING`.** Boot is the slow part: 633 MB of
-  database from S3, then 52,869 embeddings into RAM.
+  database from S3, then 52,870 embeddings into RAM.
 
   Measured on the first backend deploy (2026-07-31): `OPERATION_IN_PROGRESS` →
   `RUNNING` took 2m53s, and `embeddings_loaded: 52869` was already true on the

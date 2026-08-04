@@ -82,6 +82,33 @@ To build the corpus from scratch, see [`docs/corpus.md`](docs/corpus.md).
 
 ---
 
+## Rebuilding the whole system
+
+The path from an empty AWS account and a clone of this repo to a running copy of production. Each step links to the doc that is authoritative for it — this section is the map, not the manual.
+
+1. **Run it locally** — [Quick start](#quick-start) above. Verify search works before touching production.
+2. **Configure environment** — [`backend/.env.example`](backend/.env.example) documents *every* variable the app reads (secrets by name only; real keys go in the Keychain locally or SSM in production). It is the single source of truth for configuration.
+3. **Build the corpus** — [`docs/corpus.md`](docs/corpus.md) and [`tools/corpus/README.md`](tools/corpus/README.md): import → migrate → prune post-Chalcedon → repair → FTS → embed, and the **rebuild-derived-tables-after-any-edit** rule. Output is the 633 MB `database.db`. Upload it to the S3 DB bucket below.
+4. **Provision AWS** — the inventory below. There is **no scripted/IaC provisioning**: `infra/` is gitignored and local-only, and [`docs/aws-migration-guide.md`](docs/aws-migration-guide.md) is a narrative of how the migration went, not a from-zero runbook. Provision these by hand, then wire the GitHub OIDC deploy role per [`docs/github-actions-deploy.md`](docs/github-actions-deploy.md).
+5. **Deploy** — [`docs/deploying.md`](docs/deploying.md) is the authoritative manual sequence (backend → ECR → App Runner; frontend → S3 → CloudFront), and what the CI in [`docs/github-actions-deploy.md`](docs/github-actions-deploy.md) automates on push to `main`.
+6. **Verify** — the health, `og-image.png`, and extensionless-routing checks in [`docs/deploying.md`](docs/deploying.md#frontend--s3--cloudfront). `/api/health` should report `embeddings_loaded: 52870` and all three providers `true`.
+
+### AWS resource inventory
+
+Everything production runs on, region **us-east-2**. Sizing and names come from the live service — see [`docs/deploying.md`](docs/deploying.md) for the exact commands and the traps each one has hit.
+
+| Resource | What it is |
+|----------|-----------|
+| **ECR** | Repository `ask-the-early-church-api` — the x86_64 backend image the service pulls (the suffix matters; see deploying.md) |
+| **App Runner** | Service on 2 vCPU / 4 GB, autoscaling config `aetc-api` (concurrency 8, min 1, max 25), health check `/api/health` (interval 10s, timeout 5s, healthy 1, unhealthy 5) |
+| **S3** | `ask-the-early-church-frontend-<account-id>` (static frontend) and a DB bucket holding `database.db`, fetched on boot by `prestart.sh` via `DB_URL=s3://…` |
+| **CloudFront** | One distribution over the frontend bucket, with the `tools/cloudfront-rewrite-function.js` viewer-request function attached to serve per-route static `<head>` at extensionless URLs |
+| **ACM + DNS** | TLS cert for `asktheearlychurch.com`; DNS on Cloudflare |
+| **SSM Parameter Store** | `SecureString` params for `VOYAGE`/`GEMINI`/`GROQ`/`ANTHROPIC` keys, referenced by ARN and decrypted by the instance role |
+| **IAM** | App Runner instance role (S3 read + SSM decrypt) and a GitHub OIDC deploy role for CI |
+
+---
+
 ## Documentation
 
 | Document | For |

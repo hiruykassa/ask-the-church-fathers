@@ -51,7 +51,7 @@ A free web library for reading and searching the pre-Chalcedon Church Fathers �
 ```bash
 npm run dev            # frontend, :5173 — proxies /api/* to Flask :5001
 npm run lint           # ESLint flat config; same check CI runs
-npm test               # 62 Vitest cases over src/utils + src/hooks; no API keys or DB needed
+npm test               # 87 Vitest cases: utils, hooks, api client, components; no API keys or DB needed
 npm run build          # → dist/ ; FAILS without VITE_API_URL (vite.config.js guard)
 npm run generate:seo   # regenerate sitemap + topic pages from database.db
 
@@ -62,7 +62,7 @@ python -m pytest -q    # smoke tests
 
 ## Working rules
 
-- **Don't touch the corpus casually.** `backend/database.db` is ~633 MB, gitignored, and lives in S3. There are no DB triggers, so any edit to `passages` leaves `passages_fts`, `scripture_index`, and `embeddings` stale — rebuild per [`tools/corpus/README.md`](tools/corpus/README.md). `import_github_writings.py` has **no single-work mode**: `run_etl` opens by deleting every row in `passages`, `works`, `authors`, and `embeddings`, so running it re-embeds all 52,869 passages at real cost. `backend/embed_passages.py` is incremental (`WHERE embeddings.passage_id IS NULL`), so a targeted repair that adds one passage costs one embedding call.
+- **Don't touch the corpus casually.** `backend/database.db` is ~633 MB, gitignored, and lives in S3. There are no DB triggers, so any edit to `passages` leaves `passages_fts`, `scripture_index`, and `embeddings` stale — rebuild per [`tools/corpus/README.md`](tools/corpus/README.md). `import_github_writings.py` has **no single-work mode**: `run_etl` opens by deleting every row in `passages`, `works`, `authors`, and `embeddings`, so running it re-embeds all 52,870 passages at real cost. `backend/embed_passages.py` is incremental (`WHERE embeddings.passage_id IS NULL`), so a targeted repair that adds one passage costs one embedding call.
 - **Never regress a security control.** Rate limits, CSP, CORS, the 500-char query cap, `prepare_fts_query`, and `sanitizePassageHtml` are load-bearing; read [`docs/security.md`](docs/security.md) before changing any of them.
 - **Search must degrade, never 500.** Any Voyage/Gemini/Groq failure falls back to FTS keyword search.
 - **`App.css` is authoritative** for styling. Tailwind v4 runs with preflight skipped, so it contributes utilities and theme layers only.
