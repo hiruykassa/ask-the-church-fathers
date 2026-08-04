@@ -29,7 +29,7 @@ aws apprunner start-deployment --service-arn <service-arn> --region us-east-2
 curl -s https://<service>.us-east-2.awsapprunner.com/api/health | jq
 ```
 
-`/api/health` should report `status: ok`, `embeddings_loaded: 52869`, and all three providers `true`. **Boot takes ~135 seconds**, measured on a 2026-07-31 config deploy: the 633 MB database downloads from S3, then 52,869 embeddings load into RAM before gunicorn answers anything.
+`/api/health` should report `status: ok`, `embeddings_loaded: 52870`, and all three providers `true`. **Boot takes ~135 seconds** (measured 2m53s on 2026-07-31, 3m05s on 2026-08-04): the 633 MB database downloads from S3, then 52,870 embeddings load into RAM before gunicorn answers anything.
 
 > **`update-service` does not ship code.** An earlier version of this section claimed that because the tag is `:latest`, any `update-service` call also re-pulls the image, so an env-var change and a code change could share one deployment. **That is wrong**, and it bit a real deploy on 2026-07-31: the new image was pushed to ECR, `update-service` was called to add `SENTRY_DSN`, the service reported a successful deployment — and the *old* code kept serving. `update-service` applies configuration; it does not re-pull an unchanged tag. It was caught only because the new `Cache-Control` headers and the raised `/api/health` limit were missing from the live responses.
 >
