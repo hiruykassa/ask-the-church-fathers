@@ -7,8 +7,23 @@ pushed them, and the CloudFront function `aetc-directory-index` is published
 and attached to the default cache behaviour as a viewer-request function
 (distribution `Deployed`). Verified live: the raw HTML at `/read/852` returns
 its own canonical (`.../read/852`) and title rather than the homepage, and
-`/author/246` carries per-page JSON-LD. Phase 2 (body content) not started.
-**Date:** 2026-07-30, updated 2026-07-31
+`/author/246` carries per-page JSON-LD.
+
+Re-verified live 2026-08-03: `/about` and `/read/1000` return their own
+canonical and title, so the function is attached and working. Two problems found
+while checking, **both since resolved** — `/read/852` was serving a stale cached
+homepage response, cleared by invalidation `I2H3D3R4738UFPYSVU7OJ2BEQU` and
+re-verified; and `infra/distribution-config.json` did not record the function
+association, since re-exported and now showing
+`FunctionAssociations.Quantity == 1`. Neither needs action.
+
+Phase 2 (body content) **written 2026-08-03, not yet deployed** — the same
+script now also fills `#root` with a heading, byline, and excerpt on all 3,121
+routes. The open question below was resolved in favour of writing into `#root`
+and letting `createRoot().render()` clear it: `<noscript>` is discounted by
+Google and a `display:none` sibling reads as cloaking. `dist/` grew from ~10 MB
+to 23 MB, so watch the `aws s3 sync` step on the next deploy.
+**Date:** 2026-07-30, updated 2026-08-03
 
 ## What shipped, and where phase 1 diverged from this plan
 
@@ -150,16 +165,33 @@ Deliberately excluded from phase 1: `/author/:id` and `/scripture/*`. Those
 routes are absent from the sitemap entirely and should be added there first;
 generating meta for pages nothing links to solves nothing.
 
-### Phase 2 — body content
+### Phase 2 — body content — **implemented 2026-08-03**
 
 Emit the actual passage text into the static HTML so non-rendering crawlers see
 real content rather than a `<noscript>` notice. `generate_seo.py` already has
 the text, so this needs no headless browser.
 
-Open question to resolve before phase 2: React's `createRoot().render()` wipes
-whatever is inside `#root` on mount, so static body content either flashes and
-is replaced, or has to live outside `#root`. Worth measuring the flash before
-committing to an approach.
+Open question, now resolved: React's `createRoot().render()` wipes whatever is
+inside `#root` on mount, so static body content either flashes and is replaced,
+or has to live outside `#root`. **Decision: inside `#root`.** Content there sits
+where server-rendered content would, so crawlers weigh it as main content;
+`<noscript>` is discounted by Google, and a `display:none` sibling is the
+pattern search engines treat as cloaking. The flash is bounded by
+`EXCERPT_BUDGET` (1,200 characters) and the stylesheet is already in `<head>`
+when it paints.
+
+What each route type emits:
+
+| Route | Body |
+|-------|------|
+| `/read/:workId` | Work title as `<h1>`, author + life dates, opening passages to the budget, link to the author |
+| `/author/:id` | Name, dates, bio, and a linked list of up to 60 works — also how a crawler reaches `/read/:id` pages |
+| `/topics/:slug` | Title, hand-written `intro`, description. The passages below it come from a live search the script cannot run |
+| `/browse`, `/browse/:slug`, `/about`, `/contact` | Heading and the same copy the page renders |
+
+The `<noscript>` block is stripped from generated routes: it exists to explain
+an otherwise blank page, and it would otherwise put a second `<h1>` on every
+route.
 
 ## Risks
 
@@ -177,15 +209,12 @@ committing to an approach.
 
 Not part of the proposal, but they touch the same files and should not be lost:
 
-1. **`og-image.png` is not in `public/` and not tracked by git.** Every
-   `og:image` and `twitter:image` tag points at
-   `https://asktheearlychurch.com/og-image.png`. Because the frontend deploy is
-   `aws s3 sync dist/ … --delete`, and `dist/` is built from `public/`, the next
-   sync deletes it with no copy in version control to restore from. This was
-   already flagged in `docs/walkthrough/13-maintenance.md`. Verify with
-   `curl -I https://asktheearlychurch.com/og-image.png` before the next deploy.
-   Fixing the meta tags while the image they point at is missing would be wasted
-   work.
+1. ~~**`og-image.png` is not in `public/` and not tracked by git.**~~
+   **Resolved.** The file is now in `public/og-image.png` (35 KB), tracked by
+   git, built into `dist/`, and serving 200 at
+   `https://asktheearlychurch.com/og-image.png` — re-verified 2026-08-03. The
+   `aws s3 sync … --delete` risk is gone: there is now a copy in version control
+   to restore from.
 
 2. **JSON-LD is site-wide only.** `src/components/SeoJsonLd.jsx` emits a single
    `WebSite` schema from `main.jsx`. There is no `Book`, `Article`, or `Person`

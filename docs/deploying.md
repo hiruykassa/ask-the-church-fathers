@@ -41,6 +41,8 @@ curl -s https://<service>.us-east-2.awsapprunner.com/api/health | jq
 
 ```bash
 # VITE_API_URL is baked into the bundle at build time — a wrong value ships broken.
+# Omitting it no longer can: vite.config.js fails the build when it is unset or
+# is not an absolute http(s) URL, before any artifact exists to upload.
 # build:deploy runs generate:seo → vite build → generate:meta, in that order.
 VITE_API_URL=https://<service>.us-east-2.awsapprunner.com npm run build:deploy
 
@@ -80,7 +82,7 @@ Two settings worth knowing because they are not editable in place:
 | Job | What it does |
 |-----|--------------|
 | **Backend smoke tests** | Python 3.13, installs `backend/requirements.txt`, fetches the database via `prestart.sh` when the `DB_URL` secret is set, then runs `pytest -q`. Skips the tests with a clear log line when no database is available rather than failing opaquely |
-| **Frontend build** | Node 20, `npm ci`, `npm run lint`, `npm run build` against a placeholder `VITE_API_URL` — it verifies the bundle compiles, not that it points anywhere real |
+| **Frontend lint, test, build** | Node 20, `npm ci`, `npm run lint`, `npm test` (Vitest over `src/utils`, no keys or DB needed), then `npm run build` against a placeholder `VITE_API_URL` — it verifies the bundle compiles, not that it points anywhere real |
 
 Tests live in `backend/tests/`: `test_parsing.py` covers query parsing and scripture-reference detection (no database needed); `test_smoke.py` exercises the live endpoints against a real corpus.
 

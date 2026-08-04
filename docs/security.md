@@ -20,7 +20,7 @@ The API is a **public, read-only, unauthenticated** service. The table describes
 | **Secret hygiene** | No keys in git (scanned). macOS Keychain locally; SSM Parameter Store `SecureString`, referenced by ARN, in production. `.dockerignore` keeps secrets and the database out of the image. The container runs as non-root uid 1000 |
 | **Graceful degradation** | Voyage, Gemini, or Groq failure never returns 500 — search falls back to FTS keyword ranking |
 | **DB safety** | Connections closed in `try/finally`; search DB errors return 503; error handlers return generic JSON without leaking stack traces |
-| **Monitoring** | Optional Sentry (`SENTRY_DSN`), errors only, `send_default_pii=False` so client IPs and query text are never sent; disabled when the DSN is unset. Uptime via an external pinger on `/api/health` |
+| **Monitoring** | Optional Sentry (`SENTRY_DSN`), errors only, `send_default_pii=False` so client IPs and query text are never sent; disabled when the DSN is unset — **and it is currently unset, so no errors are being collected**. Uptime via an external pinger on `/api/health` |
 
 Two planned changes will deliberately move this posture: a mobile app would add an authenticated, user-scoped API as a separate surface, and display ads would relax the CSP to an explicit `script-src` / `frame-src` allowlist. Both are scoped trade-offs to be made consciously, not drift.
 
