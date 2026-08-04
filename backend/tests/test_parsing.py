@@ -239,3 +239,51 @@ def test_diversify_respects_limit():
                     passage_author={1: 'x', 2: 'y', 3: 'z', 4: 'w'},
                     limit=2, work_cap=10, author_cap=10)
     assert out == [1, 2]
+
+
+# ── Monthly budget cap parsing ────────────────────────────────────────────────
+#
+# _budget_from_env runs at import time, so anything it raises stops the
+# container from booting. A typo in an env var must not take the site down to
+# protect a $10 ceiling.
+
+@pytest.fixture()
+def budget_from_env(monkeypatch):
+    import telemetry
+    return telemetry._budget_from_env, telemetry._DEFAULT_MONTHLY_BUDGET_USD
+
+
+def test_budget_reads_a_valid_override(budget_from_env, monkeypatch):
+    read, _ = budget_from_env
+    monkeypatch.setenv("MONTHLY_API_BUDGET_USD", "25.5")
+    assert read() == 25.5
+
+
+def test_budget_defaults_when_unset_or_blank(budget_from_env, monkeypatch):
+    read, default = budget_from_env
+    monkeypatch.delenv("MONTHLY_API_BUDGET_USD", raising=False)
+    assert read() == default
+    monkeypatch.setenv("MONTHLY_API_BUDGET_USD", "   ")
+    assert read() == default
+
+
+def test_budget_falls_back_on_garbage_rather_than_raising(budget_from_env, monkeypatch):
+    read, default = budget_from_env
+    for bad in ("abc", "10 dollars", "$10", ""):
+        monkeypatch.setenv("MONTHLY_API_BUDGET_USD", bad)
+        assert read() == default
+
+
+def test_budget_rejects_a_negative_cap(budget_from_env, monkeypatch):
+    # A negative ceiling would mean "already over budget" forever, silently
+    # disabling every paid call.
+    read, default = budget_from_env
+    monkeypatch.setenv("MONTHLY_API_BUDGET_USD", "-1")
+    assert read() == default
+
+
+def test_budget_allows_zero(budget_from_env, monkeypatch):
+    # Zero is a legitimate setting: it means "make no paid calls at all".
+    read, _ = budget_from_env
+    monkeypatch.setenv("MONTHLY_API_BUDGET_USD", "0")
+    assert read() == 0.0

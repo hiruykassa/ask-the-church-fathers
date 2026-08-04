@@ -28,7 +28,38 @@ log = logging.getLogger(__name__)
 # the 1st. Override via env. NOTE: the cap only bites when RATELIMIT_STORAGE_URI
 # (Redis) is configured — without it the counter has nowhere to live and fails
 # open (so spend is unbounded; rely on heavy caching to keep it small).
-MONTHLY_BUDGET_USD = float(os.getenv("MONTHLY_API_BUDGET_USD", "10"))
+_DEFAULT_MONTHLY_BUDGET_USD = 10.0
+
+
+def _budget_from_env() -> float:
+    """Read the cap, falling back on garbage rather than refusing to boot.
+
+    This runs at import time, so raising here means the container never starts —
+    a typo in an env var would take the whole site down to protect a $10 ceiling.
+    Mirrors ``_positive_int_env`` in app.py, which guards the same class of
+    mistake for the cache TTLs.
+    """
+    raw = os.getenv("MONTHLY_API_BUDGET_USD")
+    if raw is None or not raw.strip():
+        return _DEFAULT_MONTHLY_BUDGET_USD
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        log.warning(
+            "MONTHLY_API_BUDGET_USD is not a number (%r) — using default $%s",
+            raw, _DEFAULT_MONTHLY_BUDGET_USD,
+        )
+        return _DEFAULT_MONTHLY_BUDGET_USD
+    if value < 0:
+        log.warning(
+            "MONTHLY_API_BUDGET_USD is negative (%s) — using default $%s",
+            value, _DEFAULT_MONTHLY_BUDGET_USD,
+        )
+        return _DEFAULT_MONTHLY_BUDGET_USD
+    return value
+
+
+MONTHLY_BUDGET_USD = _budget_from_env()
 _REDIS_URL = os.getenv("RATELIMIT_STORAGE_URI", "").strip()
 
 # Approximate $/call — tune as model pricing changes. These are pessimistic
