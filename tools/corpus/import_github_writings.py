@@ -198,6 +198,62 @@ AUTHOR_META = {
 # HTML parsing
 # ---------------------------------------------------------------------------
 
+# An <hr> past this fraction of the body text is structural punctuation inside
+# the work, not the end of a table of contents. The real TOC terminators in this
+# corpus sit in the first percent or two — Life of Antony's is at 0.08% — so the
+# threshold is deliberately loose; it only has to exclude the pathological case,
+# which was at 76.6%.
+TOC_HR_MAX_POSITION = 0.25
+
+# ...but a fraction alone is wrong on very short files. Eight of Leo the Great's
+# letters are title-only stubs of ~311 characters, where a legitimate one-line
+# TOC is inherently ~50% of the text. Judged on fraction alone the guard rejects
+# their genuine TOC terminator, the TOC survives, and two *older* heuristics
+# downstream then finish them off — the <p>-tail trim removes the <h2> title (the
+# only content), and the anchor step empties what remains. Net: 165 chars to 0,
+# on seven works that import fine today.
+#
+# A table of contents is short in absolute terms whatever fraction of a stub it
+# represents, so require both. 400 clears the largest stub (155) comfortably and
+# is far below any real content. Validated over all 3,764 upstream files: 0
+# regressions, and it shrinks the blast radius from 53 changed files to 6.
+TOC_HR_MAX_ABS = 400
+
+
+def _toc_terminator(body):
+    """The <hr> that ends a table of contents, or None if there isn't one.
+
+    Two conditions, both required:
+
+    * **A direct child of <body>.** A TOC and its rule sit at the top level. An
+      <hr> nested inside a container is punctuation within that container, and
+      walking backwards from it escapes into content.
+    * **Early in the document** — by *both* an absolute and a relative measure.
+      Position is measured on text length rather than element count, because one
+      <div> can hold an entire treatise; element position would call that <hr>
+      the second of three children and wave it through. The absolute bound
+      exists because a fraction is meaningless on a 311-character stub, where a
+      one-line TOC is legitimately half the file. Rejecting only when content
+      before the rule is *both* long and proportionally late leaves the stubs
+      alone. See TOC_HR_MAX_ABS.
+    """
+    total = len(body.get_text(" ", strip=True))
+    for hr in body.find_all("hr"):
+        if hr.parent is not body:
+            continue
+        if total:
+            before = sum(
+                len(node.get_text(" ", strip=True)) if hasattr(node, "get_text")
+                else len(str(node).strip())
+                for node in hr.find_all_previous()
+                if node.parent is body
+            )
+            if before > TOC_HR_MAX_ABS and before / total > TOC_HR_MAX_POSITION:
+                continue
+        return hr
+    return None
+
+
 def parse_html_file_content(html_bytes: bytes) -> tuple[str | None, str]:
     """Return (header_title, clean_html_body) from a GitHub writings HTML file.
 
@@ -230,8 +286,23 @@ def parse_html_file_content(html_bytes: bytes) -> tuple[str | None, str]:
     for el in body.find_all(["script", "style", "head"]):
         el.decompose()
 
-    # Remove the initial TOC block (content before the first HR)
-    first_hr = body.find("hr")
+    # Remove the initial TOC block (content before the first HR).
+    #
+    # This is only safe on the dialect most of the upstream repo uses: HTTrack
+    # mirrors of CCEL, with a flat <body> and a short table of contents ended by
+    # an <hr> near the top. A minority of files are Microsoft Word exports —
+    # nested <div>s, styled <span>s instead of headings, <o:p> tags — where the
+    # only <hr> sits deep inside the work. There, find_all_previous() walks back
+    # over the work container itself and decomposes the entire text.
+    #
+    # That is not a degraded parse, it is total loss, and it is silent: the body
+    # then fails the caller's 50-character floor and no passage is inserted.
+    # Athanasius' "On the Incarnation of the Word" went from 161,643 characters
+    # to zero this way. See docs/corpus.md.
+    #
+    # So require the <hr> to look like a TOC terminator before trusting it:
+    # a direct child of <body>, in the leading portion of the document.
+    first_hr = _toc_terminator(body)
     if first_hr:
         for el in list(first_hr.find_all_previous()):
             if el.parent == body or _is_toc_element(el):
