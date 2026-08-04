@@ -227,6 +227,26 @@ def excerpt(chunks: list[str], budget: int = EXCERPT_BUDGET) -> list[str]:
     return picked
 
 
+def drop_heading_echo(chunks: list[str], heading: str) -> list[str]:
+    """Drop a leading paragraph that merely repeats the heading.
+
+    `article()` already renders the work title as the page's <h1>. Most passages
+    open with an <h3> section header that differs from it ("Book I.", "Prologue"),
+    so the first extracted paragraph is useful context. But where a work is a
+    single passage whose <h3> *is* the work title, the excerpt opens by saying
+    the title a second time, directly under the <h1>.
+
+    Only the first chunk is considered, and only on an exact case-folded match:
+    a later paragraph that happens to repeat the title is real text, and so is a
+    heading that merely starts with it.
+    """
+    if not chunks or not heading:
+        return chunks
+    if chunks[0].strip().rstrip(".").casefold() == heading.strip().rstrip(".").casefold():
+        return chunks[1:]
+    return chunks
+
+
 def _p(text: str, cls: str = "") -> str:
     attr = f' class="{cls}"' if cls else ""
     return f"<p{attr}>{html.escape(text)}</p>"
@@ -401,7 +421,7 @@ def work_routes(conn: sqlite3.Connection, site: str) -> list[tuple[str, dict]]:
         body = article(
             title,
             f"{author}{f' ({dates})' if dates else ''}",
-            [_p(chunk) for chunk in excerpt(chunks)],
+            [_p(chunk) for chunk in excerpt(drop_heading_echo(chunks, title))],
             footer=link_list([(f"/author/{aid}", f"More works by {author}")], "See also"),
         )
         # Same reasoning as SCHEMA_TYPE_BY_CATEGORY: a council or a liturgy is

@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from generate_static_meta import (  # noqa: E402
     EXCERPT_BUDGET,
     article,
+    drop_heading_echo,
     excerpt,
     format_dates,
     link_list,
@@ -139,6 +140,42 @@ def test_excerpt_default_budget_is_the_module_constant():
     # README and the design note both quote.
     assert EXCERPT_BUDGET == 1200
     assert excerpt(["x" * 5000]) [0].endswith("…")
+
+
+# ── drop_heading_echo: don't say the title twice ──────────────────────────────
+
+def test_drops_a_first_paragraph_that_repeats_the_title():
+    # /read/936: a single-passage work whose <h3> is the work title, so the
+    # excerpt opened by restating the <h1> immediately below it.
+    chunks = ["On the Incarnation of the Word", "§1. Introductory.—The Subject…"]
+    assert drop_heading_echo(chunks, "On the Incarnation of the Word") == chunks[1:]
+
+
+def test_ignores_trailing_full_stops_and_case():
+    assert drop_heading_echo(["The Work Title."], "the work title") == []
+
+
+def test_keeps_a_section_header_that_differs_from_the_title():
+    # The common case — "Book I." under "The Harmony of the Gospels" is useful
+    # context, not an echo.
+    chunks = ["Book I.", "Body text"]
+    assert drop_heading_echo(chunks, "The Harmony of the Gospels") == chunks
+
+
+def test_only_the_first_chunk_is_considered():
+    # A later paragraph repeating the title is real text.
+    chunks = ["Prologue.", "On the Incarnation of the Word"]
+    assert drop_heading_echo(chunks, "On the Incarnation of the Word") == chunks
+
+
+def test_a_heading_that_merely_starts_with_the_title_is_kept():
+    chunks = ["On the Incarnation of the Word, Chapter 1"]
+    assert drop_heading_echo(chunks, "On the Incarnation of the Word") == chunks
+
+
+def test_handles_empty_input():
+    assert drop_heading_echo([], "T") == []
+    assert drop_heading_echo(["x"], "") == ["x"]
 
 
 # ── article / link_list: escaping at the output boundary ──────────────────────
