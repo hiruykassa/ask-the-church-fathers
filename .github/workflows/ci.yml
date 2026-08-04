@@ -116,11 +116,18 @@ jobs:
 
       # generate_static_meta.py runs inside build:deploy and writes 3,121
       # files. It failing is loud; it silently degrading is not — a bug here
-      # once shipped a 7-character excerpt on 505 works. These are pure-function
-      # tests, so they need neither the corpus nor any key.
+      # once shipped a 7-character excerpt on 505 works. These tests need no
+      # corpus and no key, but the corpus-tooling half imports
+      # import_github_writings, which needs beautifulsoup4. Pinned from
+      # backend/requirements.txt so CI and the container parse identically —
+      # a different bs4 could tokenise the corpus HTML differently.
       - name: Test build tooling
         run: |
-          python3 -m pip install --quiet pytest
+          set -euo pipefail
+          SPEC=$(grep -E '^beautifulsoup4' backend/requirements.txt | sed 's/#.*//' | xargs)
+          test -n "$SPEC" || { echo "::error::No beautifulsoup4 pin in backend/requirements.txt"; exit 1; }
+          echo "Installing: pytest $SPEC"
+          python3 -m pip install --quiet pytest "$SPEC"
           python3 -m pytest tools/tests -q
 
       - name: Build
