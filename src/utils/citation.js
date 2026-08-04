@@ -18,6 +18,36 @@ const SOURCE_LABELS = [
   [/catholiclibrary\.org/i, 'Catholic Library'],
 ]
 
+/**
+ * The URL if it is safe to put in an href, otherwise null.
+ *
+ * `source_url` is corpus data — scraped from third-party sites and stored
+ * verbatim — so it is untrusted input that ends up in an anchor. React 18 does
+ * not block `javascript:` hrefs (it warns and renders them anyway; blocking
+ * only lands in React 19), so without this a single bad row in `passages`
+ * would be a stored-XSS click target. Every URL in the corpus today is http or
+ * https, so this changes no current behaviour — it keeps a future re-import
+ * from silently introducing one.
+ *
+ * Protocol-relative (`//host/path`) and relative URLs are rejected too: these
+ * links are always external by definition, so anything that is not an absolute
+ * http(s) URL is a corpus defect rather than something to render.
+ *
+ * Returns the parsed `href` rather than the original string, so what gets
+ * rendered is exactly what was validated — no room for a difference between
+ * the two readings.
+ */
+export function safeSourceUrl(url) {
+  if (!url) return null
+  let parsed
+  try {
+    parsed = new URL(String(url).trim())
+  } catch {
+    return null
+  }
+  return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : null
+}
+
 /** Human-readable label for a source URL — a known collection name or its host. */
 export function sourceLabel(url) {
   if (!url) return ''

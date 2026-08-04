@@ -1,4 +1,4 @@
-import { citationText, sourceLabel } from '../../utils/citation'
+import { citationText, safeSourceUrl, sourceLabel } from '../../utils/citation'
 
 /**
  * The "Source:" citation shown under a quotation — the real reference scraped
@@ -9,21 +9,27 @@ import { citationText, sourceLabel } from '../../utils/citation'
  * where they're going before they click.
  */
 export default function PassageSource({ title, url, className = '' }) {
+  // The label still comes from the raw url — sourceLabel only ever reads it, and
+  // a passage with an unusable link should keep its citation text.
   const label = citationText({ source_title: title, source_url: url })
   if (!label) return null
 
+  // Anything that is not an absolute http(s) URL renders as plain text instead
+  // of a link. See safeSourceUrl: this is corpus data going into an href.
+  const href = safeSourceUrl(url)
+
   // The collection the link opens. Hidden when it would just repeat the label
   // (e.g. the end-of-work note whose citation already *is* the site name).
-  const place = url ? sourceLabel(url) : ''
-  const showPlace = !!url && !!place && place !== label
+  const place = href ? sourceLabel(href) : ''
+  const showPlace = !!href && !!place && place !== label
 
   return (
     <p className={`passage-source${className ? ' ' + className : ''}`}>
       <span className="passage-source-label">Source</span>
-      {url ? (
+      {href ? (
         <a
           className="passage-source-link"
-          href={url}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           onClick={e => e.stopPropagation()}
@@ -36,7 +42,7 @@ export default function PassageSource({ title, url, className = '' }) {
       {showPlace && (
         <a
           className="passage-source-place"
-          href={url}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           onClick={e => e.stopPropagation()}
