@@ -110,3 +110,28 @@ def test_error_responses_are_not_cached(client):
     r = client.get("/api/passages/999999999")
     assert r.status_code == 404
     assert "Cache-Control" not in r.headers
+
+
+def test_csp_matches_the_cloudfront_policy(client):
+    # The API and the CloudFront Response Headers Policy
+    # (infra/response-headers-policy.json) must not drift — a directive present
+    # on one surface and missing on the other is how a gap gets overlooked.
+    csp = client.get("/api/health").headers["Content-Security-Policy"]
+    for directive in (
+        "default-src 'self'",
+        "base-uri 'self'",
+        "object-src 'none'",
+        "form-action 'self'",
+        "script-src 'self'",
+        "frame-ancestors 'none'",
+    ):
+        assert directive in csp, f"CSP missing {directive!r}: {csp!r}"
+
+
+def test_hsts_is_not_sent_outside_production(client):
+    # Sending HSTS from the plain-HTTP dev server pins localhost to https in the
+    # browser and breaks local development until the pin expires.
+    import app as app_module
+    if app_module.IS_PRODUCTION:
+        pytest.skip("running with PRODUCTION=1")
+    assert "Strict-Transport-Security" not in client.get("/api/health").headers

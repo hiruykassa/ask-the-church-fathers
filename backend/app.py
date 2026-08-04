@@ -902,16 +902,14 @@ def set_security_headers(response):
     response.headers["X-XSS-Protection"] = "0"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    # Force HTTPS for a year on the API origin too (the frontend gets it from
-    # the CloudFront Response Headers Policy). Production only — never send
-    # HSTS over the plain-HTTP dev server, which would pin localhost to HTTPS
-    # in the browser.
-    if IS_PRODUCTION:
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
-        )
+    # base-uri, object-src and form-action mirror the CloudFront Response
+    # Headers Policy in infra/response-headers-policy.json. They matter little
+    # for JSON, but the two policies drifting is how a gap gets missed later.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
+        "base-uri 'self'; "
+        "object-src 'none'; "
+        "form-action 'self'; "
         "script-src 'self'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
@@ -919,8 +917,10 @@ def set_security_headers(response):
         "connect-src 'self'; "
         "frame-ancestors 'none'"
     )
-    # HSTS — production only. Setting it during local http://localhost dev
-    # would force browsers to upgrade to https and break the workflow.
+    # Force HTTPS for a year on the API origin too (the frontend gets it from
+    # the CloudFront Response Headers Policy). Production only — never send
+    # HSTS over the plain-HTTP dev server, which would pin localhost to HTTPS
+    # in the browser.
     if IS_PRODUCTION:
         response.headers["Strict-Transport-Security"] = (
             "max-age=31536000; includeSubDomains"
