@@ -10,6 +10,10 @@ __pycache__/
 *.db-shm
 *.db-wal
 *.backup.*.db
+# prestart.sh writes these at runtime; baking a stale one into the image would
+# let a fresh container skip the download. *.db does not match them.
+*.db.etag
+*.db.part
 *.log
 tests/
 audit*

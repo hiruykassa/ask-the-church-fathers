@@ -21,6 +21,10 @@ backend/.env
 *.db-shm
 *.db-wal
 *.backup.*.db
+# prestart.sh runtime artifacts. Note *.db does NOT cover these — it matches a
+# .db suffix, and these end in .etag / .part.
+*.db.etag
+*.db.part
 
 # OS junk
 .DS_Store
