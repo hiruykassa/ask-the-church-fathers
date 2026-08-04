@@ -25,7 +25,7 @@ Production runs entirely on **AWS**: React frontend on **S3 + CloudFront**, Flas
 | Error monitoring (Sentry) | **Not live, by decision** — the integration is in `app.py` and stays dormant while `SENTRY_DSN` is unset. Unhandled 500s appear in App Runner logs only. See [Known gaps](#known-gaps) |
 | Automated deploys | **Live** — push to `main` deploys the half you touched. Both jobs have run green, but the backend one only via `workflow_dispatch`. See [`docs/github-actions-deploy.md`](docs/github-actions-deploy.md) |
 | Uptime monitoring | **Live** — UptimeRobot on both the CloudFront frontend and the App Runner `/api/health` endpoint. The API monitor was pointed at the service root (which has no route, so it 404s) and was repointed on 2026-08-03 |
-| Monthly API budget cap | **Not enforced** — needs Redis; see [Known gaps](#known-gaps) |
+| Monthly API budget cap | **Enforced per process** — an in-process counter caps spend without Redis. With N gunicorn workers the effective ceiling is roughly N x `MONTHLY_API_BUDGET_USD`, and it resets on restart. `/api/health` reports `budget.scope` |
 | AI synthesis | **Not live** — parked as a commented block in `app.py` |
 
 ### Corpus
@@ -41,7 +41,7 @@ Production runs entirely on **AWS**: React frontend on **S3 + CloudFront**, Flas
 
 Counts verified against the local corpus on 2026-08-04, after repairing Athanasius' *On the Incarnation of the Word* (see [Known gaps](#known-gaps)). That repair added the 52,870th passage — 174,742 chars, indexed in FTS and embedded as a unit-normalized 1,024-dim `voyage-3` vector, matching the existing matrix. Coverage is back to 100% and no work in the corpus has zero passages.
 
-The repair is **live**: the database was re-uploaded to S3 and App Runner redeployed on 2026-08-04 (3m05s, `OPERATION_IN_PROGRESS` to `RUNNING`). The live `/api/health` now reports `embeddings_loaded: 52870`, with Voyage, Gemini, and Groq all configured and `budget.enabled: false`. Verified end to end — `/api/works/936` returns the passage, and an author-scoped search for "Athanasius on the incarnation of the word" ranks it second.
+The repair is **live**: the database was re-uploaded to S3 and App Runner redeployed on 2026-08-04 (3m05s, `OPERATION_IN_PROGRESS` to `RUNNING`). The live `/api/health` now reports `embeddings_loaded: 52870`, with Voyage, Gemini, and Groq all configured and `budget.scope: process`. Verified end to end — `/api/works/936` returns the passage, and an author-scoped search for "Athanasius on the incarnation of the word" ranks it second.
 
 ---
 
@@ -62,8 +62,8 @@ python -m pytest -q         # smoke tests
 npm install
 npm run dev                 # http://localhost:5173
 npm run lint                # same check CI runs
-npm test                    # 62 Vitest cases over src/utils + src/hooks (no API keys or DB)
-python3 -m pytest tools/tests -q   # 58 cases over the build and corpus tooling
+npm test                    # 87 Vitest cases: utils, hooks, api client, components
+python3 -m pytest tools/tests -q   # 64 cases over the build and corpus tooling
 ```
 
 API keys live in the **macOS Keychain**, never in a plain-text file:
@@ -112,7 +112,7 @@ To build the corpus from scratch, see [`docs/corpus.md`](docs/corpus.md).
 | Query parsing | Gemini 2.5 Flash-Lite with the full author roster; Groq Llama 3.3 70B fallback; local author-detect floor |
 | Ranking | Voyage `voyage-3` vectors + FTS5 BM25 + work-title match, fused by reciprocal rank fusion |
 | Infrastructure | AWS App Runner, ECR, S3, CloudFront, ACM, SSM Parameter Store, IAM; Cloudflare DNS |
-| Quality | ESLint, Vitest (62), backend pytest (44), tooling pytest (58) — all gated in GitHub Actions |
+| Quality | ESLint, Vitest (87), backend pytest (49), tooling pytest (64) — all gated in GitHub Actions |
 
 ---
 
@@ -140,17 +140,15 @@ An honest register. Each of these is a real, current defect, not a hypothetical.
 
 | Gap | Impact | Fix |
 |-----|--------|-----|
-| **No Redis** — `RATELIMIT_STORAGE_URI` unset | `MONTHLY_API_BUDGET_USD` fails **open**: spend has no shared store, so the cap never triggers. Live `/api/health` reports `budget.enabled: false`. Search degrades gracefully without it, so this is a cost risk, not an uptime one | ElastiCache or self-hosted Redis reachable from an App Runner VPC connector |
-| **`deploy-backend` has only run manually** | Both deploy paths are proven, but the backend job has so far only been triggered by `workflow_dispatch`. The first push touching `backend/**` will be its first automatic run | Watch that run when it happens |
+| **Budget cap counts per process, not globally** | `MONTHLY_API_BUDGET_USD` is now enforced by an in-process counter, so it bites — but each gunicorn worker counts separately and the count resets on restart. The real ceiling is roughly N x the limit. `/api/health` reports `budget.scope: process`. Better than the previous state, where it was not enforced at all | Redis via an App Runner VPC connector, which also makes rate limits correct across workers |
+| **Origen's *De Principiis* Book IV is truncated** | Stored at **39,751** chars; the guarded parse of `De Principiis/Book 4.html` yields **193,934**. Books I-III are 133K / 167K / 225K, so Book IV is plainly out of family. The passage exists, so no zero-passage check catches it and `repair_word_export.py` deliberately refuses it | Diff the parsed text against the stored passage, then an `apply_corrections.py` update — an edit, not an insert |
+| **Augustine's *Exposition of Certain Propositions* is missing entirely** | The upstream file exists (`Augustine of Hippo/Exposition of Certain Propositions from the Epistle to the Romans.html`, 89,649 bytes, parsing to **82,557** chars), but no work by that title is in the corpus at all — it is absent, not truncated. Do not confuse it with work 1817 *Commentary on Romans*, which comes from the commentaries importer and is complete | Establish why the work never landed, then insert via the `repair_word_export.py` path if the parse is sound |
 | **API is not CDN-fronted** | `Cache-Control` ships on the ten immutable reference endpoints, so repeat visits hit the browser cache. But the distribution has one origin and no `/api/*` behaviour, so a *first* visit still reaches App Runner | Add an `/api/*` cache behaviour forwarding `Origin` and honouring origin `Cache-Control` |
-| **Cold start is ~2-3 minutes** | App Runner must pull the image, then 633 MB from S3, then load 52,870 embeddings before answering. Measured 2m53s on the 2026-07-31 deploy and 3m05s on 2026-08-04, both `OPERATION_IN_PROGRESS` to `RUNNING`. Any instance replacement is a window that long | Slim the boot path, or keep a warm standby |
-| **AI synthesis is not live** | No `/api/synthesize` route. The last working implementation (`ac6ec5e^`) is parked as a commented block in `app.py` with a re-enable checklist. Reviving it before Redis exists ships an uncapped paid endpoint | Restore per that checklist, after Redis |
-| **No component or API-client tests** | Vitest covers `src/utils` plus the exported `writeStored` helper from `useSavedPassages` — but nothing renders a component or a hook, so `renderHook`/DOM-level behaviour is untested, and `api/client.js` has no coverage at all | Add `@testing-library/react`, then cover `FormattedPassage`, `PassageSource`, and the client's cache and abort paths |
-| ~~**One work has no passages**~~ **Repaired 2026-08-04** | `/read/936` — Athanasius, *On the Incarnation of the Word* — was the only work with zero rows in `passages`, so the page rendered empty. A flagship text, and `/topics/athanasius-incarnation` points at the subject. **Cause traced to the file.** The source is intact upstream (264,950 bytes), but it is a Microsoft Word export rather than the HTTrack/CCEL shape the importer assumes, and its only `<hr>` sits 76.6% into the document inside the work `<div>`. The TOC heuristic strips everything before the first `<hr>`, which here decomposes the entire treatise: 161,643 chars of body text to **zero**. It then fails the 50-char floor and no passage is inserted. The importer now drops and reports such rows rather than leaving an empty work, but that does not bring the text back. Full trace in [`docs/corpus.md`](docs/corpus.md) | **Done.** `_toc_terminator()` now guards the TOC step, validated over all 3,764 upstream files (0 regressions, 2 recoveries), and `repair_word_export.py` inserted the passage — 174,742 chars, FTS row present, `fts.py --dry-run` reports no drift. Embedded with one incremental `voyage-3` call, then the database was re-uploaded to S3 and App Runner redeployed on 2026-08-04 — live and searchable |
-| **No error monitoring — accepted, not overlooked** | Sentry is integrated in `app.py` but inert without `SENTRY_DSN`, and the decision is to leave it that way. Be clear about what that costs: uptime monitoring answers "is the API up", error monitoring answers "which request threw and why". A 500 on one search query leaves `/api/health` green and UptimeRobot silent, so that class of bug surfaces only if someone reads the App Runner logs | Revisit if a user ever reports a failure that the logs cannot explain |
-| **`infra/` snapshots have no version history** | Re-exported 2026-08-03: the live distribution does have the viewer-request function attached, and the local copy now records it. But the stale snapshot had gone unnoticed for weeks, and it only surfaced because someone read the file. `infra/` is gitignored (account-specific ARNs, deliberately not in a public repo), so nothing diffs these against reality. Detaching that function would take all 3,121 static route files out of service **silently** — every URL still returns 200, just with the homepage `<head>` | Assert in CI that the live distribution reports `FunctionAssociations.Quantity == 1`; that catches the failure mode without committing any ARNs |
-| **Augustine's *Exposition of Certain Propositions* is 97% truncated** | Stored as **2,786** chars; the guarded parse yields **82,557**. It is in the corpus today as a stub, and no zero-passage check catches it because the stub clears the 50-char floor. Found while validating the parser over all 3,764 upstream files | Same shape of fix as Origen below — diff parsed against stored, then an `apply_corrections.py` update. Neither is an insert |
-| **Origen's *De Principiis* Book IV may be truncated** | Found while validating the import parser: the guarded parse recovers **193,934** chars from `De Principiis/Book 4.html`, but the stored `Book IV.` passage holds only **39,751** — roughly a fifth. The other three books are 133K–225K, so 40K is out of family. Unlike the Athanasius case the passage does exist, so this is a possible truncation rather than a missing work, and `repair_word_export.py` deliberately refuses it | Diff the parsed text against the stored passage before touching anything; if confirmed, it is an `apply_corrections.py`-shaped update, not an insert |
+| **Cold start is ~2-3 minutes** | App Runner must pull the image, then 633 MB from S3, then load 52,870 embeddings before answering. Measured 2m53s on 2026-07-31 and 3m05s on 2026-08-04, both `OPERATION_IN_PROGRESS` to `RUNNING`. Any instance replacement is a window that long | Slim the boot path, or keep a warm standby |
+| **AI synthesis is not live** | No `/api/synthesize` route. The last working implementation (`ac6ec5e^`) is parked as a commented block in `app.py` with a re-enable checklist. It is a paid endpoint, so the monthly cap has to be trustworthy before it comes back — which means a shared counter, not the per-process one | Restore per that checklist, once spend is tracked across workers |
+| **No error monitoring — accepted, not overlooked** | Sentry is integrated in `app.py` but inert without `SENTRY_DSN`, and the decision is to leave it that way. Be clear about what that costs: uptime monitoring answers "is the API up", error monitoring answers "which request threw and why". A 500 on one search query leaves `/api/health` green and UptimeRobot silent, so that class of bug surfaces only if someone reads the App Runner logs | Revisit if a user reports a failure the logs cannot explain |
+| **Organic growth is unmeasured** | Nobody has opened Search Console, so no one knows whether the site ranks for anything. A new site with no backlinks gets little crawl demand regardless. This is a distribution problem, not a code one, and it moves over months | Read Search Console, then decide whether it needs work |
+| **No monetization** | Reading and searching are free and always will be. Donations and affiliate book links are planned; nothing is implemented, so the project has no revenue and no path to any | Donations first, then affiliate links |
 | **App Runner in maintenance mode** | AWS stopped accepting new customers 2026-04-30. Existing services keep running with security patching; no sunset date announced | Someday migration to ECS Express Mode |
 | **Vite/esbuild dev advisory** | Dev server only, not exploitable in the hosted app | Vite 8 upgrade (breaking) |
 
@@ -158,17 +156,14 @@ An honest register. Each of these is a real, current defect, not a hypothetical.
 
 ## Roadmap
 
-Ordered by value per unit of effort.
+Ordered by value per unit of effort. Completed items are in the git history rather than here.
 
-- [x] **Deploy automation** — OIDC role, path-scoped jobs, both paths exercised end to end
-- [x] **Uptime monitoring on the API** — a second UptimeRobot monitor on `/api/health`, since the CloudFront one stays green when the backend is dead. Repointed off the service root and verified green 2026-08-03
-- [x] **Build-time `VITE_API_URL` check** — `vite.config.js` fails the build when it is missing or not an absolute http(s) URL, so a misconfigured build never produces an artifact to upload
-- [x] **Static meta phase 2** — heading, byline, and a ~1,200-character excerpt written into `#root` on all 3,121 generated routes
-- [x] **Frontend tests** — 62 Vitest cases over the sanitizer, citation formatting, URL safety, era bucketing, and saved-passage persistence; gated in CI
-- [ ] **Redis for App Runner** — makes `MONTHLY_API_BUDGET_USD` real and rate limits correct across processes. The one item with a real cost consequence
+- [ ] **Redis for App Runner** — upgrades the budget cap from per-process to shared, and makes rate limits correct across workers. Also the precondition for AI synthesis
+- [ ] **Two corpus repairs** — Origen's *De Principiis* Book IV (truncated) and Augustine's *Exposition of Certain Propositions* (missing). Both are `apply_corrections.py`-shaped work; see [Known gaps](#known-gaps)
 - [ ] **`/api/*` CloudFront behaviour** — collapse first-visit API fetches to one origin hit per hour globally
-- [ ] **Organic growth** — likely the real bottleneck, though unmeasured: nobody has read Search Console. A new site with no backlinks gets little crawl demand regardless. This is a distribution problem, not a code one, and it moves over months
+- [ ] **Organic growth** — the real bottleneck, and unmeasured. Read Search Console before deciding it needs work
 - [ ] **Monetization** — donations first, then affiliate book links. Nothing implemented
+- [ ] **AI synthesis** — parked in `app.py`. Needs a shared spend counter first, or it ships an uncapped paid endpoint
 
 ---
 
