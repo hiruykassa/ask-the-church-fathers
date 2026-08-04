@@ -9,12 +9,13 @@
  * Prod: VITE_API_URL must be set at build time — the App Runner API origin,
  *       baked into the bundle that gets uploaded to S3 and served by CloudFront.
  *
- * The throw below is better than silently falling back to localhost, but be
- * clear about when it fires: `import.meta.env.DEV` is replaced at build time,
- * so the check is *bundled* and runs at module evaluation **in the browser**,
- * not during `vite build`. A production build with VITE_API_URL unset succeeds
- * and ships a blank page. Moving this to a real build-time guard in
- * vite.config.js is tracked in the README roadmap.
+ * The real guard is in vite.config.js, which fails `vite build` outright when
+ * VITE_API_URL is missing or malformed — so a build that would ship a blank
+ * page never produces an artifact to upload. The throw below is the second
+ * layer: `import.meta.env.DEV` is replaced at build time, so this check is
+ * *bundled* and runs at module evaluation in the browser. It should now be
+ * unreachable in a normally-built bundle; it stays as a loud failure for a
+ * hand-rolled or partially-configured build that bypasses the config.
  */
 
 const fromEnv = import.meta.env.VITE_API_URL?.replace(/\/$/, '')
