@@ -169,13 +169,22 @@ resources this project uses — no wildcards on buckets or services.
       "Effect": "Allow",
       "Action": [
         "cloudfront:CreateInvalidation",
-        "cloudfront:GetInvalidation"
+        "cloudfront:GetInvalidation",
+        "cloudfront:GetDistributionConfig"
       ],
       "Resource": "arn:aws:cloudfront::<ACCOUNT_ID>:distribution/<DISTRIBUTION_ID>"
     }
   ]
 }
 ```
+
+> **`cloudfront:GetDistributionConfig` is required**, not optional. The frontend
+> job asserts after each sync that the viewer-request rewrite function is still
+> attached, and that read fails closed: without the permission the step reports
+> `AccessDenied` and the job goes red even though the distribution is fine. It
+> was added on 2026-08-04 after exactly that false alarm. `put-role-policy`
+> replaces the whole document, so round-trip the existing policy and add the
+> action — do not send this statement alone.
 
 ```bash
 aws iam put-role-policy --role-name aetc-github-deploy \
