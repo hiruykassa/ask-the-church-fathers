@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import time
+from threading import Lock
 
 log = logging.getLogger(__name__)
 
@@ -86,44 +87,84 @@ def _period_key() -> str:
     return f"aetc:spend:{time.strftime('%Y-%m')}"
 
 
+# In-process fallback counter, used when Redis is not configured.
+#
+# Previously the cap simply did not exist without Redis: budget_remaining()
+# returned True unconditionally, so MONTHLY_API_BUDGET_USD was decorative and
+# spend was bounded only by caching. A per-process counter is weaker than a
+# shared one — with N gunicorn workers the effective ceiling is N x the limit,
+# and it resets when the instance restarts — but "approximately enforced" beats
+# "not enforced", and it needs no infrastructure.
+_local_spend: dict[str, float] = {}
+_local_lock = Lock()
+
+
+def _local_spent() -> float:
+    with _local_lock:
+        return _local_spend.get(_period_key(), 0.0)
+
+
 def budget_remaining() -> bool:
     """True if this month's spend is still under MONTHLY_BUDGET_USD.
 
     Fails *open* on any Redis error — we don't want a flaky cache to break
-    search. The flip side: a sustained Redis outage disables the cap.
+    search. The flip side: a sustained Redis outage falls back to the
+    in-process counter, which under-counts across workers.
     """
     if _redis is None:
-        return True
+        return _local_spent() < MONTHLY_BUDGET_USD
     try:
         spent = float(_redis.get(_period_key()) or 0)
         return spent < MONTHLY_BUDGET_USD
     except Exception as exc:
-        log.warning("telemetry: budget read failed (%s); allowing call", exc)
-        return True
+        log.warning("telemetry: budget read failed (%s); using in-process count", exc)
+        return _local_spent() < MONTHLY_BUDGET_USD
 
 
 def budget_status() -> dict:
-    """Snapshot for the health endpoint: whether the monthly cap is actually
-    enforced (Redis reachable) and how much has been spent this month."""
-    enabled = _redis is not None
+    """Snapshot for the health endpoint.
+
+    ``scope`` says how much the cap is worth: "shared" means one counter across
+    every worker and instance; "process" means each worker counts separately, so
+    the real ceiling is roughly N x limit and resets on restart. The cap is
+    always enforced now — ``enabled`` is kept for compatibility and mirrors
+    whether the counter is shared.
+    """
+    shared = _redis is not None
     spent = None
-    if enabled:
+    if shared:
         try:
             spent = round(float(_redis.get(_period_key()) or 0), 4)
         except Exception:
             spent = None
-    return {"enabled": enabled, "spent_usd": spent, "limit_usd": MONTHLY_BUDGET_USD}
+    if spent is None:
+        spent = round(_local_spent(), 6)
+    return {
+        "enabled": shared,
+        "scope": "shared" if shared else "process",
+        "spent_usd": spent,
+        "limit_usd": MONTHLY_BUDGET_USD,
+    }
 
 
 def record_spend(call_type: str) -> None:
     """Increment this month's spend counter by the cost-per-call for ``call_type``."""
-    if _redis is None:
-        return
     cost = COST_PER_CALL_USD.get(call_type, 0.0)
     if cost == 0.0:
         return
+
+    # Always count locally, Redis or not: it is the fallback budget_remaining()
+    # reads, and it keeps /api/health honest about spend on a single instance.
+    key = _period_key()
+    with _local_lock:
+        _local_spend[key] = _local_spend.get(key, 0.0) + cost
+        # One entry per month; drop anything older so this cannot grow.
+        for stale in [k for k in _local_spend if k != key]:
+            del _local_spend[stale]
+
+    if _redis is None:
+        return
     try:
-        key = _period_key()
         pipe = _redis.pipeline()
         pipe.incrbyfloat(key, cost)
         pipe.expire(key, 3456000)  # keep ~40 days so the month's counter outlives the month

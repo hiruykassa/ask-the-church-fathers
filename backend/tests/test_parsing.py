@@ -287,3 +287,52 @@ def test_budget_allows_zero(budget_from_env, monkeypatch):
     read, _ = budget_from_env
     monkeypatch.setenv("MONTHLY_API_BUDGET_USD", "0")
     assert read() == 0.0
+
+
+# ── Budget cap without Redis ──────────────────────────────────────────────────
+#
+# The cap used to be decorative when RATELIMIT_STORAGE_URI was unset:
+# budget_remaining() returned True unconditionally, so MONTHLY_API_BUDGET_USD
+# never bit and spend was bounded only by caching. An in-process counter is
+# weaker than a shared one — N workers means roughly N x the ceiling, and it
+# resets on restart — but it is enforcement rather than none.
+
+@pytest.fixture()
+def budget(monkeypatch):
+    import telemetry
+    monkeypatch.setattr(telemetry, "_redis", None)
+    monkeypatch.setattr(telemetry, "MONTHLY_BUDGET_USD", 0.0005)
+    telemetry._local_spend.clear()
+    yield telemetry
+    telemetry._local_spend.clear()
+
+
+def test_budget_starts_with_room(budget):
+    assert budget.budget_remaining() is True
+    assert budget.budget_status()["spent_usd"] == 0.0
+
+
+def test_budget_trips_without_redis(budget):
+    for _ in range(3):
+        budget.record_spend("gemini_parse")      # 0.00015 each
+        assert budget.budget_remaining() is True
+    budget.record_spend("gemini_parse")          # 0.0006 total, over 0.0005
+    assert budget.budget_remaining() is False
+
+
+def test_budget_status_reports_process_scope_without_redis(budget):
+    status = budget.budget_status()
+    assert status["scope"] == "process"
+    assert status["enabled"] is False
+
+
+def test_free_calls_do_not_count(budget):
+    budget.record_spend("groq_parse")            # free tier, 0.0
+    assert budget.budget_status()["spent_usd"] == 0.0
+
+
+def test_local_counter_keeps_only_the_current_month(budget):
+    budget.record_spend("gemini_parse")
+    budget._local_spend["aetc:spend:1999-01"] = 99.0
+    budget.record_spend("gemini_parse")
+    assert list(budget._local_spend) == [budget._period_key()]
