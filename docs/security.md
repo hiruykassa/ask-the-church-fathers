@@ -20,7 +20,7 @@ The API is a **public, read-only, unauthenticated** service. The table describes
 | **Secret hygiene** | No keys in git (scanned). macOS Keychain locally; SSM Parameter Store `SecureString`, referenced by ARN, in production. `.dockerignore` keeps secrets and the database out of the image. The container runs as non-root uid 1000 |
 | **Graceful degradation** | Voyage, Gemini, or Groq failure never returns 500 — search falls back to FTS keyword ranking |
 | **DB safety** | Connections closed in `try/finally`; search DB errors return 503; error handlers return generic JSON without leaking stack traces |
-| **Monitoring** | Optional Sentry (`SENTRY_DSN`), errors only, `send_default_pii=False` so client IPs and query text are never sent; disabled when the DSN is unset — **and it is currently unset, so no errors are being collected**. Uptime via an external pinger on `/api/health` |
+| **Monitoring** | Sentry (`SENTRY_DSN`), errors only, `send_default_pii=False` so client IPs and query text are never sent; disabled when the DSN is unset — **it is set in production as of 2026-07-31, so errors are being collected**. Uptime via an external pinger on `/api/health` |
 
 Two planned changes will deliberately move this posture: a mobile app would add an authenticated, user-scoped API as a separate surface, and display ads would relax the CSP to an explicit `script-src` / `frame-src` allowlist. Both are scoped trade-offs to be made consciously, not drift.
 
@@ -35,6 +35,7 @@ Set on the App Runner service under **Configuration → Environment variables**.
 PRODUCTION=1                                                    # missing ALLOWED_ORIGIN becomes a startup error
 ALLOWED_ORIGIN=https://asktheearlychurch.com
 DB_URL=s3://ask-the-early-church-db-<account-id>/database.db    # boto3 + instance role, not a signed URL
+SENTRY_DSN=https://…                                            # set 2026-07-31 — errors only, no PII
 
 # Secrets — SSM Parameter Store (SecureString), referenced by ARN.
 # Values are never typed into App Runner and never appear in any config file.
@@ -44,9 +45,8 @@ GROQ_API_KEY     → /ask-the-early-church/GROQ_API_KEY
 
 # Not set (defaults apply)
 VOYAGE_MODEL           # defaults to voyage-3 — must match the model the corpus was embedded with
-MONTHLY_API_BUDGET_USD # defaults to 10, but has no effect without Redis below
+MONTHLY_API_BUDGET_USD # defaults to 10 — enforced by an in-process counter even without Redis
 RATELIMIT_STORAGE_URI  # NOT SET — budget cap and rate limits are per-process only
-SENTRY_DSN             # unset = Sentry disabled
 ```
 
 The container runs `prestart.sh && gunicorn -w 1 --threads 8 -b 0.0.0.0:$PORT --timeout 60 app:app`. A single worker keeps exactly one copy of the embedding matrix in RAM; adding workers multiplies that memory by N and also splits the in-memory rate-limit counters. The 8 threads inside that worker are what provide concurrency: a search spends most of its wall time blocked on Gemini/Voyage HTTP and on SQLite, all of which release the GIL, so without threads one slow search serializes every other visitor. Threads share the matrix, so this costs no extra memory. (`--threads > 1` switches gunicorn from the `sync` worker to `gthread`; the DB layer opens a connection per request under WAL, and the TTL caches are lock-guarded, so this is safe.) Reproduce the production process locally with the same Dockerfile:
