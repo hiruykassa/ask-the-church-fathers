@@ -36,4 +36,28 @@ python backend/embed_passages.py       # re-embed changed rows — Voyage, costs
 
 After a rebuild, re-upload the database to S3 and restart App Runner so the new corpus is actually served.
 
+### The importer assumes one HTML dialect, and silently drops the other
+
+`import_github_writings.py` was written against the shape most of the upstream repo has: HTTrack mirrors of CCEL — flat `<body>` children, old-style `<font size=4>` markup, a short table of contents at the top. Its TOC heuristic (`import_github_writings.py:233-242`) strips *everything before the first `<hr>`*, which is correct for that shape.
+
+A minority of files are **Microsoft Word exports** instead: nested `<div>`s, `<span style="font-size:24.0pt">` where a heading should be, and `<o:p>` Office tags. On those the heuristic is catastrophic rather than wrong-by-a-little.
+
+The worked example is Athanasius' *On the Incarnation of the Word*, traced 2026-08-03:
+
+| | Working sibling (`Life of Antony.html`) | Word export (`On the Incarnation of the Word.html`) |
+|---|---|---|
+| `<body>` children | 756, flat | 3 — an empty `<a>` and two `<div>`s |
+| First `<hr>` | index 2, 0.08% in | inside the work `<div>`, 76.6% in |
+| Effect of the TOC strip | removes a one-paragraph TOC | `find_all_previous()` returns 934 nodes, 163 of which match; the work `<div>` is among them |
+| Body text after strip | intact | **0 chars**, down from 161,643 |
+
+The body then fails the 50-character floor, no passage is inserted, and — before the guard added in this session — the work row survived with zero passages. Nothing errored. The import reported success.
+
+Two separate pieces of work follow from this, and they should not be combined:
+
+1. **Recovering the text.** Bypassing the `<hr>` step recovers 158,867 chars, but the output does not match sibling convention: no `<h3>` title (the title is a styled `<span>`), a `None` header, and Word cruft throughout. A faithful restore needs a normalization pass — promote the title span to `<h3>`, strip `<span style>` and `<o:p>`, set the header to the work title.
+2. **Fixing the parser.** Guarding the TOC step — only strip before an `<hr>` that is a *direct child of `<body>`* and in the leading portion of the document — prevents recurrence. This changes shared import code, so it cannot be validated without a full re-import, and belongs in its own commit.
+
+**Embedding an oversized passage is a non-issue.** At ~159 KB this passage is unremarkable: 320 passages already exceed 100 KB and the largest is 2.07 MB. `embed_passages.py` pre-truncates every input to `PER_INPUT_CHARS` (120,000 chars, ~30K tokens, under the model context) and passes `truncation=True` as a second guard, so an oversized passage embeds on its opening text rather than erroring. Semantic search then matches on that opening; keyword search via FTS still covers the whole text. Cost is one `voyage-3` call, because the embedder selects `WHERE embeddings.passage_id IS NULL`.
+
 ---
