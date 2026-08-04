@@ -114,6 +114,15 @@ jobs:
       - name: Test
         run: npm test
 
+      # generate_static_meta.py runs inside build:deploy and writes 3,121
+      # files. It failing is loud; it silently degrading is not — a bug here
+      # once shipped a 7-character excerpt on 505 works. These are pure-function
+      # tests, so they need neither the corpus nor any key.
+      - name: Test build tooling
+        run: |
+          python3 -m pip install --quiet pytest
+          python3 -m pytest tools/tests -q
+
       - name: Build
         env:
           # CI verifies the build compiles only — the real App Runner API
