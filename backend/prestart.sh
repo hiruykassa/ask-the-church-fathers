@@ -75,6 +75,23 @@ fi
 TMP_FILE="${DB_FILE}.part"
 trap 'rm -f "$TMP_FILE"' EXIT
 
+# ...but the temp copy needs room for a second corpus alongside the old one.
+# On a fresh instance there is no old file and this is moot; on an in-place
+# restart — the case this whole version check exists for — it doubles peak
+# usage. If the disk cannot take both, drop the old file first and accept the
+# weaker guarantee, because the alternative is a boot loop: prestart fails,
+# the health check fails, App Runner rebuilds, and it fails again the same way.
+if [ -f "$DB_FILE" ]; then
+  need_kb=$(( $(wc -c < "$DB_FILE") / 1024 ))
+  free_kb=$(df -Pk . | awk 'NR==2 {print $4}')
+  # 5% headroom so we do not fill the disk exactly.
+  if [ "$free_kb" -lt $(( need_kb + need_kb / 20 )) ]; then
+    echo "[prestart] WARNING: only ${free_kb}KB free, need ~${need_kb}KB for a second copy."
+    echo "[prestart] Removing the old $DB_FILE before downloading — a failed download will leave no corpus."
+    rm -f "$DB_FILE" "${DB_FILE}-wal" "${DB_FILE}-shm"
+  fi
+fi
+
 echo "[prestart] Fetching $DB_FILE from S3 ($DB_URL) via instance role"
 DB_URL="$DB_URL" DB_FILE="$TMP_FILE" python3 - <<'PYEOF'
 import os, sys
