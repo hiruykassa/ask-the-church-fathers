@@ -366,6 +366,25 @@ jobs:
         run: |
           aws s3 sync dist/ "s3://${{ secrets.S3_FRONTEND_BUCKET }}/" --delete
 
+      # The 3,121 per-route files are only reachable because a viewer-request
+      # function rewrites /read/852 to /read/852/index.html. If it is ever
+      # detached, every URL still returns 200 — just with the homepage <head> —
+      # so nothing looks broken and the whole static-meta feature is silently
+      # dead. infra/distribution-config.json is gitignored (account ARNs), so
+      # nothing else diffs this. One assertion, no snapshot, no ARNs in the repo.
+      - name: Assert the CloudFront rewrite function is attached
+        run: |
+          set -euo pipefail
+          N=$(aws cloudfront get-distribution-config \
+                --id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" \
+                --query 'DistributionConfig.DefaultCacheBehavior.FunctionAssociations.Quantity' \
+                --output text)
+          if [ "$N" != "1" ]; then
+            echo "::error::CloudFront viewer-request function is NOT attached (Quantity=$N). All 3,121 static route files are unreachable."
+            exit 1
+          fi
+          echo "Rewrite function attached."
+
       - name: Invalidate CloudFront
         run: |
           set -euo pipefail
