@@ -31,8 +31,21 @@ Two behaviours are deliberate and should not be "simplified" later:
   serving. The workflow also tags each image with the commit SHA, so there is
   always an immutable identifier to roll back to.
 - **Health is verified by polling `/api/health` until `embeddings_loaded > 0`,
-  not by the service reaching `RUNNING`.** Boot takes ~135 seconds — 633 MB of
-  database, then 52,869 embeddings into RAM — and `RUNNING` precedes readiness.
+  not by the service reaching `RUNNING`.** Boot is the slow part: 633 MB of
+  database from S3, then 52,869 embeddings into RAM.
+
+  Measured on the first backend deploy (2026-07-31): `OPERATION_IN_PROGRESS` →
+  `RUNNING` took 2m53s, and `embeddings_loaded: 52869` was already true on the
+  first poll about a second later. So in practice `RUNNING` *did* imply ready —
+  an earlier draft of this file asserted the opposite as a general fact, which
+  was wrong.
+
+  The reason it holds is worth understanding rather than relying on: App Runner
+  gates the deployment on its own configured health check, and that check is
+  pointed at `/api/health` — an application endpoint that cannot answer until
+  gunicorn is up and the embeddings are loaded. **Repoint the health check at a
+  static path and that guarantee silently disappears.** The explicit poll costs
+  a second and keeps the workflow correct regardless, so it stays.
 
 The frontend job downloads `database.db` before building, because
 `npm run build:deploy` runs `generate_seo.py` and `generate_static_meta.py`,
