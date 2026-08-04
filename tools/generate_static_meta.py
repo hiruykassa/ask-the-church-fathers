@@ -157,6 +157,12 @@ def paragraphs(raw: str) -> list[str]:
         return []
     text = _DROP_RE.sub(" ", raw)
     text = _NOISE_RE.sub(" ", text)
+    # A newline inside a block is just whitespace in HTML — the corpus is
+    # hard-wrapped scraped markup, so without this a single <p> that happens to
+    # wrap across source lines would come out as several paragraphs.
+    # Flatten first, then let _BREAK_RE put newlines back where a real block
+    # boundary is.
+    text = re.sub(r"\s*\n\s*", " ", text)
     text = _BREAK_RE.sub("\n", text)
     text = _TAG_RE.sub(" ", text)
     text = html.unescape(text)
@@ -171,27 +177,53 @@ def paragraphs(raw: str) -> list[str]:
     return out
 
 
+# Below this fraction of the budget, an excerpt is too thin to be worth
+# shipping, so an over-long paragraph gets truncated to fill the page rather
+# than dropped. Above it there is already enough text, and stopping on a whole
+# paragraph reads better than a clipped one.
+MIN_FILL = 0.5
+
+
 def excerpt(chunks: list[str], budget: int = EXCERPT_BUDGET) -> list[str]:
     """Take whole paragraphs up to `budget` characters.
 
-    Always returns at least one paragraph when there is any text at all — a
-    single opening paragraph longer than the budget is truncated at a word
-    boundary rather than dropped, since dropping it would leave the page with
-    no body content, which is the whole problem this is fixing.
+    Whole paragraphs are preferred: an excerpt that stops at a paragraph break
+    reads like text rather than like a truncation. But "prefer" is not
+    "require", and the earlier version enforced it absolutely — it stopped at
+    the first paragraph that would not fit, whatever had been collected so far.
+
+    That is fine when the opening paragraph is prose, and badly wrong for the
+    shape most multi-book works in this corpus actually have: a short heading
+    ("Book I.") followed by a long summary. The heading fit, the summary did
+    not, and the page shipped a seven-character excerpt with 499 paragraphs
+    available. It looked like a working feature from every angle except the
+    output.
+
+    So: fill to the budget. Take whole paragraphs while they fit; when one does
+    not, truncate it at a word boundary if the excerpt is still thin, and stop
+    cleanly if it is already substantial.
     """
     picked: list[str] = []
     used = 0
+
     for chunk in chunks:
-        if picked and used + len(chunk) > budget:
+        room = budget - used
+        if len(chunk) <= room:
+            picked.append(chunk)
+            used += len(chunk)
+            if used >= budget:
+                break
+            continue
+
+        # Doesn't fit. Enough text already? Stop on the paragraph boundary.
+        if used >= budget * MIN_FILL:
             break
-        if not picked and len(chunk) > budget:
-            cut = chunk.rfind(" ", 0, budget)
-            picked.append(chunk[: cut if cut > 0 else budget].rstrip(" ,;:") + "…")
-            return picked
-        picked.append(chunk)
-        used += len(chunk)
-        if used >= budget:
-            break
+
+        # Otherwise take what fits, cutting at a word boundary.
+        cut = chunk.rfind(" ", 0, room)
+        picked.append(chunk[: cut if cut > 0 else room].rstrip(" ,;:") + "…")
+        break
+
     return picked
 
 
