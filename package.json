@@ -8,6 +8,8 @@
     "generate:seo": "python3 tools/generate_seo.py",
     "generate:meta": "python3 tools/generate_static_meta.py",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "vite build",
     "build:deploy": "npm run generate:seo && npm run build && npm run generate:meta",
     "preview": "vite preview"
@@ -29,7 +31,9 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^15.15.0",
+    "jsdom": "^25.0.1",
     "tailwindcss": "^4.2.2",
-    "vite": "^5.0.8"
+    "vite": "^5.0.8",
+    "vitest": "^2.1.9"
   }
 }

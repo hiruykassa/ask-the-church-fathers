@@ -92,7 +92,7 @@ jobs:
           fi
 
   frontend:
-    name: Frontend build
+    name: Frontend lint, test, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,6 +107,12 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # Vitest over src/utils — the sanitizer, citation formatting, and era
+      # bucketing. Deliberately runs with VITE_API_URL unset: the tests import
+      # utilities directly and must not depend on deploy configuration.
+      - name: Test
+        run: npm test
 
       - name: Build
         env:
