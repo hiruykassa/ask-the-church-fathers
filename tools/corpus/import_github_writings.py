@@ -543,6 +543,9 @@ def run_etl(repo_path: Path, db_path: Path, dry_run: bool = False):
     total_works = 0
     total_passages = 0
     errors = []
+    # Works whose source files produced no usable text. Reported at the end
+    # because a silent skip here is indistinguishable from a successful import.
+    empty_works = []
 
     if dry_run:
         for adir in author_dirs:
@@ -590,6 +593,7 @@ def run_etl(repo_path: Path, db_path: Path, dry_run: bool = False):
         for work in works:
             title = work["title"]
             work_id = insert_work(cursor, author_id, title, work["source_dir"], repo_path)
+            work_passages = 0
 
             for header_hint, html_path in work["files"]:
                 try:
@@ -606,9 +610,26 @@ def run_etl(repo_path: Path, db_path: Path, dry_run: bool = False):
                     if body_html and len(body_html.strip()) > 50:
                         insert_passage(cursor, work_id, header, body_html)
                         author_passages += 1
+                        work_passages += 1
 
                 except Exception as e:
                     errors.append(f"{html_path}: {e}")
+
+            # A work row is inserted before its files are parsed, and every way a
+            # file can yield nothing — empty parse, a body under the 50-char
+            # floor, or an exception caught above — is silently skipped. That
+            # combination used to leave a work with no passages behind: a real
+            # row, in the sitemap, with its own static-meta page, rendering an
+            # empty reader. It is how Athanasius' "On the Incarnation of the
+            # Word" went missing without anything failing.
+            #
+            # Drop the row and say so. A 404 is a better answer than a blank
+            # page, and the warning below is the signal that the upstream file
+            # needs looking at.
+            if work_passages == 0:
+                cursor.execute("DELETE FROM works WHERE id = ?", (work_id,))
+                empty_works.append(f"{author_name} — {title} ({work['source_dir']})")
+                continue
 
             author_works += 1
 
@@ -649,6 +670,13 @@ def run_etl(repo_path: Path, db_path: Path, dry_run: bool = False):
     print(f"  Authors:  {total_authors}")
     print(f"  Works:    {total_works}")
     print(f"  Passages: {total_passages}")
+    if empty_works:
+        # Loud on purpose. Each of these is a work the corpus is *supposed* to
+        # have and does not — the reader would otherwise find out by opening a
+        # blank page. Check the upstream file before accepting the import.
+        print(f"\n  ⚠ Dropped {len(empty_works)} work(s) with no usable text:")
+        for item in empty_works:
+            print(f"    {item}")
     if errors:
         print(f"\n  Errors ({len(errors)}):")
         for err in errors[:20]:
