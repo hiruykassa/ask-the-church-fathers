@@ -15,6 +15,7 @@ databases, not scraped from websites.
 | `migrate_schema.py` | Idempotent: add author classification columns, build `scripture_index`, create indexes |
 | `remove_post_chalcedon.py` | Prune post-Chalcedon / medieval authors and reclassify non-personal works |
 | `repair_truncated.py` | Repair passages whose HCF source file was truncated upstream |
+| `repair_word_export.py` | Insert the passage for a work whose source is a Microsoft Word export. Surgical, for works with **zero** passages — the full importer wipes and re-embeds everything. `--dry-run` first |
 | `apply_corrections.py` | Apply manual editorial fixes listed in `corrections.json` |
 | `reorder_passages.py` | Fix passage display order within multi-part works |
 | `backfill_commentary_sources.py` | Attach real per-quote citations to commentary passages |

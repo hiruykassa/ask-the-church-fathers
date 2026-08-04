@@ -34,12 +34,14 @@ Production runs entirely on **AWS**: React frontend on **S3 + CloudFront**, Flas
 |--------|------:|
 | Authors | 247 |
 | Works | 2,858 |
-| Passages | 52,869 |
-| Embeddings (`voyage-3`) | 52,869 — 100% coverage |
+| Passages | 52,870 |
+| Embeddings (`voyage-3`) | 52,870 — 100% coverage |
 | Verse-keyed commentary rows | 49,757 across 76 books |
 | Authors by category | commentary 132 · father 81 · council 13 · misc 10 · apocrypha 8 · liturgy 3 |
 
-Counts verified against the local corpus on 2026-08-03. The live `/api/health` on the same date reported `embeddings_loaded: 52869` — matching the table — with Voyage, Gemini, and Groq all configured and `budget.enabled: false`.
+Counts verified against the local corpus on 2026-08-04, after repairing Athanasius' *On the Incarnation of the Word* (see [Known gaps](#known-gaps)). That repair added the 52,870th passage — 174,742 chars, indexed in FTS and embedded as a unit-normalized 1,024-dim `voyage-3` vector, matching the existing matrix. Coverage is back to 100% and no work in the corpus has zero passages.
+
+The repair is **live**: the database was re-uploaded to S3 and App Runner redeployed on 2026-08-04 (3m05s, `OPERATION_IN_PROGRESS` to `RUNNING`). The live `/api/health` now reports `embeddings_loaded: 52870`, with Voyage, Gemini, and Groq all configured and `budget.enabled: false`. Verified end to end — `/api/works/936` returns the passage, and an author-scoped search for "Athanasius on the incarnation of the word" ranks it second.
 
 ---
 
@@ -60,7 +62,8 @@ python -m pytest -q         # smoke tests
 npm install
 npm run dev                 # http://localhost:5173
 npm run lint                # same check CI runs
-npm test                    # Vitest over src/utils (needs no API keys or DB)
+npm test                    # 62 Vitest cases over src/utils + src/hooks (no API keys or DB)
+python3 -m pytest tools/tests -q   # 58 cases over the build and corpus tooling
 ```
 
 API keys live in the **macOS Keychain**, never in a plain-text file:
@@ -109,7 +112,7 @@ To build the corpus from scratch, see [`docs/corpus.md`](docs/corpus.md).
 | Query parsing | Gemini 2.5 Flash-Lite with the full author roster; Groq Llama 3.3 70B fallback; local author-detect floor |
 | Ranking | Voyage `voyage-3` vectors + FTS5 BM25 + work-title match, fused by reciprocal rank fusion |
 | Infrastructure | AWS App Runner, ECR, S3, CloudFront, ACM, SSM Parameter Store, IAM; Cloudflare DNS |
-| Quality | ESLint flat config + pytest, both gated in GitHub Actions |
+| Quality | ESLint, Vitest (62), backend pytest (44), tooling pytest (58) — all gated in GitHub Actions |
 
 ---
 
@@ -140,12 +143,14 @@ An honest register. Each of these is a real, current defect, not a hypothetical.
 | **No Redis** — `RATELIMIT_STORAGE_URI` unset | `MONTHLY_API_BUDGET_USD` fails **open**: spend has no shared store, so the cap never triggers. Live `/api/health` reports `budget.enabled: false`. Search degrades gracefully without it, so this is a cost risk, not an uptime one | ElastiCache or self-hosted Redis reachable from an App Runner VPC connector |
 | **`deploy-backend` has only run manually** | Both deploy paths are proven, but the backend job has so far only been triggered by `workflow_dispatch`. The first push touching `backend/**` will be its first automatic run | Watch that run when it happens |
 | **API is not CDN-fronted** | `Cache-Control` ships on the ten immutable reference endpoints, so repeat visits hit the browser cache. But the distribution has one origin and no `/api/*` behaviour, so a *first* visit still reaches App Runner | Add an `/api/*` cache behaviour forwarding `Origin` and honouring origin `Cache-Control` |
-| **Cold start is ~2-3 minutes** | App Runner must pull the image, then 633 MB from S3, then load 52,869 embeddings before answering. Measured 2m53s from `OPERATION_IN_PROGRESS` to `RUNNING` on the 2026-07-31 deploy. Any instance replacement is a window that long | Slim the boot path, or keep a warm standby |
+| **Cold start is ~2-3 minutes** | App Runner must pull the image, then 633 MB from S3, then load 52,870 embeddings before answering. Measured 2m53s on the 2026-07-31 deploy and 3m05s on 2026-08-04, both `OPERATION_IN_PROGRESS` to `RUNNING`. Any instance replacement is a window that long | Slim the boot path, or keep a warm standby |
 | **AI synthesis is not live** | No `/api/synthesize` route. The last working implementation (`ac6ec5e^`) is parked as a commented block in `app.py` with a re-enable checklist. Reviving it before Redis exists ships an uncapped paid endpoint | Restore per that checklist, after Redis |
 | **No component or API-client tests** | Vitest covers `src/utils` plus the exported `writeStored` helper from `useSavedPassages` — but nothing renders a component or a hook, so `renderHook`/DOM-level behaviour is untested, and `api/client.js` has no coverage at all | Add `@testing-library/react`, then cover `FormattedPassage`, `PassageSource`, and the client's cache and abort paths |
-| **One work has no passages** | `/read/936` — Athanasius, *On the Incarnation of the Word* — is the only work in the corpus with zero rows in `passages`, so the page renders empty. A flagship text, and `/topics/athanasius-incarnation` points at the subject. **Cause traced to the file.** The source is intact upstream (264,950 bytes), but it is a Microsoft Word export rather than the HTTrack/CCEL shape the importer assumes, and its only `<hr>` sits 76.6% into the document inside the work `<div>`. The TOC heuristic strips everything before the first `<hr>`, which here decomposes the entire treatise: 161,643 chars of body text to **zero**. It then fails the 50-char floor and no passage is inserted. The importer now drops and reports such rows rather than leaving an empty work, but that does not bring the text back. Full trace in [`docs/corpus.md`](docs/corpus.md) | Not cheap, and no tool does it today. `import_github_writings.py` has no single-work mode — `run_etl` deletes every row in `passages`, `works`, `authors`, and `embeddings` first, so that route re-embeds all 52,869 passages at real cost. `apply_corrections.py` only *updates* a passage matched by (author, work title), and there is no row here to match. The cheap path is a one-off `INSERT INTO passages`, then `fts.py` + `migrate_schema.py` + `backend/embed_passages.py` — the embedder is incremental, so that is a single embedding call. Teaching `apply_corrections.py` to insert when a work has no passages would make it repeatable |
+| ~~**One work has no passages**~~ **Repaired 2026-08-04** | `/read/936` — Athanasius, *On the Incarnation of the Word* — was the only work with zero rows in `passages`, so the page rendered empty. A flagship text, and `/topics/athanasius-incarnation` points at the subject. **Cause traced to the file.** The source is intact upstream (264,950 bytes), but it is a Microsoft Word export rather than the HTTrack/CCEL shape the importer assumes, and its only `<hr>` sits 76.6% into the document inside the work `<div>`. The TOC heuristic strips everything before the first `<hr>`, which here decomposes the entire treatise: 161,643 chars of body text to **zero**. It then fails the 50-char floor and no passage is inserted. The importer now drops and reports such rows rather than leaving an empty work, but that does not bring the text back. Full trace in [`docs/corpus.md`](docs/corpus.md) | **Done.** `_toc_terminator()` now guards the TOC step, validated over all 3,764 upstream files (0 regressions, 2 recoveries), and `repair_word_export.py` inserted the passage — 174,742 chars, FTS row present, `fts.py --dry-run` reports no drift. Embedded with one incremental `voyage-3` call, then the database was re-uploaded to S3 and App Runner redeployed on 2026-08-04 — live and searchable |
 | **No error monitoring — accepted, not overlooked** | Sentry is integrated in `app.py` but inert without `SENTRY_DSN`, and the decision is to leave it that way. Be clear about what that costs: uptime monitoring answers "is the API up", error monitoring answers "which request threw and why". A 500 on one search query leaves `/api/health` green and UptimeRobot silent, so that class of bug surfaces only if someone reads the App Runner logs | Revisit if a user ever reports a failure that the logs cannot explain |
 | **`infra/` snapshots have no version history** | Re-exported 2026-08-03: the live distribution does have the viewer-request function attached, and the local copy now records it. But the stale snapshot had gone unnoticed for weeks, and it only surfaced because someone read the file. `infra/` is gitignored (account-specific ARNs, deliberately not in a public repo), so nothing diffs these against reality. Detaching that function would take all 3,121 static route files out of service **silently** — every URL still returns 200, just with the homepage `<head>` | Assert in CI that the live distribution reports `FunctionAssociations.Quantity == 1`; that catches the failure mode without committing any ARNs |
+| **Augustine's *Exposition of Certain Propositions* is 97% truncated** | Stored as **2,786** chars; the guarded parse yields **82,557**. It is in the corpus today as a stub, and no zero-passage check catches it because the stub clears the 50-char floor. Found while validating the parser over all 3,764 upstream files | Same shape of fix as Origen below — diff parsed against stored, then an `apply_corrections.py` update. Neither is an insert |
+| **Origen's *De Principiis* Book IV may be truncated** | Found while validating the import parser: the guarded parse recovers **193,934** chars from `De Principiis/Book 4.html`, but the stored `Book IV.` passage holds only **39,751** — roughly a fifth. The other three books are 133K–225K, so 40K is out of family. Unlike the Athanasius case the passage does exist, so this is a possible truncation rather than a missing work, and `repair_word_export.py` deliberately refuses it | Diff the parsed text against the stored passage before touching anything; if confirmed, it is an `apply_corrections.py`-shaped update, not an insert |
 | **App Runner in maintenance mode** | AWS stopped accepting new customers 2026-04-30. Existing services keep running with security patching; no sunset date announced | Someday migration to ECS Express Mode |
 | **Vite/esbuild dev advisory** | Dev server only, not exploitable in the hosted app | Vite 8 upgrade (breaking) |
 

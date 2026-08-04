@@ -53,10 +53,18 @@ The worked example is Athanasius' *On the Incarnation of the Word*, traced 2026-
 
 The body then fails the 50-character floor, no passage is inserted, and — before the guard added in this session — the work row survived with zero passages. Nothing errored. The import reported success.
 
-Two separate pieces of work follow from this, and they should not be combined:
+Both halves are now addressed:
 
-1. **Recovering the text.** Bypassing the `<hr>` step recovers 158,867 chars, but the output does not match sibling convention: no `<h3>` title (the title is a styled `<span>`), a `None` header, and Word cruft throughout. A faithful restore needs a normalization pass — promote the title span to `<h3>`, strip `<span style>` and `<o:p>`, set the header to the work title.
-2. **Fixing the parser.** Guarding the TOC step — only strip before an `<hr>` that is a *direct child of `<body>`* and in the leading portion of the document — prevents recurrence. This changes shared import code, so it cannot be validated without a full re-import, and belongs in its own commit.
+1. **The parser is guarded.** `_toc_terminator()` only accepts an `<hr>` that is a direct child of `<body>`, and rejects one only when the content before it is **both** longer than `TOC_HR_MAX_ABS` (400 chars) **and** past `TOC_HR_MAX_POSITION` (25%) of the body text.
+
+   Position is measured on **text length, not element count** — that distinction is the whole bug, because one `<div>` can hold an entire treatise, which made the offending `<hr>` look like the second of three children.
+
+   The absolute bound is there because a fraction alone breaks on short files, and doing it fraction-only regressed seven works during validation. Eight of Leo the Great's letters are title-only stubs of ~311 characters — shape `['a', 'p', 'hr', 'h2']`, the title printed twice — where a legitimate one-line TOC is inherently ~50% of the file. Rejecting their genuine terminator left the TOC in place, and two *older* heuristics then finished the job: the `<p>`-tail trim removes everything after the last `<p>` (here the `<h2>`, the only content), and the anchor step decomposes the `LOC_` anchor inside that paragraph, emptying it. 165 characters to zero, on works that import fine today.
+
+   Validated over all 3,764 upstream files: **0 regressions, 2 recoveries, 6 files changed**.
+2. **Recovery is a separate, surgical script.** `repair_word_export.py` normalizes one Word export to sibling convention and inserts the passage for a work that has none. It refuses a work that already has passages, and refuses a parse that comes back under the 50-character floor rather than forcing anything in. Re-running the full importer is not an option for a one-work repair — it wipes and re-embeds all 52,870 passages.
+
+Normalization is not cosmetic. `ReadPage` and `sanitizePassageHtml` key off the sibling shape, and the client sanitizer drops style attributes, so a title left as `<span style="font-size:24.0pt">` renders as ordinary body text.
 
 **Embedding an oversized passage is a non-issue.** At ~159 KB this passage is unremarkable: 320 passages already exceed 100 KB and the largest is 2.07 MB. `embed_passages.py` pre-truncates every input to `PER_INPUT_CHARS` (120,000 chars, ~30K tokens, under the model context) and passes `truncation=True` as a second guard, so an oversized passage embeds on its opening text rather than erroring. Semantic search then matches on that opening; keyword search via FTS still covers the whole text. Cost is one `voyage-3` call, because the embedder selects `WHERE embeddings.passage_id IS NULL`.
 
