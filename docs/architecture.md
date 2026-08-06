@@ -31,7 +31,7 @@ S3: ask-the-early-church-frontend-<account-id>   (static dist/ only)
     │
     │  Browser calls VITE_API_URL cross-origin (baked into the bundle at build time)
     ▼
-App Runner: ask-the-early-church-api  (ECR image, x86_64, 2 vCPU / 4 GB)
+App Runner: ask-the-early-church-api  (ECR image, x86_64, 1 vCPU / 2 GB)
     │  prestart.sh fetches database.db from S3 via the instance role
     │      DB_URL=s3://ask-the-early-church-db-<account-id>/database.db
     │      no credentials in the URL, the environment, or the image
@@ -64,7 +64,14 @@ Full narrative in [`docs/aws-migration-guide.md`](aws-migration-guide.md).
 
 ### Cost
 
-App Runner at 2 vCPU / 4 GB runs roughly **$25-50/mo**; S3 + CloudFront adds a few dollars; egress is negligible at this traffic. Comparable to the old Render + Netlify bill, with full control over deploys, logs, and scaling. A monthly AWS budget alarm is configured.
+Measured run-rate is **~$11/mo**: App Runner provisioned memory $10.22, S3 ~$0.65, ECR ~$0.06. CloudFront and ACM sit inside the free tier, there is no Route 53 hosted zone (DNS is on Cloudflare), and egress is negligible at this traffic.
+
+Two things that figure hides:
+
+- **Provisioned memory is ~97% of the bill, and it accrues whether or not anyone visits.** App Runner bills reserved memory 24/7 and vCPU only while requests are in flight; at ~470 requests/day the vCPU half is about $0.25/mo. Cost here is a function of instance *size*, not traffic — which is why the 2026-08-05 resize from 2 vCPU / 4 GB halved it.
+- **Credits currently cover the whole thing**, so the invoice reads $0. `UnblendedCost` nets credits against usage and reports ~$0 per service, which makes the account look idle; `infra/cost-audit.sh` filters to `RECORD_TYPE=Usage` for this reason. The ~$11 is what lands when the credits expire.
+
+This is **more** than the stack it replaced, which was effectively free — Render's 512 MB free plan, Netlify free, and R2 inside its free tier. The trade is paid capacity for a container that does not sleep, plus control over deploys, logs, and scaling. A monthly AWS budget alarm is configured.
 
 ---
 

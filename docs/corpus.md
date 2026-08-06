@@ -16,7 +16,7 @@ Most of the corpus comes from [HistoricalChristianFaith](https://historicalchris
 
 Embeddings are produced offline by `embed_passages.py` (Voyage `voyage-3`) and loaded into RAM at startup. `_load_embeddings()` streams vectors into a single preallocated **float16** matrix and normalizes each chunk in place, so peak cold-start memory stays at roughly 1× the matrix (~108 MB) instead of the ~3× a naive load costs. Scoring upcasts small row-chunks back to float32 on the fly (`_cosine_scores`), so the float16 store is never inflated into a full float32 copy per query, and top-k ranking is unaffected by the precision change.
 
-This was originally built to fit a 512 MB instance. It still matters on App Runner's 4 GB: it is what keeps cold start at seconds rather than minutes. Search degrades to FTS-only whenever embeddings are missing.
+This was originally built to fit a 512 MB instance. It matters more on App Runner's 2 GB than it did on the 4 GB that preceded it: it is what keeps cold start at seconds rather than minutes, and the loaded matrix is now a visible fraction of the reservation rather than a rounding error. Search degrades to FTS-only whenever embeddings are missing.
 
 ### Building the database from scratch
 

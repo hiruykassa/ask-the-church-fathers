@@ -14,7 +14,7 @@ Reading and searching are, and always will be, free. **No monetization is live t
 
 ## Status
 
-Production runs entirely on **AWS**: React frontend on **S3 + CloudFront**, Flask backend on **App Runner** (Docker via ECR, x86_64, 2 vCPU / 4 GB), and the 633 MB `database.db` in **S3**, fetched on boot by `prestart.sh`. The corpus is fully embedded, so hybrid semantic + keyword search is on. Originally launched on Netlify + Render + Cloudflare R2; migrated to AWS in mid-2026.
+Production runs entirely on **AWS**: React frontend on **S3 + CloudFront**, Flask backend on **App Runner** (Docker via ECR, x86_64, 1 vCPU / 2 GB), and the 633 MB `database.db` in **S3**, fetched on boot by `prestart.sh`. The corpus is fully embedded, so hybrid semantic + keyword search is on. Originally launched on Netlify + Render + Cloudflare R2; migrated to AWS in mid-2026.
 
 | Area | Status |
 |------|--------|
@@ -100,7 +100,7 @@ Everything production runs on, region **us-east-2**. Sizing and names come from 
 | Resource | What it is |
 |----------|-----------|
 | **ECR** | Repository `ask-the-early-church-api` — the x86_64 backend image the service pulls (the suffix matters; see deploying.md) |
-| **App Runner** | Service on 2 vCPU / 4 GB, autoscaling config `aetc-api` (concurrency 8, min 1, max 25), health check `/api/health` (interval 10s, timeout 5s, healthy 1, unhealthy 5) |
+| **App Runner** | Service on 1 vCPU / 2 GB, autoscaling config `aetc-api` (concurrency 8, min 1, max 25), health check `/api/health` (interval 10s, timeout 5s, healthy 1, unhealthy 10) |
 | **S3** | `ask-the-early-church-frontend-<account-id>` (static frontend) and a DB bucket holding `database.db`, fetched on boot by `prestart.sh` via `DB_URL=s3://…` |
 | **CloudFront** | One distribution over the frontend bucket, with the `tools/cloudfront-rewrite-function.js` viewer-request function attached to serve per-route static `<head>` at extensionless URLs |
 | **ACM + DNS** | TLS cert for `asktheearlychurch.com`; DNS on Cloudflare |
