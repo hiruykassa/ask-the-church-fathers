@@ -100,7 +100,7 @@ Two settings worth knowing because they are not editable in place:
 
 | Job | What it does |
 |-----|--------------|
-| **Backend smoke tests** | Python 3.13, installs `backend/requirements.txt`, fetches the database via `prestart.sh` when the `DB_URL` secret is set, then runs `pytest -q`. Skips the tests with a clear log line when no database is available rather than failing opaquely |
+| **Backend smoke tests** | Python 3.13, installs `backend/requirements.txt`, fetches the database via `prestart.sh` when the `DB_URL` secret is set, then runs `pytest -q`. **Green on push to `main`, but fails on every `pull_request`** — the job assumes an AWS role via OIDC before it reaches any skip logic, and the trust policy is not scoped to PR refs, so it dies at `Configure AWS credentials` with `Not authorized to perform sts:AssumeRoleWithWebIdentity`. It does not skip cleanly; PRs get no backend signal. See [Known gaps](../README.md#known-gaps) |
 | **Frontend lint, test, build** | Node 20, `npm ci`, `npm run lint`, `npm test` (Vitest over `src/utils`, no keys or DB needed), then `npm run build` against a placeholder `VITE_API_URL` — it verifies the bundle compiles, not that it points anywhere real |
 
 Tests live in `backend/tests/`: `test_parsing.py` covers query parsing and scripture-reference detection (no database needed); `test_smoke.py` exercises the live endpoints against a real corpus.
