@@ -14,7 +14,7 @@ Reading and searching are, and always will be, free. **No monetization is live t
 
 ## Status
 
-Production runs entirely on **AWS**: React frontend on **S3 + CloudFront**, Flask backend on **App Runner** (Docker via ECR, x86_64, 2 vCPU / 4 GB), and the 633 MB `database.db` in **S3**, fetched on boot by `prestart.sh`. The corpus is fully embedded, so hybrid semantic + keyword search is on. Originally launched on Netlify + Render + Cloudflare R2; migrated to AWS in mid-2026.
+Production runs entirely on **AWS**: React frontend on **S3 + CloudFront**, Flask backend on **App Runner** (Docker via ECR, x86_64, 1 vCPU / 2 GB), and the 633 MB `database.db` in **S3**, fetched on boot by `prestart.sh`. The corpus is fully embedded, so hybrid semantic + keyword search is on. Originally launched on Netlify + Render + Cloudflare R2; migrated to AWS in mid-2026.
 
 | Area | Status |
 |------|--------|
@@ -100,7 +100,7 @@ Everything production runs on, region **us-east-2**. Sizing and names come from 
 | Resource | What it is |
 |----------|-----------|
 | **ECR** | Repository `ask-the-early-church-api` — the x86_64 backend image the service pulls (the suffix matters; see deploying.md) |
-| **App Runner** | Service on 2 vCPU / 4 GB, autoscaling config `aetc-api` (concurrency 8, min 1, max 25), health check `/api/health` (interval 10s, timeout 5s, healthy 1, unhealthy 5) |
+| **App Runner** | Service on 1 vCPU / 2 GB, autoscaling config `aetc-api` (concurrency 8, min 1, max 25), health check `/api/health` (interval 10s, timeout 5s, healthy 1, unhealthy 10) |
 | **S3** | `ask-the-early-church-frontend-<account-id>` (static frontend) and a DB bucket holding `database.db`, fetched on boot by `prestart.sh` via `DB_URL=s3://…` |
 | **CloudFront** | One distribution over the frontend bucket, with the `tools/cloudfront-rewrite-function.js` viewer-request function attached to serve per-route static `<head>` at extensionless URLs |
 | **ACM + DNS** | TLS cert for `asktheearlychurch.com`; DNS on Cloudflare |
@@ -171,12 +171,14 @@ An honest register. Each of these is a real, current defect, not a hypothetical.
 | **Origen's *De Principiis* Book IV is truncated** | Stored at **39,751** chars; the guarded parse of `De Principiis/Book 4.html` yields **193,934**. Books I-III are 133K / 167K / 225K, so Book IV is plainly out of family. The passage exists, so no zero-passage check catches it and `repair_word_export.py` deliberately refuses it | Diff the parsed text against the stored passage, then an `apply_corrections.py` update — an edit, not an insert |
 | **Augustine's *Exposition of Certain Propositions* is missing entirely** | The upstream file exists (`Augustine of Hippo/Exposition of Certain Propositions from the Epistle to the Romans.html`, 89,649 bytes, parsing to **82,557** chars), but no work by that title is in the corpus at all — it is absent, not truncated. Do not confuse it with work 1817 *Commentary on Romans*, which comes from the commentaries importer and is complete | Establish why the work never landed, then insert via the `repair_word_export.py` path if the parse is sound |
 | **API is not CDN-fronted** | `Cache-Control` ships on the ten immutable reference endpoints, so repeat visits hit the browser cache. But the distribution has one origin and no `/api/*` behaviour, so a *first* visit still reaches App Runner | Add an `/api/*` cache behaviour forwarding `Origin` and honouring origin `Cache-Control` |
-| **Cold start is ~2-3 minutes** | App Runner must pull the image, then 633 MB from S3, then load 52,870 embeddings before answering. Measured 2m53s on 2026-07-31 and 3m05s on 2026-08-04, both `OPERATION_IN_PROGRESS` to `RUNNING`. Any instance replacement is a window that long | Slim the boot path, or keep a warm standby |
+| **Cold start is ~3 minutes** | App Runner must pull the image, then 633 MB from S3, then load 52,870 embeddings before answering. Measured 2m53s on 2026-07-31, 3m05s on 2026-08-04, and 3m10s on 2026-08-05 — the last after the resize to 1 vCPU, which halves the CPU the embedding load runs on. Any instance replacement is a window that long | Slim the boot path, or keep a warm standby |
 | **AI synthesis is not live** | No `/api/synthesize` route. The last working implementation (`ac6ec5e^`) is parked as a commented block in `app.py` with a re-enable checklist. It is a paid endpoint, so the monthly cap has to be trustworthy before it comes back — which means a shared counter, not the per-process one | Restore per that checklist, once spend is tracked across instances |
 | **Organic growth is unmeasured** | Nobody has opened Search Console, so no one knows whether the site ranks for anything. A new site with no backlinks gets little crawl demand regardless. This is a distribution problem, not a code one, and it moves over months | Read Search Console, then decide whether it needs work |
 | **No monetization** | Reading and searching are free and always will be. Donations and affiliate book links are planned; nothing is implemented, so the project has no revenue and no path to any | Donations first, then affiliate links |
 | **App Runner in maintenance mode** | AWS stopped accepting new customers 2026-04-30. Existing services keep running with security patching; no sunset date announced | Someday migration to ECS Express Mode |
-| **Vite/esbuild dev advisory** | Dev server only, not exploitable in the hosted app | Vite 8 upgrade (breaking) |
+| **Dev-only dependency advisories** | 9 of the 11 packages `npm audit` flags are build/test-tree only (vite, esbuild, postcss, vitest, vite-node, @vitest/mocker, js-yaml, brace-expansion, @babel/core). Dev server and CI only; none reach the shipped bundle | Vite 8 upgrade (breaking) |
+| **`react-router` RSC advisory ships but is unreachable** | `react-router-dom` is a runtime dependency, so its advisories do ship. The open-redirect and XSS ones were cleared by the 7.14.2 → 7.18.0 bump on 2026-08-06; one HIGH remains, RSC Mode CSRF, affecting `>=7.12.0 <8.3.0`. This SPA uses `BrowserRouter` with no RSC, server actions, or SSR, so it is not reachable — and no fixed release exists yet (latest is 7.18.2; npm's only "fix" is a downgrade to 7.11.0 that reinstates the open redirect) | Bump when 8.3.0 ships |
+| **PR CI cannot run backend tests** | Every `pull_request` run fails at `Configure AWS credentials` with `Not authorized to perform sts:AssumeRoleWithWebIdentity`. The OIDC trust policy is not scoped to PR refs, so the job dies before it can fetch the test database and backend smoke tests give no signal on a PR. Push to `main` is unaffected and green | Scope the trust policy to PR refs, or let the backend job skip cleanly without credentials |
 
 ---
 

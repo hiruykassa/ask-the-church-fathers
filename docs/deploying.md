@@ -29,11 +29,24 @@ aws apprunner start-deployment --service-arn <service-arn> --region us-east-2
 curl -s https://<service>.us-east-2.awsapprunner.com/api/health | jq
 ```
 
-`/api/health` should report `status: ok`, `embeddings_loaded: 52870`, and all three providers `true`. **Boot takes ~135 seconds** (measured 2m53s on 2026-07-31, 3m05s on 2026-08-04): the 633 MB database downloads from S3, then 52,870 embeddings load into RAM before gunicorn answers anything.
+`/api/health` should report `status: ok`, `embeddings_loaded: 52870`, and all three providers `true`. **Boot takes ~190 seconds** (measured 2m53s on 2026-07-31, 3m05s on 2026-08-04, 3m10s on 2026-08-05 at 1 vCPU): the 633 MB database downloads from S3, then 52,870 embeddings load into RAM before gunicorn answers anything. This figure previously read ~135s, which never matched the measurements beside it.
+
+**Authoritative instance config.** `infra/` is gitignored, so the snapshot in `infra/apprunner-service.json` exists only in a local checkout. These are the values to restore from if that file is lost or has drifted — the ones that silently cost money or break boot when wrong:
+
+| Field | Value | Why it bites |
+|---|---|---|
+| `Cpu` | `1 vCPU` | Resized from 2 vCPU on 2026-08-05 |
+| `Memory` | `2 GB` | Resized from 4 GB. Provisioned memory bills 24/7 and is ~97% of the AWS bill; reverting doubles it |
+| `Interval` | `10` | With `UnhealthyThreshold`, sets the boot grace window |
+| `Timeout` | `5` | Raised from 2s so a slow-but-alive instance is not replaced |
+| `HealthyThreshold` | `1` | |
+| `UnhealthyThreshold` | `10` | Raised from 5 → 100s grace. App Runner's default is 5; omitting it falls back to that and halves the window the 1 vCPU boot needs |
+
+Everything else in that file — image identifier, roles, env vars, SSM ARNs — is recoverable from `aws apprunner describe-service`. These six are the ones where a wrong value looks like nothing is wrong.
 
 > **`update-service` does not ship code.** An earlier version of this section claimed that because the tag is `:latest`, any `update-service` call also re-pulls the image, so an env-var change and a code change could share one deployment. **That is wrong**, and it bit a real deploy on 2026-07-31: the new image was pushed to ECR, `update-service` was called to add `SENTRY_DSN`, the service reported a successful deployment — and the *old* code kept serving. `update-service` applies configuration; it does not re-pull an unchanged tag. It was caught only because the new `Cache-Control` headers and the raised `/api/health` limit were missing from the live responses.
 >
-> Ship code with **`start-deployment`**, or pin `ImageIdentifier` to an explicit digest so the identifier itself changes. If a release carries both a config change and a code change, expect **two** restarts at ~135s each, and verify the code actually landed by checking for something only the new build emits.
+> Ship code with **`start-deployment`**, or pin `ImageIdentifier` to an explicit digest so the identifier itself changes. If a release carries both a config change and a code change, expect **two** restarts at ~190s each, and verify the code actually landed by checking for something only the new build emits.
 
 > **Both `update-service` and `update-distribution` replace configuration wholesale.** They do not merge. Every call must round-trip the complete object — fetch the current config, change only the field you intend to change, send the whole thing back. A partial payload silently drops everything omitted. On 2026-07-31 a payload was about to ship without `PRODUCTION=1`, which would have disabled `ProxyFix` (`app.py:745`) and collapsed every visitor into a single rate-limit bucket — one user running ten searches would have locked out the whole site.
 
@@ -70,7 +83,13 @@ Always fetch the current config first, change only the field you intend to chang
 Two settings worth knowing because they are not editable in place:
 
 - **Autoscaling concurrency is immutable.** Changing it means creating a *new* autoscaling configuration and associating it, not editing the existing one. The live config is `aetc-api` — concurrency 8, min 1, max 25. Concurrency is deliberately matched to gunicorn's `--threads 8` so App Runner scales out when the worker is actually saturated, rather than queueing 92 requests inside one instance first.
-- **Health check timings** are interval 10s, timeout 5s, healthy 1, unhealthy 5. The timeout was raised from 2s because a busy instance answering `/api/health` slowly was indistinguishable from a dead one, and replacement costs a ~135s rebuild — which under sustained load loops.
+- **Health check timings** are interval 10s, timeout 5s, healthy 1, unhealthy 10 — a **100s grace window** (interval × unhealthy threshold). Two different failure modes share these numbers, and they pull in opposite directions.
+
+  *Steady state.* A busy instance answering `/api/health` slowly is indistinguishable from a dead one. The timeout was raised from 2s for that reason, and the unhealthy threshold from 5 to 10, so ten consecutive slow probes are tolerated instead of five. This matters because the remedy for a failed check is replacement, and replacement costs a full rebuild — under sustained load, killing a slow-but-alive instance just produces another cold one that is also slow, which loops.
+
+  *Startup.* The same window covers the 633 MB S3 download in `prestart.sh` **and** the embedding load, because nothing binds the port until both finish — an instance that is still booting is, to the health checker, simply not answering. This is why the threshold was doubled to 10 *before* the instance was cut to 1 vCPU on 2026-08-05: the normalize step in `_load_embeddings()` is CPU-bound and roughly doubles at half the CPU, and it sits inside the grace window.
+
+  The numbers do not have much room. A deploy is ~190s wall clock, but only the in-container part runs against the 100s window — provisioning and image pull happen before the first probe. That split is not separately instrumented, so the 100s is known to be sufficient only because the resize deploy passed on it, not because the margin has been measured. **If the corpus grows or the instance shrinks again, raise the threshold first.** The failure mode is not a slow start; it is a boot loop, where each replacement re-downloads 633 MB and never finishes in time.
 
 ---
 
@@ -81,7 +100,7 @@ Two settings worth knowing because they are not editable in place:
 
 | Job | What it does |
 |-----|--------------|
-| **Backend smoke tests** | Python 3.13, installs `backend/requirements.txt`, fetches the database via `prestart.sh` when the `DB_URL` secret is set, then runs `pytest -q`. Skips the tests with a clear log line when no database is available rather than failing opaquely |
+| **Backend smoke tests** | Python 3.13, installs `backend/requirements.txt`, fetches the database via `prestart.sh` when the `DB_URL` secret is set, then runs `pytest -q`. **Green on push to `main`, but fails on every `pull_request`** — the job assumes an AWS role via OIDC before it reaches any skip logic, and the trust policy is not scoped to PR refs, so it dies at `Configure AWS credentials` with `Not authorized to perform sts:AssumeRoleWithWebIdentity`. It does not skip cleanly; PRs get no backend signal. See [Known gaps](../README.md#known-gaps) |
 | **Frontend lint, test, build** | Node 20, `npm ci`, `npm run lint`, `npm test` (Vitest over `src/utils`, no keys or DB needed), then `npm run build` against a placeholder `VITE_API_URL` — it verifies the bundle compiles, not that it points anywhere real |
 
 Tests live in `backend/tests/`: `test_parsing.py` covers query parsing and scripture-reference detection (no database needed); `test_smoke.py` exercises the live endpoints against a real corpus.

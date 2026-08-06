@@ -48,6 +48,10 @@ infra/
 # Local-only working material (not part of the shipped app)
 brand/
 
+# Cost audit reports. infra/cost-audit.sh now writes into infra/ (already
+# ignored); this covers reports left in the repo root by earlier runs.
+cost-audit-*.txt
+
 # Editor / AI tooling (not part of the app)
 .vscode/
 .cursor/*

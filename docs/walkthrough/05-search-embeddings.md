@@ -47,7 +47,7 @@ The qualities that make this a *good* batch job:
 
 ## 3. Loading 52,869 vectors into a small instance — the float16 trick (`app.py:164`)
 
-This is the single most impressive piece of engineering in the backend and a guaranteed interview highlight. The problem: at startup the server loads *every* passage vector into RAM so it can score queries fast. 52,869 vectors × 1024 dims × 4 bytes (float32) ≈ **217 MB** just for the matrix — and a naive load would briefly hold ~3× that (the raw bytes, a joined copy, and the final array). This optimization was originally written to fit the **512 MB** Render free plan; it still matters, keeping the container's footprint small on the current App Runner instance (2 vCPU / 4 GB) and cheap to run.
+This is the single most impressive piece of engineering in the backend and a guaranteed interview highlight. The problem: at startup the server loads *every* passage vector into RAM so it can score queries fast. 52,869 vectors × 1024 dims × 4 bytes (float32) ≈ **217 MB** just for the matrix — and a naive load would briefly hold ~3× that (the raw bytes, a joined copy, and the final array). This optimization was originally written to fit the **512 MB** Render free plan; it still matters, keeping the container's footprint small on the current App Runner instance (1 vCPU / 2 GB) and cheap to run — it is part of why that instance could be halved from 2 vCPU / 4 GB without the corpus outgrowing it.
 
 Two optimizations in `_load_embeddings()`:
 
