@@ -68,3 +68,18 @@ python -m pytest -q    # smoke tests
 - **`App.css` is authoritative** for styling. Tailwind v4 runs with preflight skipped, so it contributes utilities and theme layers only.
 - **Known gap:** `RATELIMIT_STORAGE_URI` (Redis) is unset on App Runner, so `MONTHLY_API_BUDGET_USD` is enforced by an in-process counter rather than a shared one — it *does* bite, but each instance counts separately and the count resets on restart. Check `budget.scope` on `/api/health`; `budget.enabled` reports only whether the counter is shared, so `false` there does not mean unenforced.
 - Update the README, `docs/`, and `docs/walkthrough/` when a change makes them wrong. The README is deliberately short — it links out rather than explaining. Deep detail belongs in `docs/architecture.md`, `docs/deploying.md`, `docs/security.md`, `docs/api-reference.md`, `docs/seo.md`, or `docs/corpus.md`. Don't grow the README back.
+
+## AWS
+
+From the [Agent Toolkit for AWS](https://github.com/aws/agent-toolkit-for-aws) rules file, added as a section rather than replacing this file — the toolkit's setup step says to write these to `CLAUDE.md`, which here would have deleted the secrets policy above.
+
+- Prefer the AWS MCP Server for AWS interactions — it provides sandboxed execution, observability, and audit logging. If unavailable, use the AWS CLI directly.
+- Before starting a task, check whether a relevant AWS skill is available. Load the skill with `retrieve_skill` and prefer its guidance over general knowledge.
+- When uncertain about specific AWS details (API parameters, permissions, limits, error codes), verify against documentation rather than guessing. State uncertainty explicitly if you cannot confirm.
+- When creating infrastructure, prefer infrastructure-as-code (AWS CDK or CloudFormation) over direct CLI commands.
+- When working with infrastructure, follow AWS Well-Architected Framework principles.
+- Do not use em dashes in AWS resource names or descriptions. Use hyphens instead.
+
+**These do not override the secrets rules at the top of this file.** The MCP server's sandboxing does not make it acceptable to read `~/.secrets/`, `backend/.env`, or pull production secrets out of SSM.
+
+Live infrastructure is described in [`docs/aws-migration-guide.md`](docs/aws-migration-guide.md) and snapshotted in `infra/` — note the drift warning in `infra/README.md` before re-applying anything from there.
