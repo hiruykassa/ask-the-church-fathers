@@ -2281,6 +2281,13 @@ html[data-theme='dark'] .site-footer__nav-divider {
   color: var(--btn-on-gold);
   border-color: var(--gold);
 }
+/* Facet count — shows the reader the ratio, which is the real answer to
+   "why is everything a Bible commentary?" (the corpus is ~94% commentary). */
+.filter-chip-count {
+  margin-left: 6px;
+  opacity: 0.62;
+  font-variant-numeric: tabular-nums;
+}
 
 /* Verse-ref line on scripture result cards */
 .result-card-ref {

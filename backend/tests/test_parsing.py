@@ -241,6 +241,84 @@ def test_diversify_respects_limit():
     assert out == [1, 2]
 
 
+# ── Writing floor ─────────────────────────────────────────────────────────────
+#
+# 94% of the corpus is verse-keyed commentary, so a rank-ordered page is almost
+# always pure commentary — not because writings rank badly but because there
+# are 16x fewer of them. The floor swaps the weakest results for the best
+# writings that missed the cut.
+
+def _pool():
+    """Ten commentary passages across ten works, then three writings below."""
+    ranked = list(range(1, 11)) + [101, 102, 103]
+    work = {p: f"w{p}" for p in ranked}
+    author = {p: f"a{p}" for p in ranked}
+    return ranked, work, author, {101, 102, 103}
+
+
+def test_writing_floor_is_off_without_writing_ids():
+    from ranking import diversify
+    ranked, work, author, _ = _pool()
+    # Existing callers that pass no writing_ids must behave exactly as before.
+    assert diversify(ranked, work, author, limit=5) == [1, 2, 3, 4, 5]
+
+
+def test_writing_floor_swaps_only_the_weakest_results():
+    from ranking import diversify
+    ranked, work, author, writings = _pool()
+    out = diversify(ranked, work, author, limit=5, writing_ids=writings)
+    # Top three untouched; the last two slots go to the best writings.
+    assert out[:3] == [1, 2, 3]
+    assert out[3:] == [101, 102]
+    assert len(out) == 5 and len(set(out)) == 5
+
+
+def test_writing_floor_keeps_the_better_writing_higher():
+    from ranking import diversify
+    ranked, work, author, writings = _pool()
+    out = diversify(ranked, work, author, limit=5, writing_ids=writings)
+    # Slots are freed from the bottom up, but rank order must survive the swap.
+    assert out.index(101) < out.index(102)
+
+
+def test_writing_floor_is_a_noop_when_none_matched():
+    from ranking import diversify
+    ranked, work, author, _ = _pool()
+    plain = diversify(ranked, work, author, limit=5)
+    # A query no writing matched must not be degraded by the floor.
+    assert diversify(ranked, work, author, limit=5, writing_ids={999}) == plain
+
+
+def test_writing_floor_is_a_noop_when_already_satisfied():
+    from ranking import diversify
+    _, work, author, writings = _pool()
+    ranked = [101, 102] + list(range(1, 11))
+    plain = diversify(ranked, work, author, limit=5)
+    # The ranking already surfaced enough writings — leave it alone.
+    assert diversify(ranked, work, author, limit=5, writing_ids=writings) == plain
+
+
+def test_writing_floor_never_shrinks_the_page():
+    from ranking import diversify
+    ranked, work, author, writings = _pool()
+    for limit in (1, 2, 3, 5, 10):
+        plain = diversify(ranked, work, author, limit=limit)
+        floored = diversify(ranked, work, author, limit=limit, writing_ids=writings)
+        assert len(floored) == len(plain)
+        assert len(set(floored)) == len(floored)
+
+
+def test_writing_floor_respects_the_work_cap():
+    from ranking import diversify
+    # Three writings from one work; the cap of 1 means only one may be lifted.
+    ranked = [1, 2, 3, 4, 5, 101, 102, 103]
+    work = {1: 'a', 2: 'b', 3: 'c', 4: 'd', 5: 'e', 101: 'z', 102: 'z', 103: 'z'}
+    author = {p: f"au{p}" for p in ranked}
+    out = diversify(ranked, work, author, limit=5,
+                    work_cap=1, author_cap=10, writing_ids={101, 102, 103})
+    assert len([p for p in out if p in {101, 102, 103}]) == 1
+
+
 # ── Monthly budget cap parsing ────────────────────────────────────────────────
 #
 # _budget_from_env runs at import time, so anything it raises stops the
@@ -336,3 +414,124 @@ def test_local_counter_keeps_only_the_current_month(budget):
     budget._local_spend["aetc:spend:1999-01"] = 99.0
     budget.record_spend("gemini_parse")
     assert list(budget._local_spend) == [budget._period_key()]
+
+
+# ── Reader windowing helpers ─────────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def window_helpers():
+    """Load the two pure helpers out of app.py without booting Flask.
+
+    app.py imports Voyage/Gemini clients at module scope, so these tests read
+    the source and exec just the helper definitions — same trick as keeping
+    ranking.py dependency-free, applied to code that has to live next to the
+    route it serves.
+    """
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parents[1].joinpath("app.py").read_text()
+    start = src.index("def _window_bounds")
+    end = src.index('@app.route("/api/works/<int:work_id>")')
+    ns = {}
+    exec(compile(src[start:end], "app.py", "exec"), ns)
+    return ns["_window_bounds"], ns["_chapter_index"]
+
+
+def test_window_grows_forward_within_budget(window_helpers):
+    bounds, _ = window_helpers
+    # 10 passages of 100 bytes, budget 350 — three fit, the fourth would be 400.
+    assert bounds([100] * 10, 0, 350, 60, "forward") == (0, 2)
+
+
+def test_window_centres_on_the_anchor(window_helpers):
+    bounds, _ = window_helpers
+    lo, hi = bounds([100] * 100, 50, 500, 60, "both")
+    assert lo <= 50 <= hi
+    assert 50 - lo == pytest.approx(hi - 50, abs=1)
+
+
+def test_window_always_yields_the_anchor(window_helpers):
+    bounds, _ = window_helpers
+    # A single passage far over budget must stay reachable rather than being
+    # windowed out of existence — 64 passages in the corpus are this shape.
+    assert bounds([5_000_000], 0, 240_000, 60, "both") == (0, 0)
+
+
+def test_window_respects_the_passage_cap(window_helpers):
+    bounds, _ = window_helpers
+    lo, hi = bounds([1] * 1000, 500, 10_000_000, 60, "both")
+    assert hi - lo + 1 == 60
+
+
+def test_window_clamps_an_out_of_range_anchor(window_helpers):
+    bounds, _ = window_helpers
+    assert bounds([10] * 5, 99, 1000, 60, "forward") == (4, 4)
+    assert bounds([10] * 5, -3, 1000, 60, "backward") == (0, 0)
+
+
+def test_window_of_an_empty_work_is_empty(window_helpers):
+    bounds, _ = window_helpers
+    lo, hi = bounds([], 0, 1000, 60)
+    assert hi < lo  # an empty range, not a phantom passage
+
+
+def test_forward_and_backward_windows_abut(window_helpers):
+    bounds, _ = window_helpers
+    sizes = [100] * 50
+    _, hi = bounds(sizes, 0, 350, 60, "forward")
+    lo2, _ = bounds(sizes, hi, 350, 60, "backward")
+    # The backward window ending at `hi` must reach back without skipping.
+    assert lo2 <= hi
+
+
+def test_chapter_index_collapses_repeated_headers(window_helpers):
+    _, chapters = window_helpers
+    rows = [(1, 5, "A"), (2, 5, "A"), (3, 5, "B"), (4, 5, "B"), (5, 5, "A")]
+    assert chapters(rows) == [
+        {"header": "A", "index": 0, "count": 2},
+        {"header": "B", "index": 2, "count": 2},
+        # A header recurring later is its own chapter, not merged with the first.
+        {"header": "A", "index": 4, "count": 1},
+    ]
+
+
+def test_chapter_index_handles_null_headers(window_helpers):
+    _, chapters = window_helpers
+    assert chapters([(1, 5, None), (2, 5, None)]) == [
+        {"header": None, "index": 0, "count": 2},
+    ]
+    assert chapters([]) == []
+
+
+def test_writing_floor_only_counts_the_first_page():
+    from ranking import diversify
+    # 100 results, writings buried at ranks 40 and 61. Search returns 100 ids
+    # but the reader sees 15, so a floor measured across the whole list would
+    # call this satisfied while page one stays pure commentary.
+    ranked = list(range(1, 101))
+    writings = {40, 61}
+    work = {p: f"w{p}" for p in ranked}
+    author = {p: f"a{p}" for p in ranked}
+
+    plain = diversify(ranked, work, author, limit=100)
+    out = diversify(ranked, work, author, limit=100, writing_ids=writings)
+
+    assert [p for p in plain[:15] if p in writings] == []
+    assert [p for p in out[:15] if p in writings] == [40, 61]
+    assert plain[:12] == out[:12]  # the top of the page is never disturbed
+
+
+def test_writing_floor_returns_a_permutation():
+    from ranking import diversify
+    # Promoting a result that was already on the list must exchange the two,
+    # not drop the displaced one — losing a hit outright would be worse than
+    # the skew it fixes.
+    ranked = list(range(1, 101))
+    writings = {40, 61, 83}
+    work = {p: f"w{p}" for p in ranked}
+    author = {p: f"a{p}" for p in ranked}
+
+    plain = diversify(ranked, work, author, limit=100)
+    out = diversify(ranked, work, author, limit=100, writing_ids=writings)
+
+    assert sorted(out) == sorted(plain)
+    assert len(set(out)) == len(out)

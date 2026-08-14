@@ -65,11 +65,12 @@ export default function SearchResults({
   isSaved, onToggleSave, onSearch, navigate,
 }) {
   const [tradition, setTradition] = useState(null)
+  const [kind, setKind] = useState(null)
   // Render the first page immediately, reveal the rest on demand. The whole
   // result set is already in memory, so "Show more" is instant (no new request)
   // — it just keeps the initial paint light and the page less overwhelming.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
-  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [results, tradition])
+  useEffect(() => { setVisibleCount(PAGE_SIZE) }, [results, tradition, kind])
 
   // Highlight terms: the parsed keywords (or the raw query), words of 3+ chars.
   const terms = useMemo(() => {
@@ -84,9 +85,29 @@ export default function SearchResults({
     return [...set].sort()
   }, [results])
 
-  const shown = tradition
-    ? results.filter(r => r.tradition === tradition)
-    : results
+  // Source-kind facet. The corpus is ~94% verse-keyed commentary, so a topical
+  // search comes back looking like a shelf of Bible commentaries even when the
+  // ranking is doing its job. Showing the split — and letting the reader ask
+  // for treatises, letters and sermons on their own — makes that legible
+  // instead of feeling like the search is broken.
+  const kindCounts = useMemo(() => {
+    const counts = { writing: 0, commentary: 0 }
+    for (const r of results) if (r.kind in counts) counts[r.kind]++
+    return counts
+  }, [results])
+  // Only worth offering when the page actually holds both.
+  const showKindFilter = kindCounts.writing > 0 && kindCounts.commentary > 0
+  // Ignore a stale selection rather than showing an empty page: the filter
+  // persists across searches, and the next query may have only one kind.
+  const activeKind = showKindFilter ? kind : null
+
+  const shown = useMemo(
+    () => results.filter(r =>
+      (!tradition || r.tradition === tradition) &&
+      (!activeKind || r.kind === activeKind),
+    ),
+    [results, tradition, activeKind],
+  )
   const total = shown.length
   const visible = shown.slice(0, visibleCount)
 
@@ -137,6 +158,30 @@ export default function SearchResults({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Source-kind filter */}
+      {!searching && showKindFilter && (
+        <div className="results-filter" role="group" aria-label="Filter by source type">
+          <button
+            className={`filter-chip${activeKind === null ? ' is-active' : ''}`}
+            onClick={() => setKind(null)}
+          >
+            All sources
+          </button>
+          <button
+            className={`filter-chip${activeKind === 'writing' ? ' is-active' : ''}`}
+            onClick={() => setKind(prev => (prev === 'writing' ? null : 'writing'))}
+          >
+            Writings <span className="filter-chip-count">{kindCounts.writing}</span>
+          </button>
+          <button
+            className={`filter-chip${activeKind === 'commentary' ? ' is-active' : ''}`}
+            onClick={() => setKind(prev => (prev === 'commentary' ? null : 'commentary'))}
+          >
+            Scripture commentary <span className="filter-chip-count">{kindCounts.commentary}</span>
+          </button>
         </div>
       )}
 
