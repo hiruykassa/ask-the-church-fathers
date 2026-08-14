@@ -136,3 +136,61 @@ describe('url building', () => {
     expect(fetchMock.mock.calls[0][1]).toEqual({ signal: controller.signal })
   })
 })
+
+describe('work windows', () => {
+  it('requests the plain path when no window is asked for', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.work(12)
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/works/12')
+  })
+
+  it('passes around / offset / before through as query params', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.work(12, { around: 998 })
+    await api.work(12, { offset: 40 })
+    await api.work(12, { before: 40 })
+
+    expect(fetchMock.mock.calls.map(c => c[0])).toEqual([
+      '/api/works/12?around=998',
+      '/api/works/12?offset=40',
+      '/api/works/12?before=40',
+    ])
+  })
+
+  it('treats offset 0 as a real window, not a missing one', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.work(12, { offset: 0 })
+
+    // A falsy-but-present offset must not silently become "no window".
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/works/12?offset=0')
+  })
+
+  it('caches each window separately', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.work(12, { offset: 0 })
+    await api.work(12, { offset: 20 })
+    await api.work(12, { offset: 0 })
+
+    // Paging back over ground already read should cost no network.
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('still forwards the abort signal alongside window params', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    await api.work(12, { around: 5, signal: controller.signal })
+
+    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal)
+  })
+})

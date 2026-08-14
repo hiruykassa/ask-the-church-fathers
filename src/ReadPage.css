@@ -942,6 +942,38 @@ html[data-theme='dark'] .read-passage--saved {
   border-top: 1px solid var(--border);
 }
 
+/* ── Window edges (long works load a page of passages at a time) ──
+   Doubles as the IntersectionObserver sentinel, so it must stay in the flow
+   with real height even while idle — a zero-height node inside a margin the
+   observer is already watching would never fire a fresh intersection. */
+.read-edge {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0;
+  min-height: 44px;
+}
+.read-edge-btn {
+  font-family: var(--font-prose);
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 22px;
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+.read-edge-btn:hover:not(:disabled) {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+.read-edge-btn:disabled {
+  cursor: default;
+  font-style: italic;
+  opacity: 0.7;
+}
+
 /* ── "Other writings" footer (prevents short pages dead-ending) ── */
 .read-more {
   margin-top: 48px;

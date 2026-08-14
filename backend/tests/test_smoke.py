@@ -135,3 +135,186 @@ def test_hsts_is_not_sent_outside_production(client):
     if app_module.IS_PRODUCTION:
         pytest.skip("running with PRODUCTION=1")
     assert "Strict-Transport-Security" not in client.get("/api/health").headers
+
+
+# ── Reader windowing (/api/works/<id>) ───────────────────────────────────────
+#
+# Large works are returned a page at a time. The properties that matter are
+# that the pages abut exactly — a gap silently swallows text the reader will
+# never see — and that a small work still arrives whole.
+
+@pytest.fixture
+def paging_client(client):
+    """A client with the 30/min cap lifted, for tests that walk a whole work.
+
+    Paging through Augustine's Sermons is dozens of requests from one address,
+    which is precisely what the limiter exists to stop. Lifted only inside
+    these tests, and restored afterwards, so the default `client` fixture
+    still exercises the limited path everywhere else.
+    """
+    import app as app_module
+    app_module.limiter.enabled = False
+    try:
+        yield client
+    finally:
+        app_module.limiter.enabled = True
+
+
+@pytest.fixture(scope="module")
+def big_work_id(client):
+    """A work large enough that the endpoint must window it."""
+    import app as app_module
+    conn = app_module.get_db_connection()
+    try:
+        row = conn.execute("""
+            SELECT work_id FROM passages
+            GROUP BY work_id
+            HAVING SUM(LENGTH(text)) > ?
+            ORDER BY SUM(LENGTH(text)) DESC LIMIT 1
+        """, (app_module.WORK_FULL_BYTES,)).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        pytest.skip("no work large enough to be windowed")
+    return row[0]
+
+
+def test_small_work_comes_back_complete(client):
+    import app as app_module
+    conn = app_module.get_db_connection()
+    try:
+        row = conn.execute("""
+            SELECT work_id FROM passages
+            GROUP BY work_id
+            HAVING SUM(LENGTH(text)) <= ?
+            ORDER BY work_id LIMIT 1
+        """, (app_module.WORK_FULL_BYTES,)).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        pytest.skip("no small work in the corpus")
+
+    body = client.get(f"/api/works/{row[0]}").get_json()
+    assert body["complete"] is True
+    assert body["has_prev"] is False and body["has_next"] is False
+    assert len(body["passages"]) == body["total_passages"]
+    # A complete work needs no separate chapter index — it has every header.
+    assert body["chapters"] == []
+
+
+def test_large_work_is_windowed(client, big_work_id):
+    import app as app_module
+    body = client.get(f"/api/works/{big_work_id}").get_json()
+    assert body["complete"] is False
+    assert body["offset"] == 0 and body["has_next"] is True
+    assert 0 < len(body["passages"]) < body["total_passages"]
+    # The chapter index still covers the whole work so navigation never waits.
+    assert len(body["chapters"]) >= 1
+    assert body["chapters"][0]["index"] == 0
+    assert max(c["index"] for c in body["chapters"]) < body["total_passages"]
+    # One passage may legitimately exceed the budget on its own; two must not.
+    if len(body["passages"]) > 1:
+        size = sum(len(p["text"] or "") for p in body["passages"])
+        assert size <= app_module.WORK_WINDOW_BYTES * 1.5
+
+
+def test_windows_tile_the_work_without_gaps(paging_client, big_work_id):
+    """Walking forward must reproduce the work exactly — no gap, no repeat."""
+    import app as app_module
+    conn = app_module.get_db_connection()
+    try:
+        expected = [r[0] for r in conn.execute(
+            "SELECT id FROM passages WHERE work_id = ? ORDER BY id", (big_work_id,)
+        )]
+    finally:
+        conn.close()
+
+    seen, offset = [], 0
+    for _ in range(len(expected) + 1):
+        body = paging_client.get(f"/api/works/{big_work_id}?offset={offset}").get_json()
+        seen += [p["id"] for p in body["passages"]]
+        if not body["has_next"]:
+            break
+        offset = body["offset"] + len(body["passages"])
+    assert seen == expected
+
+
+def test_backward_windows_abut_the_one_they_precede(paging_client, big_work_id):
+    body = paging_client.get(f"/api/works/{big_work_id}?offset=0").get_json()
+    boundary = len(body["passages"])
+    nxt = paging_client.get(f"/api/works/{big_work_id}?offset={boundary}").get_json()
+    prev = paging_client.get(f"/api/works/{big_work_id}?before={boundary}").get_json()
+    # `before` ends exactly where the window at `boundary` begins.
+    assert prev["offset"] + len(prev["passages"]) == nxt["offset"] == boundary
+
+
+def test_around_centres_the_window_on_the_passage(paging_client, big_work_id):
+    import app as app_module
+    conn = app_module.get_db_connection()
+    try:
+        ids = [r[0] for r in conn.execute(
+            "SELECT id FROM passages WHERE work_id = ? ORDER BY id", (big_work_id,)
+        )]
+    finally:
+        conn.close()
+    target = ids[len(ids) // 2]
+
+    body = paging_client.get(f"/api/works/{big_work_id}?around={target}").get_json()
+    # The whole point: the passage the reader clicked is in the first response.
+    assert target in [p["id"] for p in body["passages"]]
+    assert body["has_prev"] is True
+
+
+def test_unknown_around_falls_back_to_the_opening_window(paging_client, big_work_id):
+    # A stale or wrong passage id must still render the work, not 500.
+    body = paging_client.get(f"/api/works/{big_work_id}?around=999999999").get_json()
+    assert body["offset"] == 0
+    assert body["passages"]
+
+
+# ── Passage kind ─────────────────────────────────────────────────────────────
+
+def test_writing_index_is_derived_and_is_the_minority():
+    import app as app_module
+    conn = app_module.get_db_connection()
+    try:
+        total = conn.execute("SELECT COUNT(*) FROM passages").fetchone()[0]
+    finally:
+        conn.close()
+    writings = len(app_module.WRITING_PASSAGE_IDS)
+    # Derived from scripture_index rather than a stored column — if the catena
+    # pipeline ever stops writing those rows this flips and search silently
+    # starts calling every commentary a "writing".
+    assert 0 < writings < total
+    assert writings / total < 0.25
+
+
+def test_passage_kind_labels_both_shapes():
+    import app as app_module
+    conn = app_module.get_db_connection()
+    try:
+        commentary = conn.execute(
+            "SELECT passage_id FROM scripture_index LIMIT 1"
+        ).fetchone()
+        writing = conn.execute("""
+            SELECT p.id FROM passages p
+            LEFT JOIN (SELECT DISTINCT passage_id FROM scripture_index) si
+                   ON si.passage_id = p.id
+            WHERE si.passage_id IS NULL LIMIT 1
+        """).fetchone()
+    finally:
+        conn.close()
+    if commentary is None or writing is None:
+        pytest.skip("corpus has only one kind of passage")
+    assert app_module.passage_kind(commentary[0]) == "commentary"
+    assert app_module.passage_kind(writing[0]) == "writing"
+
+
+def test_search_results_carry_a_kind(client):
+    # The results filter is driven entirely by this field; without it the
+    # facet silently disappears from the UI.
+    body = client.get("/api/search?q=hardship").get_json()
+    results = body.get("results", [])
+    if not results:
+        pytest.skip("search degraded (no API keys configured)")
+    assert all(r.get("kind") in ("writing", "commentary") for r in results)

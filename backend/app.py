@@ -318,9 +318,51 @@ def _load_passage_indexes():
         conn.close()
 
 
+def _load_writing_passage_ids():
+    """Passage ids that are standalone writings rather than verse commentary.
+
+    The corpus never recorded a passage "kind", but it does not need to: the
+    catena pipeline writes a `scripture_index` row for every passage keyed to a
+    verse, so absence from that table *is* the distinction. It is clean, too —
+    594 works are entirely writings and 2,224 entirely commentary, with only 40
+    mixed. Deriving it here costs one query at boot and no schema change, which
+    matters because adding a column would mean rebuilding and re-uploading a
+    633 MB database (see tools/corpus/README.md).
+
+    Held as a set of the *minority* kind — 3,113 ids rather than 49,757 — since
+    a single gunicorn worker also holds the whole embedding matrix in RAM.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT passages.id
+            FROM passages
+            LEFT JOIN (SELECT DISTINCT passage_id FROM scripture_index) si
+                   ON si.passage_id = passages.id
+            WHERE si.passage_id IS NULL
+            """
+        )
+        return {row[0] for row in cursor.fetchall()}
+    except sqlite3.Error:
+        # A corpus without scripture_index (a bare rebuild) must still serve
+        # search — it just loses the writing floor and the kind label.
+        log.warning("scripture_index unavailable — passage kinds not derived")
+        return set()
+    finally:
+        conn.close()
+
+
 PASSAGE_IDS, PASSAGE_VECS, PASSAGE_ID_TO_IDX = _load_embeddings()
 AUTHOR_PASSAGE_INDEX = _load_author_passage_index()
 PASSAGE_WORK_INDEX, PASSAGE_AUTHOR_INDEX = _load_passage_indexes()
+WRITING_PASSAGE_IDS = _load_writing_passage_ids()
+
+
+def passage_kind(passage_id):
+    """"writing" (treatise, letter, sermon) or "commentary" (keyed to a verse)."""
+    return "writing" if passage_id in WRITING_PASSAGE_IDS else "commentary"
 
 
 def _cache_key(*parts):
@@ -528,7 +570,10 @@ def hybrid_search(lexical_text, semantic_text=None, author=None, limit=100):
     rrf_accumulate(fused, title_hits, weight=RRF_WEIGHT_TITLE)
 
     ranked = [pid for pid, _ in sorted(fused.items(), key=lambda item: item[1], reverse=True)]
-    passage_ids = diversify(ranked, PASSAGE_WORK_INDEX, PASSAGE_AUTHOR_INDEX, limit=limit)
+    passage_ids = diversify(
+        ranked, PASSAGE_WORK_INDEX, PASSAGE_AUTHOR_INDEX, limit=limit,
+        writing_ids=WRITING_PASSAGE_IDS,
+    )
     hybrid_cache.set(cache_key, passage_ids)
     return passage_ids
 
@@ -1010,6 +1055,10 @@ def search():
                     "work_id": row[4],
                     "header": row[5],
                     "tradition": row[6],
+                    # Always "commentary" on this path by construction — a
+                    # catena is verse-keyed by definition — but sent anyway so
+                    # the client can treat every result shape identically.
+                    "kind": passage_kind(row[0]),
                 } for row in rows]
                 search_path = "scripture"
                 result_count = len(results)
@@ -1089,6 +1138,7 @@ def search():
             "work_id": row[4],
             "header": row[5],
             "tradition": row[6],
+            "kind": passage_kind(row[0]),
         } for row in rows]
 
         rank = {pid: i for i, pid in enumerate(passage_ids)}
@@ -1428,10 +1478,99 @@ def get_passage(id):
     })
 
 
+# ── Reader windowing ─────────────────────────────────────────────────────────
+#
+# Works are wildly uneven. The median one is ~3 KB, but Augustine's *Sermons*
+# is 600 passages and 7.6 MB of text, and 27 works clear 1 MB between them
+# holding 23% of the corpus. Returning a whole work so the reader can look at
+# one sermon costs a multi-megabyte transfer and — far worse on a phone — a
+# multi-second main-thread stall while the browser parses and lays out every
+# passage it will never look at.
+#
+# So the endpoint returns a *byte-budgeted window*. Small works still come back
+# whole, which is the overwhelming majority and keeps the old behaviour intact.
+# Large ones come back as a slice the client extends by scrolling, plus a
+# chapter index covering the whole work so navigation never needs the full text.
+#
+# The budget is in bytes rather than passages because passage size varies by
+# three orders of magnitude — a 60-passage cap would be 780 KB of Augustine and
+# 4 KB of Ignatius.
+WORK_WINDOW_BYTES = _positive_int_env("WORK_WINDOW_BYTES", 240_000)
+WORK_FULL_BYTES = _positive_int_env("WORK_FULL_BYTES", 400_000)
+WORK_WINDOW_MAX_PASSAGES = _positive_int_env("WORK_WINDOW_MAX_PASSAGES", 60)
+
+
+def _window_bounds(sizes, anchor, budget, max_count, grow="both"):
+    """Inclusive [lo, hi] index range around ``anchor`` within a byte budget.
+
+    ``grow`` is "both" (centre on the anchor — used when opening a search hit),
+    "forward" (anchor is the first passage — reading onward) or "backward"
+    (anchor is the last — loading what came before). The forward/backward modes
+    make a requested window abut the one the client already holds exactly, so
+    scrolling can never open a gap in the text.
+
+    Always returns at least the anchor itself: a single passage over the budget
+    must still be reachable rather than windowed out of existence.
+    """
+    if not sizes:
+        return 0, -1
+    anchor = min(max(anchor, 0), len(sizes) - 1)
+    lo = hi = anchor
+    total = sizes[anchor]
+    while hi - lo + 1 < max_count:
+        grew = False
+        if (grow in ("both", "forward") and hi + 1 < len(sizes)
+                and total + sizes[hi + 1] <= budget):
+            hi += 1
+            total += sizes[hi]
+            grew = True
+        if (grow in ("both", "backward") and lo > 0 and hi - lo + 1 < max_count
+                and total + sizes[lo - 1] <= budget):
+            lo -= 1
+            total += sizes[lo]
+            grew = True
+        if not grew:
+            break
+    return lo, hi
+
+
+def _chapter_index(index_rows):
+    """Collapse the ordered header column into [{header, index, count}].
+
+    Drives the reader's table of contents for a windowed work, where the client
+    holds only a slice of the passages but still needs every chapter listed.
+    """
+    chapters = []
+    unset = object()
+    prev = unset
+    for i, row in enumerate(index_rows):
+        header = row[2]
+        if prev is unset or header != prev:
+            chapters.append({"header": header, "index": i, "count": 1})
+            prev = header
+        else:
+            chapters[-1]["count"] += 1
+    return chapters
+
+
 @app.route("/api/works/<int:work_id>")
 @limiter.limit("30 per minute", override_defaults=True)
 def get_work(work_id):
-    """Full work text: title, author, ordered passages (scripture refs stripped)."""
+    """Work text: title, author, and a window of ordered passages.
+
+    Query params, all optional and mutually exclusive:
+      ``around=<passage_id>``  window centred on that passage (opening a hit)
+      ``offset=<index>``       window starting at that index, growing forward
+      ``before=<index>``       window ending just before that index, backward
+
+    With none of them a small work returns complete and a large one returns its
+    opening window. ``complete`` says which happened, so a client can skip all
+    the pagination machinery for the common case.
+    """
+    around = request.args.get("around", type=int)
+    offset = request.args.get("offset", type=int)
+    before = request.args.get("before", type=int)
+
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -1446,14 +1585,52 @@ def get_work(work_id):
         if work_row is None:
             return jsonify({"error": "Work not found"}), 404
 
+        # id / size / header only. This still reads the text pages off local
+        # disk to compute LENGTH(), but it neither serializes them to JSON nor
+        # sends them, which is where the real cost was.
         cursor.execute("""
-            SELECT passages.id, passages.text, passages.header,
-                   passages.source_title, passages.source_url
+            SELECT id, LENGTH(text), header
             FROM passages
-            WHERE passages.work_id = ?
-            ORDER BY passages.id
+            WHERE work_id = ?
+            ORDER BY id
         """, (work_id,))
-        passage_rows = cursor.fetchall()
+        index_rows = cursor.fetchall()
+
+        total = len(index_rows)
+        sizes = [row[1] or 0 for row in index_rows]
+        windowed = any(p is not None for p in (around, offset, before))
+
+        if total == 0:
+            lo, hi, complete = 0, -1, True
+        elif not windowed and sum(sizes) <= WORK_FULL_BYTES:
+            lo, hi, complete = 0, total - 1, True
+        else:
+            if around is not None:
+                anchor = next(
+                    (i for i, row in enumerate(index_rows) if row[0] == around), 0
+                )
+                grow = "both"
+            elif before is not None:
+                anchor, grow = before - 1, "backward"
+            else:
+                anchor, grow = offset or 0, "forward"
+            lo, hi = _window_bounds(
+                sizes, anchor, WORK_WINDOW_BYTES, WORK_WINDOW_MAX_PASSAGES, grow
+            )
+            complete = lo == 0 and hi == total - 1
+
+        passage_rows = []
+        if hi >= lo:
+            # The window is contiguous in id order, so BETWEEN beats a 60-term
+            # IN list and uses the same index the ordering already needs.
+            cursor.execute("""
+                SELECT passages.id, passages.text, passages.header,
+                       passages.source_title, passages.source_url
+                FROM passages
+                WHERE passages.work_id = ? AND passages.id BETWEEN ? AND ?
+                ORDER BY passages.id
+            """, (work_id, index_rows[lo][0], index_rows[hi][0]))
+            passage_rows = cursor.fetchall()
     finally:
         conn.close()
 
@@ -1470,6 +1647,14 @@ def get_work(work_id):
             "id": r[0], "text": remove_scripture_refs(r[1]), "header": r[2],
             "source_title": r[3], "source_url": r[4],
         } for r in passage_rows],
+        "total_passages": total,
+        "offset": lo,
+        "complete": complete,
+        "has_prev": lo > 0,
+        "has_next": hi < total - 1,
+        # Only worth sending when the client is missing passages; a complete
+        # work already has every header it needs in `passages`.
+        "chapters": [] if complete else _chapter_index(index_rows),
     })
 
 

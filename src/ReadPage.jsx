@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { IoClose, IoChevronBack, IoArrowUp, IoChevronDown } from 'react-icons/io5'
 import ThemeToggle from './components/ui/ThemeToggle'
-import FormattedPassage from './components/ui/FormattedPassage'
+import ReadPassage from './components/ui/ReadPassage'
 import useSavedPassages from './hooks/useSavedPassages'
-import { stripHtml, hasPassageHtml } from './utils/passageText'
+import { stripHtml } from './utils/passageText'
 import PassageSource from './components/ui/PassageSource'
 import { api, isAbortError } from './api/client'
 import { usePageMeta } from './hooks/usePageMeta'
@@ -14,9 +14,12 @@ import './ReadPage.css'
 
 const LITURGY_ROLES = /\b(priest|deacon|people|bishop|reader|choir|singer|catechumen)\b/i
 const RUBRIC_STARTS = /^(prayer of|then the|after the|before the|\(aloud)/i
-const SPEAKER_RE    = /^(.{5,120}?\bsaid\s*[:\-,—–]+\s*)/
 const BOOK_HEADER_RE = /^The .+ \(Book [IVXLC\d]+\)$/i
 const SERMON_HEADER_RE = /^SERMON\s+([IVXLC\d]+)/i
+
+// Distance from the top of the viewport a jumped-to passage should come to
+// rest, clearing the fixed site header.
+const ANCHOR_OFFSET = 110
 
 // Full title for use in the reading body (never truncated)
 function displayChapterNameFull(header, index) {
@@ -59,10 +62,44 @@ function normalizeHeading(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
+/**
+ * The opening words of a passage as plain text.
+ *
+ * Callers here only ever look at how a passage *starts*, so strip tags from a
+ * short prefix with a regex rather than DOM-parsing the whole thing. The old
+ * code ran stripHtml — a full DOMParser parse — over every passage in the work
+ * just to find the first one beginning "Chapter", which on a large work was an
+ * entire extra pass over megabytes of HTML before anything could paint.
+ */
+function plainPrefix(text) {
+  return (text || '').slice(0, 400).replace(/<[^>]*>/g, ' ').replace(/^\s+/, '')
+}
+
+/** Index of the last chapter starting at or before `passageIndex`. */
+function activeChapterFor(chapters, passageIndex) {
+  let lo = 0
+  let hi = chapters.length - 1
+  let found = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (chapters[mid].firstIndex <= passageIndex) {
+      found = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  return found
+}
+
 /* ══════════════════════════════════════════════════
    READ PAGE  — /read/:workId
-   Fetches all passages for a single work and renders
-   them as a scrollable book-style page.
+   Renders a work as a scrollable book-style page.
+
+   Long works arrive from the API as a *window* of passages rather than the
+   whole text (see get_work in backend/app.py), and this page extends that
+   window in either direction as the reader scrolls. The chapter list covers
+   the whole work regardless, so navigation never waits on the text.
 ══════════════════════════════════════════════════ */
 export default function ReadPage() {
   const { workId } = useParams()
@@ -70,14 +107,31 @@ export default function ReadPage() {
   const location   = useLocation()
 
   const [work,      setWork]      = useState(null)
+  const [passages,  setPassages]  = useState([])
+  const [offset,    setOffset]    = useState(0)
+  const [hasPrev,   setHasPrev]   = useState(false)
+  const [hasNext,   setHasNext]   = useState(false)
+  const [busyEdge,  setBusyEdge]  = useState(null)
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState(null)
-  const [scrollPct,    setScrollPct]    = useState(0)
   const [tocOpen,      setTocOpen]      = useState(false)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [activeChapterIdx, setActiveChapterIdx] = useState(0)
 
-  const passageRefs = useRef([])
+  const passageRefs = useRef(new Map())
+  const progressRef = useRef(null)
+  // Shadow the paging state so loadEdge can read current values without being
+  // re-created — and re-subscribing the observer — on every window.
+  const offsetRef = useRef(0)
+  const passagesRef = useRef([])
+  const hasPrevRef = useRef(false)
+  const hasNextRef = useRef(false)
+  const prevSentinel = useRef(null)
+  const nextSentinel = useRef(null)
+  const prependAnchor = useRef(null)
+  const pendingAnchorId = useRef(null)
+  const cancelAnchor = useRef(null)
+  const edgeBusy = useRef(false)
   const { toggleSave, isSaved } = useSavedPassages()
   const [scrollHighlightId, setScrollHighlightId] = useState(null)
   const [siblings, setSiblings] = useState([])
@@ -94,21 +148,99 @@ export default function ReadPage() {
     path: `/read/${workId}`,
   })
 
+  const registerRef = useCallback((id, el) => {
+    if (el) passageRefs.current.set(id, el)
+    else passageRefs.current.delete(id)
+  }, [])
+
+  /**
+   * Bring a passage to rest under the header, and keep it there.
+   *
+   * The previous implementation tried twelve animation frames (~200 ms) and
+   * then gave up forever. On a phone a long work is still laying out well past
+   * that, so it either never found the node or measured it mid-reflow and
+   * smooth-scrolled to an offset that was stale by the time the animation
+   * finished — the "opens, says loading, never lands on the passage" bug.
+   *
+   * This instead corrects the position repeatedly until the target holds still
+   * across consecutive frames, bounded by wall-clock time rather than a frame
+   * count. The jump is instant on purpose: a smooth animation into a document
+   * that is still growing is a race the animation loses. Any real scroll input
+   * cancels it, so it can never fight the reader for control of the page.
+   */
+  const anchorToPassage = useCallback((passageId, { budgetMs = 5000 } = {}) => {
+    cancelAnchor.current?.()
+
+    let done = false
+    let lastTop = null
+    let stable = 0
+    const deadline = performance.now() + budgetMs
+
+    const stop = () => {
+      done = true
+      window.removeEventListener('wheel', stop)
+      window.removeEventListener('touchstart', stop)
+      window.removeEventListener('keydown', stop)
+      if (cancelAnchor.current === stop) cancelAnchor.current = null
+    }
+    window.addEventListener('wheel', stop, { passive: true })
+    window.addEventListener('touchstart', stop, { passive: true })
+    window.addEventListener('keydown', stop)
+    cancelAnchor.current = stop
+
+    const step = () => {
+      if (done) return
+      const el = passageRefs.current.get(passageId)
+      if (el) {
+        const top = el.getBoundingClientRect().top
+        if (Math.abs(top - ANCHOR_OFFSET) > 2) {
+          window.scrollTo({
+            top: Math.max(0, top + window.scrollY - ANCHOR_OFFSET),
+            behavior: 'auto',
+          })
+          stable = 0
+        } else if (lastTop !== null && Math.abs(top - lastTop) < 2) {
+          stable += 1
+        }
+        lastTop = top
+        if (stable >= 2) return stop()
+      }
+      if (performance.now() < deadline) requestAnimationFrame(step)
+      else stop()
+    }
+    requestAnimationFrame(step)
+  }, [])
+
+  useEffect(() => () => cancelAnchor.current?.(), [])
+
   useEffect(() => {
     setScrollHighlightId(scrollTarget != null ? Number(scrollTarget) : null)
   }, [scrollTarget, workId])
 
+  // Initial load. When we arrived from a search hit the window is centred on
+  // that passage, so the one the reader asked for is in the very first
+  // response instead of somewhere inside a multi-megabyte download.
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
     setError(null)
     setWork(null)
+    setPassages([])
+    setOffset(0)
+    passageRefs.current.clear()
     if (scrollTarget == null) {
       window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' })
     }
-    api.work(workId, { signal: controller.signal })
+    api.work(workId, {
+      around: scrollTarget != null ? Number(scrollTarget) : undefined,
+      signal: controller.signal,
+    })
       .then(data => {
         setWork(data)
+        setPassages(data.passages || [])
+        setOffset(data.offset || 0)
+        setHasPrev(!!data.has_prev)
+        setHasNext(!!data.has_next)
         setLoading(false)
       })
       .catch(err => {
@@ -118,40 +250,105 @@ export default function ReadPage() {
       })
     return () => controller.abort()
     // Refetch only when the work changes; scrollTarget is read once here to set
-    // the initial scroll and must not re-trigger the fetch when it changes.
+    // the initial window and must not re-trigger the fetch when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workId])
 
   useEffect(() => {
     if (!work || loading || scrollTarget == null) return
+    anchorToPassage(Number(scrollTarget))
+    // Runs once the first window has rendered; anchorToPassage is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [work, loading])
 
-    const idx = work.passages.findIndex(p => Number(p.id) === Number(scrollTarget))
-    if (idx < 0) return
-
-    let tries = 0
-    const attempt = () => {
-      const el = passageRefs.current[idx] || document.getElementById(`passage-${idx + 1}`)
-      if (el) {
-        const y = el.getBoundingClientRect().top + window.scrollY - 110
-        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
-        return
+  /** Extend the loaded window forwards or backwards by one page. */
+  const loadEdge = useCallback(async edge => {
+    if (edgeBusy.current) return
+    // The backend clamps an out-of-range offset to the last passage, so asking
+    // past the end would re-append a passage already on the page. Refuse at
+    // the edge instead of trusting the button and sentinel to have unmounted.
+    if (edge === 'next' ? !hasNextRef.current : !hasPrevRef.current) return
+    edgeBusy.current = true
+    setBusyEdge(edge)
+    try {
+      const params = edge === 'next'
+        ? { offset: offsetRef.current + passagesRef.current.length }
+        : { before: offsetRef.current }
+      const data = await api.work(workId, params)
+      const incoming = data.passages || []
+      if (edge === 'next') {
+        setPassages(prev => prev.concat(incoming))
+        setHasNext(!!data.has_next)
+      } else {
+        // Prepending grows the document above the viewport, which would yank
+        // the reader up the page. Record the metrics now and restore the
+        // scroll offset in a layout effect once the new passages are in.
+        prependAnchor.current = {
+          scrollHeight: document.documentElement.scrollHeight,
+          scrollY: window.scrollY,
+        }
+        setPassages(prev => incoming.concat(prev))
+        setOffset(data.offset || 0)
+        setHasPrev(!!data.has_prev)
       }
-      if (tries++ < 12) requestAnimationFrame(attempt)
+    } catch {
+      // Leave the edge flagged as loadable and say nothing: the sentinel will
+      // try again on the next scroll rather than stranding the reader at a
+      // dead end, and a failed page-in must not blank the text already read.
+    } finally {
+      edgeBusy.current = false
+      setBusyEdge(null)
     }
+  }, [workId])
 
-    requestAnimationFrame(attempt)
-  }, [work, loading, scrollTarget])
+  offsetRef.current = offset
+  passagesRef.current = passages
+  hasPrevRef.current = hasPrev
+  hasNextRef.current = hasNext
 
+  useLayoutEffect(() => {
+    const anchor = prependAnchor.current
+    if (!anchor) return
+    prependAnchor.current = null
+    const delta = document.documentElement.scrollHeight - anchor.scrollHeight
+    if (delta) window.scrollTo({ top: anchor.scrollY + delta, behavior: 'auto' })
+  }, [passages])
+
+  useLayoutEffect(() => {
+    const id = pendingAnchorId.current
+    if (id == null || !passages.length) return
+    pendingAnchorId.current = null
+    anchorToPassage(id)
+  }, [passages, anchorToPassage])
+
+  // Sentinels sit outside the loaded text at both ends; crossing into their
+  // margin pulls the adjacent window in before the reader reaches the edge.
   useEffect(() => {
-    passageRefs.current = []
-  }, [work])
+    if (!work || work.complete) return
+    const io = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue
+        loadEdge(entry.target === prevSentinel.current ? 'prev' : 'next')
+      }
+    }, { rootMargin: '600px 0px' })
+    if (prevSentinel.current) io.observe(prevSentinel.current)
+    if (nextSentinel.current) io.observe(nextSentinel.current)
+    return () => io.disconnect()
+  }, [work, loadEdge, hasPrev, hasNext])
 
   const chapters = useMemo(() => {
     if (!work) return []
+    // A windowed work ships a chapter index covering the whole text, so the
+    // table of contents is complete even though most passages are not loaded.
+    if (work.chapters?.length) {
+      return work.chapters.map(c => ({
+        header: c.header, firstIndex: c.index, count: c.count,
+      }))
+    }
     const chaps = []
     let current = null
-    for (let i = 0; i < work.passages.length; i++) {
-      const h = work.passages[i].header
+    for (let i = 0; i < passages.length; i++) {
+      const h = passages[i].header
       if (i === 0 || h !== current) {
         chaps.push({ header: h, firstIndex: i, count: 1 })
         current = h
@@ -160,7 +357,7 @@ export default function ReadPage() {
       }
     }
     return chaps
-  }, [work])
+  }, [work, passages])
 
   const hasChapters = chapters.length > 1
 
@@ -169,8 +366,10 @@ export default function ReadPage() {
   // passage-header grouping above finds only one "chapter". Derive a chapter list
   // from those inner headings instead, tagging each with an id we can scroll to,
   // so these works get the same sidebar + jump navigation as multi-passage ones.
+  // Only for complete works — on a windowed one the DOM holds a slice, so the
+  // list would silently describe part of the text as though it were all of it.
   useEffect(() => {
-    if (!work || loading || hasChapters) { setInnerChapters([]); return }
+    if (!work || loading || hasChapters || !work.complete) { setInnerChapters([]); return }
     const container = document.querySelector('.read-passages')
     if (!container) { setInnerChapters([]); return }
     const heads = Array.from(container.querySelectorAll('h2, h3'))
@@ -189,25 +388,33 @@ export default function ReadPage() {
   // The work's front matter / argument: everything before the first "Chapter …"
   // passage. Rendered a touch bolder than the body to set it apart.
   const firstChapterIdx = useMemo(() => {
-    if (!work) return -1
-    return work.passages.findIndex(p => /^\s*chapter\b/i.test(stripHtml(p.text)))
-  }, [work])
+    if (!work?.complete) return -1
+    return passages.findIndex(p => /^\s*chapter\b/i.test(plainPrefix(p.text)))
+  }, [work, passages])
 
-  // Short-text detection — used to collapse redundant heading repeats.
-  const wordCount = useMemo(() => {
-    if (!work) return 0
-    return work.passages.reduce(
+  // Short-text detection — used to collapse redundant heading repeats. The raw
+  // length is a free upper bound on the word count, so a work of any size is
+  // ruled out before a single passage gets parsed.
+  const isShort = useMemo(() => {
+    if (!work?.complete) return false
+    let raw = 0
+    for (const p of passages) {
+      raw += p.text?.length || 0
+      if (raw > 4000) return false
+    }
+    const words = passages.reduce(
       (n, p) => n + stripHtml(p.text).split(/\s+/).filter(Boolean).length,
       0,
     )
-  }, [work])
-  const isShort = !!work && wordCount < 300
+    return words < 300
+  }, [work, passages])
+
   const titleNorm = normalizeHeading(work?.title)
 
   // Commentary works carry a real citation on every passage; writings carry none.
   const hasPassageSources = useMemo(
-    () => !!work && work.passages.some(p => p.source_title || p.source_url),
-    [work],
+    () => passages.some(p => p.source_title || p.source_url),
+    [passages],
   )
 
   // Other writings by the same author (council / father), for short pages especially.
@@ -223,59 +430,98 @@ export default function ReadPage() {
   }, [work?.author_id, workId])
 
   useEffect(() => {
-    function onScroll() {
+    let frame = 0
+    function measure() {
+      frame = 0
       const el = document.documentElement
       const scrolled = el.scrollTop || document.body.scrollTop
       const total    = el.scrollHeight - el.clientHeight
-      setScrollPct(total > 0 ? (scrolled / total) * 100 : 0)
+
+      // Written straight to the node rather than held in state. As state this
+      // re-rendered ReadPage on every scroll frame, and with the passage list
+      // inlined in that render it re-sanitized the whole work each time.
+      if (progressRef.current) {
+        progressRef.current.style.width = `${total > 0 ? (scrolled / total) * 100 : 0}%`
+      }
       setShowScrollTop(scrolled > 80)
 
-      const offset = 130
-      let active = 0
       if (chapters.length > 1) {
-        for (let ci = 0; ci < chapters.length; ci++) {
-          const ref = passageRefs.current[chapters[ci].firstIndex]
-          if (!ref) continue
-          if (ref.getBoundingClientRect().top <= offset) active = ci
+        // Find the topmost passage still above the header line, translate its
+        // position in the loaded window back to an index in the whole work,
+        // then look up the chapter containing it.
+        let topIndex = offset
+        for (let i = 0; i < passages.length; i++) {
+          const node = passageRefs.current.get(passages[i].id)
+          if (node && node.getBoundingClientRect().top <= ANCHOR_OFFSET + 20) {
+            topIndex = offset + i
+          }
         }
-        setActiveChapterIdx(active)
+        setActiveChapterIdx(activeChapterFor(chapters, topIndex))
       } else if (innerChapters.length > 1) {
+        let active = 0
         for (let ci = 0; ci < innerChapters.length; ci++) {
           const node = document.getElementById(innerChapters[ci].id)
           if (!node) continue
-          if (node.getBoundingClientRect().top <= offset) active = ci
+          if (node.getBoundingClientRect().top <= ANCHOR_OFFSET + 20) active = ci
         }
         setActiveChapterIdx(active)
       }
     }
+    function onScroll() {
+      if (!frame) frame = requestAnimationFrame(measure)
+    }
     window.addEventListener('scroll', onScroll, { passive: true })
-    onScroll()
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [chapters, innerChapters])
+    measure()
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [chapters, innerChapters, offset, passages])
 
   const scrollToTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
-  function scrollToPassage(i) {
+  /** Jump to a passage by its index in the whole work, loading it if needed. */
+  const scrollToPassage = useCallback(async index => {
     setTocOpen(false)
-    requestAnimationFrame(() => {
-      const el = passageRefs.current[i] || document.getElementById(`passage-${i + 1}`)
-      if (!el) return
-      const y = el.getBoundingClientRect().top + window.scrollY - 110
-      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
-    })
-  }
+    const local = index - offsetRef.current
+    const loaded = passagesRef.current[local]
+    if (loaded) {
+      anchorToPassage(loaded.id)
+      return
+    }
+    // The chapter lies outside the loaded window — fetch a window starting
+    // there and replace the buffer rather than paging through everything in
+    // between, which for Augustine's Psalms would be two thousand passages.
+    if (edgeBusy.current) return
+    edgeBusy.current = true
+    setBusyEdge('jump')
+    try {
+      const data = await api.work(workId, { offset: index })
+      const incoming = data.passages || []
+      setPassages(incoming)
+      setOffset(data.offset || 0)
+      setHasPrev(!!data.has_prev)
+      setHasNext(!!data.has_next)
+      pendingAnchorId.current = incoming[0]?.id ?? null
+    } catch {
+      // Keep the reader where they are rather than emptying the page.
+    } finally {
+      edgeBusy.current = false
+      setBusyEdge(null)
+    }
+  }, [workId, anchorToPassage])
 
-  function scrollToElementId(id) {
+  const scrollToElementId = useCallback(id => {
     setTocOpen(false)
     requestAnimationFrame(() => {
       const el = document.getElementById(id)
       if (!el) return
-      const y = el.getBoundingClientRect().top + window.scrollY - 110
+      const y = el.getBoundingClientRect().top + window.scrollY - ANCHOR_OFFSET
       window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
     })
-  }
+  }, [])
 
   // One chapter list driving both the sidebar and the mobile drawer — either the
   // passage-header chapters (multi-passage works) or the inner-heading chapters
@@ -338,60 +584,68 @@ export default function ReadPage() {
   const isCouncil = !isLiturgy &&
     (/\b(council|synod)\b/i.test(workAuthor) || /\b(council|synod|canons?)\b/i.test(workTitle))
 
-  function classifyPassage(text) {
-    const t = stripHtml(text).trim()
-    const len = t.length
+  const workNumericId = work?.work_id
 
-    if (isLiturgy && len <= 200) {
-      if (LITURGY_ROLES.test(t) || RUBRIC_STARTS.test(t)) return 'rubric'
-    }
-
-    if (isCouncil) {
-      if (/^we believe in one god/i.test(t)) return 'creed'
-      if (/anathema/i.test(t)) return 'anathema'
-      if (len <= 100) return 'rubric'
-    }
-
-    return null
-  }
-
-  function renderCouncilText(text) {
-    const plain = stripHtml(text)
-    const match = plain.match(SPEAKER_RE)
-    if (match) {
-      const rest = plain.slice(match[1].length)
-      return (
-        <>
-          <span className="read-speaker">{match[1]}</span>
-          {hasPassageHtml(text) ? rest : text.slice(match[1].length)}
-        </>
-      )
-    }
-    return <FormattedPassage text={text} kind="council" />
-  }
-
-  function passageSavePayload(p) {
-    return {
+  const handleToggleSave = useCallback(p => {
+    const wasSaved = isSaved(p.id)
+    toggleSave(p.id, {
       id: p.id,
       passage: p.text,
-      author: work.author,
-      work: work.title,
-      work_id: work.work_id,
+      author: workAuthor,
+      work: workTitle,
+      work_id: workNumericId,
       header: p.header,
-    }
-  }
-
-  function handlePassageDoubleClick(p) {
-    if (!work) return
-    const wasSaved = isSaved(p.id)
-    toggleSave(p.id, passageSavePayload(p))
+    })
     if (wasSaved) setScrollHighlightId(prev => (Number(prev) === Number(p.id) ? null : prev))
     window.getSelection()?.removeAllRanges()
-  }
+  }, [isSaved, toggleSave, workAuthor, workTitle, workNumericId])
+
+  // Everything a passage needs to render, computed once per window rather than
+  // on every parent re-render. classifyPassage in particular used to strip the
+  // HTML of every passage in the work on each pass, for a result only liturgy
+  // and council texts ever consult.
+  const rendered = useMemo(() => {
+    function classify(text) {
+      if (!isLiturgy && !isCouncil) return null
+      const t = stripHtml(text).trim()
+      const len = t.length
+      if (isLiturgy && len <= 200) {
+        if (LITURGY_ROLES.test(t) || RUBRIC_STARTS.test(t)) return 'rubric'
+      }
+      if (isCouncil) {
+        if (/^we believe in one god/i.test(t)) return 'creed'
+        if (/anathema/i.test(t)) return 'anathema'
+        if (len <= 100) return 'rubric'
+      }
+      return null
+    }
+
+    return passages.map((p, i) => {
+      const prevHeader = i > 0 ? passages[i - 1].header : null
+      const headerName = displayChapterNameFull(p.header, offset + i)
+      // Hide a section header that just repeats the work title, and collapse
+      // the lone heading on short single-section texts.
+      const redundant = normalizeHeading(headerName) === titleNorm
+      return {
+        passage: p,
+        index: offset + i,
+        headerName,
+        // A window's first passage always shows its header, even mid-work —
+        // it opens the visible text, so the reader has no earlier one to
+        // carry the heading.
+        showHeader: !!p.header && (i === 0 || p.header !== prevHeader) &&
+          !redundant && !(isShort && !hasChapters),
+        bookDivider: isBookDivider(p.header),
+        variant: classify(p.text),
+        rich: isRichHtml(p.text),
+        intro: firstChapterIdx > 0 && i < firstChapterIdx,
+      }
+    })
+  }, [passages, offset, isLiturgy, isCouncil, titleNorm, isShort, hasChapters, firstChapterIdx])
 
   return (
     <div className={`read-page page-fade${tocOpen ? ' is-toc-open' : ''}`}>
-      <div className="read-progress-bar" style={{ width: `${scrollPct}%` }} />
+      <div className="read-progress-bar" ref={progressRef} style={{ width: 0 }} />
 
       {/* Matches the main site header exactly */}
       <header className="site-header read-site-header">
@@ -499,55 +753,57 @@ export default function ReadPage() {
                 <div className="read-title-rule" />
               </div>
 
+              {hasPrev && (
+                <div className="read-edge" ref={prevSentinel}>
+                  <button
+                    type="button"
+                    className="read-edge-btn"
+                    onClick={() => loadEdge('prev')}
+                    disabled={busyEdge === 'prev'}
+                  >
+                    {busyEdge === 'prev' ? 'Loading earlier passages…' : 'Load earlier passages'}
+                  </button>
+                </div>
+              )}
+
               <div className={`read-passages${isLiturgy ? ' read-liturgy' : ''}${isCouncil ? ' read-council' : ''}`}>
-                {work.passages.map((p, i) => {
-                  const prevHeader = i > 0 ? work.passages[i - 1].header : null
-                  const headerName = displayChapterNameFull(p.header, i)
-                  // Hide a section header that just repeats the work title, and
-                  // collapse the lone heading on short single-section texts.
-                  const redundant = normalizeHeading(headerName) === titleNorm
-                  const showHeader =
-                    p.header && p.header !== prevHeader && !redundant &&
-                    !(isShort && !hasChapters)
-                  const variant = classifyPassage(p.text)
-                  const isIntro = firstChapterIdx > 0 && i < firstChapterIdx
-                  const cls = [
-                    'read-passage',
-                    variant && `read-${variant}`,
-                    isIntro && 'read-passage--intro',
-                    Number(p.id) === scrollHighlightId && 'read-passage--highlight',
-                    isSaved(p.id) && 'read-passage--saved',
-                  ].filter(Boolean).join(' ')
-
-                  const rich = isRichHtml(p.text)
-
-                  return (
-                    <div key={p.id}>
-                      {showHeader && (
-                        <h2 className={`read-section-header${isBookDivider(p.header) ? ' read-book-header' : ''}`}>
-                          {headerName}
-                        </h2>
-                      )}
-                      <div
-                        id={`passage-${i + 1}`}
-                        className={`${cls}${rich ? ' read-passage--rich' : ''}`}
-                        ref={el => passageRefs.current[i] = el}
-                        onDoubleClick={() => handlePassageDoubleClick(p)}
-                        title={isSaved(p.id) ? 'Double-click to unsave' : 'Double-click to save'}
-                      >
-                        {isCouncil && variant !== 'rubric'
-                          ? renderCouncilText(p.text)
-                          : <FormattedPassage text={p.text} kind={isLiturgy ? 'liturgy' : undefined} />}
-                      </div>
-                      <PassageSource title={p.source_title} url={p.source_url} className="read-passage-source" />
-                    </div>
-                  )
-                })}
+                {rendered.map(r => (
+                  <ReadPassage
+                    key={r.passage.id}
+                    passage={r.passage}
+                    index={r.index}
+                    showHeader={r.showHeader}
+                    headerName={r.headerName}
+                    bookDivider={r.bookDivider}
+                    variant={r.variant}
+                    intro={r.intro}
+                    rich={r.rich}
+                    highlight={Number(r.passage.id) === scrollHighlightId}
+                    saved={isSaved(r.passage.id)}
+                    isCouncil={isCouncil}
+                    isLiturgy={isLiturgy}
+                    onToggleSave={handleToggleSave}
+                    registerRef={registerRef}
+                  />
+                ))}
               </div>
+
+              {hasNext && (
+                <div className="read-edge" ref={nextSentinel}>
+                  <button
+                    type="button"
+                    className="read-edge-btn"
+                    onClick={() => loadEdge('next')}
+                    disabled={busyEdge === 'next'}
+                  >
+                    {busyEdge === 'next' ? 'Loading more…' : 'Load more'}
+                  </button>
+                </div>
+              )}
 
               {/* Writings carry no per-quote source; cite the edition we drew the
                   text from so the page still ends on a "where to find it" note. */}
-              {!hasPassageSources && work.source_url && (
+              {!hasPassageSources && work.source_url && !hasNext && (
                 <footer className="read-citation" aria-label="Source">
                   <PassageSource url={work.source_url} />
                 </footer>
@@ -555,7 +811,7 @@ export default function ReadPage() {
             </article>
           )}
 
-          {work && !loading && (
+          {work && !loading && !hasNext && (
             <nav className="read-more" aria-label="More writings">
               <h2 className="read-more-title">Other writings from {work.author}</h2>
               {siblings.length > 0 ? (

@@ -94,7 +94,26 @@ export const api = {
   authorWorks: (authorId, opts) => getJson(`/api/authors/${authorId}/works`, opts),
   authorsByCategory: (category, opts) =>
     getJson(`/api/authors?category=${enc(category)}`, opts),
-  work: (workId, opts) => getJson(`/api/works/${workId}`, opts),
+  /**
+   * A work, or a window of one.
+   *
+   * Large works come back paginated (see get_work in backend/app.py), so this
+   * takes an optional `around` (passage id — centre the window on a search
+   * hit), `offset` (index — read onward) or `before` (index — load what came
+   * before). Omitting all three asks for the opening window, which for the
+   * overwhelming majority of works is the whole thing.
+   *
+   * Each window is a distinct path, so the session cache stores them
+   * separately and paging back over ground already read costs no network.
+   */
+  work: (workId, { around, offset, before, ...opts } = {}) => {
+    const params = new URLSearchParams()
+    if (around != null) params.set('around', around)
+    if (offset != null) params.set('offset', offset)
+    if (before != null) params.set('before', before)
+    const qs = params.toString()
+    return getJson(`/api/works/${workId}${qs ? `?${qs}` : ''}`, opts)
+  },
   library: opts => getJson('/api/library', opts),
   categories: opts => getJson('/api/categories', opts),
 
