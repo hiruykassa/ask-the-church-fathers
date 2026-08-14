@@ -1,0 +1,22 @@
+---
+description: How to work with AWS in this project (Agent Toolkit for AWS)
+alwaysApply: true
+---
+
+# AWS guidance
+
+From the [Agent Toolkit for AWS](https://github.com/aws/agent-toolkit-for-aws) rules file.
+
+- Prefer the AWS MCP Server for AWS interactions — it provides sandboxed execution, observability, and audit logging. If unavailable, use the AWS CLI directly.
+- Before starting a task, check whether a relevant AWS skill is available. Load the skill with `retrieve_skill` and prefer its guidance over general knowledge.
+- When uncertain about specific AWS details (API parameters, permissions, limits, error codes), verify against documentation rather than guessing. State uncertainty explicitly if you cannot confirm.
+- When creating infrastructure, prefer infrastructure-as-code (AWS CDK or CloudFormation) over direct CLI commands.
+- When working with infrastructure, follow AWS Well-Architected Framework principles.
+- Do not use em dashes in AWS resource names or descriptions. Use hyphens instead.
+
+## This project specifically
+
+- **`no-secrets.mdc` wins.** The MCP server's sandboxing does not make it acceptable to read `~/.secrets/`, `backend/.env`, or pull production secrets out of SSM Parameter Store.
+- **Two profiles, on purpose.** `agent-toolkit` is the browser-login profile the MCP server uses (`AWS_PROFILE` is set in `~/.cursor/mcp.json`). `default` holds the access keys that every command in the deploy runbook relies on. Do not clear, overwrite, or merge them.
+- **Region is `us-east-2`** — App Runner, S3, ECR and SSM all live there. CloudFront is `us-east-1` because it always is, and the Agent Toolkit control plane is `us-east-1` regardless of this project.
+- Live infrastructure is described in `docs/aws-migration-guide.md` and snapshotted in `infra/`. Read the drift warning in `infra/README.md` before re-applying anything from there — `distribution-config.json` in particular is stale and would detach the CloudFront viewer-request function.
