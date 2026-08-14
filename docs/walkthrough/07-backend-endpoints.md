@@ -17,7 +17,7 @@ Files: `backend/app.py` (`:978-1463`).
 | `GET /api/scripture/<book>/<chapter>` | verses in a chapter | Scripture browser (level 3) |
 | `GET /api/scripture/<book>/<chapter>/<verse>` | catena for a verse | Scripture browser (level 4) |
 | `GET /api/passages/<id>` | one passage | (utility) |
-| `GET /api/works/<id>` | full work text | Book reader |
+| `GET /api/works/<id>` | a window of a work's text | Book reader |
 | `GET /api/library` | sections → authors → works | Home catalog |
 | `GET /api/authors/<id>/works` | one author's works + bio | Author page |
 
@@ -97,6 +97,22 @@ A subtle but important distinction in how passage text is returned:
 - **search** and **scripture** results use `strip_html(...)` — **plain text** snippets.
 
 So the same column is served three ways depending on the consumer's need: plain text for snippets, cleaned HTML for reading, raw HTML for the single-passage utility. Whichever HTML reaches the browser, the frontend sanitizes it before rendering (Module 9) — the backend trusts its own corpus but the frontend still defends in depth.
+
+## 5b. Paginating by bytes, not rows — `/api/works/<id>`
+
+The obvious way to paginate is `LIMIT 50 OFFSET n`. It is the wrong unit here, and the reason is worth internalizing.
+
+Passage sizes in this corpus span three orders of magnitude. A 50-row page is 4 KB of Ignatius and 650 KB of Augustine, so a row-based limit gives you no bound at all on what you actually send. The endpoint budgets in **bytes** instead: `_window_bounds` starts at an anchor passage and grows outward while the running total fits `WORK_WINDOW_BYTES`, with a row cap only as a secondary guard.
+
+Three details make it usable:
+
+- **The anchor is always included**, even if it alone blows the budget. 64 passages in the corpus are individually over 240 KB; without this rule they would be unreachable.
+- **Direction is a parameter.** `offset=` grows forward, `before=` grows backward, `around=` grows both. Forward and backward windows abut exactly, so a client paging in either direction can never open a gap in the text — the failure mode where a reader silently loses a paragraph.
+- **The chapter index ships separately** from the passages. Navigation needs every header; it does not need every passage. Sending a 2,269-entry table of contents costs a few KB and frees the reader's table of contents from the pagination entirely.
+
+The payoff is concrete: Augustine's *Sermons* went from 2.4 MB gzipped and 2.2 s of server time to 77 KB and 190 ms.
+
+Note what is *not* solved. `LENGTH(text)` still reads the passage text off disk to size the window — cheap because it never serializes or transmits it, but not free. A `char_len` column would remove even that, at the cost of a corpus rebuild and a 633 MB re-upload. Not worth it yet; worth knowing it's the next lever.
 
 ## 6. Reshaping flat SQL into nested JSON — `/api/library` (`:1329`)
 

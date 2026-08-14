@@ -16,7 +16,7 @@ Each route from Module 8 maps to a page component, and each fetches from the mat
 | `BrowsePage` | `/browse/:slug` | `/api/authors?...` | author grid for a category |
 | `AuthorPage` | `/author/:id` | `/api/authors/:id/works` | one Father's works + bio |
 | `ScripturePage` | `/scripture/:book/:chapter/:verse` | the 4 `/api/scripture/*` endpoints | books → chapters → verses → catena |
-| `ReadPage` | `/read/:workId` | `/api/works/:id` | full work reader |
+| `ReadPage` | `/read/:workId` | `/api/works/:id` | book reader, pages long works a window at a time |
 | `TopicPage` | `/topics/:slug` | static `seo/topics.json` | SEO landing page |
 
 They all share the same skeleton: read URL params with `useParams`, fetch in a `useEffect`, hold `{data, loading, error}` state, render a loading/error/empty/content tri-state. Once you've read `App.jsx` and one other page, they rhyme. So this module zooms in on the two things that are genuinely instructive: how `SearchResults` renders, and how passage HTML is sanitized.

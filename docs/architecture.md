@@ -87,7 +87,13 @@ This is **more** than the stack it replaced, which was effectively free — Rend
    - **FTS5 BM25 (keyword)** — matches passage text using the extracted topic keywords.
    - **Work-title match** — surfaces whole treatises whose title matches the topic.
 4. If only an author is named with no topic, the frontend shows that Father's works list instead of passage results.
-5. Results return with author, work, section header, and a plain-text snippet.
+5. Results return with author, work, section header, `kind`, and a plain-text snippet.
+
+**Source kind and the writing floor.** The corpus is **94% verse-keyed commentary** — 49,757 passages against 3,113 standalone writings (treatises, letters, sermons, orations). That ratio, not the ranking, is why a topical search comes back looking like a shelf of Bible commentaries: writings do not rank badly, there are simply sixteen times fewer of them, so a purely rank-ordered page almost never contains one.
+
+Each passage's kind is derived at boot from the presence of a `scripture_index` row — no stored column, so no corpus rebuild. It is a clean split: 594 works are entirely writings, 2,224 entirely commentary, 40 mixed.
+
+Two things follow from it. `diversify` keeps a floor of `DIVERSITY_WRITING_FLOOR` (`2`) writings on **page one** (`DIVERSITY_WRITING_WINDOW`, `15` — search returns 100 ids but the reader sees 15), promoting the best writings the ranking buried into the weakest slots. It never touches the top of the page, does nothing when the ranking already surfaced enough, and exchanges rather than drops, so the result list stays a permutation of the ranked one. And every result carries `kind`, which drives the All / Writings / Scripture commentary facet on the results page — the counts on those chips are what actually explain the ratio to a reader.
 
 Author detection is LLM-first because the roster resolves fuzzy and partial names; the local matcher is the zero-cost floor. Topic keywords drive the keyword signals while the *full* query drives the semantic signal — embeddings read intent better from natural phrasing than from a few stripped words.
 
@@ -96,6 +102,8 @@ Author detection is LLM-first because the roster resolves fuzzy and partial name
 **Caching.** Queries are capped at **500 characters**. Repeats are served from in-memory TTL caches (default TTL 30 days) covering Voyage embeddings, Gemini/Groq parse results, FTS hits, and fused rankings — a query repeated within the month makes no external API calls. Tune with `SEARCH_CACHE_TTL_SEC` (`2592000`), `EMBED_CACHE_SIZE` (`10000`), `PARSE_CACHE_SIZE` (`50000`), `HYBRID_CACHE_SIZE` (`20000`), `FTS_CACHE_SIZE` (`20000`).
 
 **Response caching.** The corpus cannot change without a redeploy, so the ten reference endpoints (`/api/library`, `/api/authors`, `/api/categories`, the four `/api/scripture/*` routes, `/api/passages/:id`, `/api/works/:id`, `/api/authors/:id/works`) return `Cache-Control: public, max-age=3600, stale-while-revalidate=86400`. Tune with `STATIC_API_CACHE_SEC` (`3600`) and `STATIC_API_SWR_SEC` (`86400`); `max-age` is the ceiling on how long a corpus change takes to become visible after a redeploy. Endpoints are matched by view-function name, not URL, so a route rename cannot silently drop the header. `/api/search` is excluded on purpose — a transient Gemini or Voyage failure returns fewer results with a 200, and caching that would pin the degraded answer for an hour — as is `/api/health`, and no non-200 is ever cached.
+
+**Reader windowing.** `/api/works/:id` returns a byte-budgeted window of a work rather than the whole text — small works still come back complete, but Augustine's *Sermons* (600 passages, 7.6 MB) opens at 77 KB instead of 2.4 MB gzipped. `ReadPage` extends the window in either direction as the reader scrolls, and a separate chapter index keeps the table of contents complete regardless. Because each window is a distinct URL, response caching applies per window. Full parameter reference in [`api-reference.md`](api-reference.md#work-windowing-apiworksid).
 
 **API cost guard.** Spend is tracked against `MONTHLY_API_BUDGET_USD` (default `$10`). When the month's spend crosses it, search degrades to keyword-only FTS for the rest of the month and resets on the 1st. Roster parsing on Gemini 2.5 Flash-Lite costs ~$0.00015 per uncached search and Voyage embedding is negligible, so with caching the budget covers heavy use. **The cap only bites when `RATELIMIT_STORAGE_URI` (Redis) is set** — the counter has nowhere to live otherwise and fails *open*, leaving caching as the only limit. This is the authoritative statement of that caveat; other sections point here. Verify with `budget.enabled` on `/api/health` (currently `false` in production).
 

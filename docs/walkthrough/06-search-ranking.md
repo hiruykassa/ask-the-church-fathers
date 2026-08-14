@@ -197,6 +197,27 @@ After fusion you might have 10 near-identical snippets from one prolific comment
 
 `ranking.py` is **pure Python** — no DB, no Flask, no embeddings, just lists and dicts in and a ranked list out. That makes it trivially unit-testable (and indeed it is tested, Module 11). Keeping ranking logic pure is a deliberate, testable-by-design choice.
 
+### The writing floor — when good ranking still reads badly
+
+Here is a failure that no amount of weight-tuning fixes. Search "hardship" and every result is a Bible commentary. The instinct is to blame the ranking. It isn't the ranking: **94% of the corpus is verse-keyed commentary** — 49,757 passages against 3,113 standalone writings. Writings don't rank badly; there are sixteen times fewer of them, so a rank-ordered page almost never contains one.
+
+That's a *distribution* problem, and it needs a distribution-shaped fix:
+
+```python
+DIVERSITY_WRITING_FLOOR = 2
+DIVERSITY_WRITING_WINDOW = 15
+```
+
+Three details are worth stealing:
+
+- **The floor applies to page one, not the result list.** The first version measured across all 100 returned ids and did nothing — it was "satisfied" by a writing at rank 80 that no reader ever scrolls to. A floor has to be scoped to what is actually *seen*.
+- **It fills from the bottom.** Slots are taken from the weakest end of the page, so the reader's top hits are untouched. The change lands exactly where a tenth near-duplicate commentary snippet was worth less than the first treatise on the subject.
+- **It exchanges, never drops.** When the promoted writing was already on the list, the displaced result takes its old place, so the output is a permutation of the input. Losing a hit outright would be a worse bug than the skew it fixes.
+
+And it's a floor, not a quota: it does nothing when the ranking already surfaced enough writings, and nothing when none matched. A quota would degrade good results to satisfy a rule; a floor only fires when the page would otherwise hide a whole category from the reader.
+
+The kind itself is never stored. A passage is a "writing" iff it has no `scripture_index` row, derived once at boot into a set of 3,113 ids (~125 KB). Adding a column would have meant rebuilding and re-uploading a 633 MB database for information the schema already implied.
+
 ## 5. Fetching and final ordering — `_fetch_search_results` (`:680`)
 
 `hybrid_search` returns only passage **ids** in rank order. `_fetch_search_results` loads the actual rows (text, author, work, header, tradition) with a single `WHERE passages.id IN (...)` query. But SQL `IN` doesn't preserve order, so the route re-imposes the fused ranking (`:964`):
